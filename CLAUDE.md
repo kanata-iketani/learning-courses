@@ -8,6 +8,12 @@
 | FastAPI入門 | `fastapi/` | 8081 | venv python(TestClient) + stdout 照合 |
 | Vue.js入門 | `vue/` | 8082 | JS基礎=node 採点 / HTML・Vue=`kind:"web"` プレビュー+自己チェック |
 | Terraform入門 | `terraform/` | 8083 | `terraform init -backend=false → apply → output` 照合(プロバイダ不要・オフライン) |
+| 宅建どうじょう | `takken/` (別リポジトリ github.com/kanata-iketani/takken) | 8084 | 4択クイズ即時判定。全30章650問。にがて帳・弱点まとめ・復習問題生成 |
+
+## 絶対ルール
+
+- 「paiza」という単語を成果物(コード・教材・README・コミット・リポジトリ)に一切入れない
+- git コミットに AI 署名(Co-Authored-By 等)を入れない。作者はユーザー本人のみ
 
 ## 起動・停止
 
