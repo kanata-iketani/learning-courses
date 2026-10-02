@@ -1,0 +1,15 @@
+{
+  "lesson": 3,
+  "chapter": 2,
+  "title": "型いろいろ",
+  "priority": "🔴",
+  "text": "variable の `type` には `string` / `number` / `bool` のほか、**list**(順序付きの並び。`list(number)` のように要素の型を指定)と **map**(キーと値の組。`map(string)` など)が使えます。要素の参照は list が `var.ports[0]`(0始まり)、map が `var.tags[\"env\"]` です。実務では `list(string)` のサブネット ID 一覧や、`map(string)` のタグ集合が頻出なので、この2つの参照の形は必ず読めるようにしておきます。🔴 型の書き方と要素参照は、手が覚えるまで書きましょう。\n\n```hcl\nvariable \"ports\" {\n  type    = list(number)\n  default = [80, 443]\n}\n\noutput \"first\" {\n  value = var.ports[0]  # 80\n}\n```",
+  "sample": "# lesson03 ch02: 型いろいろ\n# list は [0] で、map は [\"キー\"] で要素を参照します。\n\nvariable \"ports\" {\n  type    = list(number)\n  default = [80, 443, 8080]\n}\n\nvariable \"tags\" {\n  type    = map(string)\n  default = { env = \"prod\", team = \"sre\" }\n}\n\nvariable \"debug\" {\n  type    = bool\n  default = true\n}\n\noutput \"first_port\" {\n  value = var.ports[0] # 0 始まり\n}\n\noutput \"team_tag\" {\n  value = var.tags[\"team\"]\n}\n\noutput \"debug_mode\" {\n  value = var.debug\n}\n",
+  "exercise": {
+    "description": "variable を3つ定義してください。\n\n1. `ports`: `type` は `list(number)`、`default` は `[80, 443]`\n2. `tags`: `type` は `map(string)`、`default` は `{ env = \"dev\" }`\n3. `debug`: `type` は `bool`、`default` は `false`\n\nさらに output を3つ書きます。\n\n- `debug_mode`: `var.debug` を表示\n- `env_tag`: `var.tags` の `\"env\"` キーの値を表示\n- `first_port`: `var.ports` の先頭要素を表示\n\n**期待出力**\n\n```text\ndebug_mode = false\nenv_tag = \"dev\"\nfirst_port = 80\n```",
+    "starter": "variable \"ports\" {\n  # list(number) と default\n}\n",
+    "stdin": "",
+    "expected_stdout": "debug_mode = false\nenv_tag = \"dev\"\nfirst_port = 80\n",
+    "answer": "# list は var.ports[0](0 始まり)、map は var.tags[\"env\"] で要素参照します。\n# 出力は number と bool がクォートなし、string だけダブルクォート付きになります。\nvariable \"ports\" {\n  type    = list(number)\n  default = [80, 443]\n}\n\nvariable \"tags\" {\n  type    = map(string)\n  default = { env = \"dev\" }\n}\n\nvariable \"debug\" {\n  type    = bool\n  default = false\n}\n\noutput \"debug_mode\" {\n  value = var.debug\n}\n\noutput \"env_tag\" {\n  value = var.tags[\"env\"]\n}\n\noutput \"first_port\" {\n  value = var.ports[0]\n}\n"
+  }
+}

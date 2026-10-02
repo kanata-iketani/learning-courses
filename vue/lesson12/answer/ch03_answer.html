@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>チケットカウンター</title>
+<script src="/vendor/vue.global.prod.js"></script>
+<style>
+  .soldout { color: red; font-weight: bold; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <h1>チケット販売</h1>
+    <!-- 工夫: 0 枚のときは三項演算子で「売り切れ」を出し、:class で赤くする -->
+    <p :class="{ soldout: tickets === 0 }">
+      {{ tickets === 0 ? "売り切れ" : "残り " + tickets + " 枚" }}
+    </p>
+    <button @click="sell">1枚売る</button>
+    <button @click="restore">1枚もどす</button>
+    <button @click="reset">リセット</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { tickets: 10 };
+      },
+      methods: {
+        sell() {
+          // 工夫: 0 枚より下には減らないようにガードする
+          if (this.tickets > 0) {
+            this.tickets--;
+          }
+        },
+        restore() {
+          this.tickets++;
+        },
+        reset() {
+          this.tickets = 10;
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

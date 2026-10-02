@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>本日のメニュー</title>
+<style>
+  .card {
+    border: 2px solid darkorange;
+    background-color: papayawhip;
+    padding: 16px;
+  }
+  /* 工夫した点: flex は並べたいカードではなく、囲んでいる親の .menu に指定します */
+  .menu {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+  <h1>本日のメニュー</h1>
+  <div class="menu">
+    <div class="card">カレー 600円</div>
+    <div class="card">ラーメン 700円</div>
+    <div class="card">オムライス 650円</div>
+  </div>
+</body>
+</html>

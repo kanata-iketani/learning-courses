@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>:key と template</title>
+</head>
+<body>
+  <div id="app">
+    <p>今日のタスク(チェックすると下の「残りタスク」から消えます)</p>
+    <ul>
+      <li v-for="task in tasks" :key="task.id">
+        <label><input type="checkbox" v-model="task.done"> {{ task.text }}</label>
+      </li>
+    </ul>
+    <p>残りタスク:</p>
+    <ul>
+      <template v-for="task in tasks" :key="task.id">
+        <li v-if="!task.done">{{ task.text }}</li>
+      </template>
+    </ul>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          tasks: [
+            { id: 1, text: "宿題をやる", done: false },
+            { id: 2, text: "犬の散歩", done: false },
+            { id: 3, text: "部屋のそうじ", done: true }
+          ]
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

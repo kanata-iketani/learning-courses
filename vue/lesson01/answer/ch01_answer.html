@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>わたしのページ</title>
+<style>
+  /* CSS: 色の変更はここ。color に別の色名を書くだけで反映されます */
+  h1 { color: tomato; }
+</style>
+</head>
+<body>
+  <!-- HTML: 見出しの中身は自由な文字列でかまいません -->
+  <h1>はじめての自作ページ</h1>
+  <p id="message"></p>
+
+  <script>
+    // JavaScript: textContent に入れた文字列がページに表示されます
+    document.getElementById("message").textContent = "JavaScript から書き込みました！";
+  </script>
+</body>
+</html>

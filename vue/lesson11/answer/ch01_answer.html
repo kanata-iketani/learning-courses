@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>イベント申し込みカード</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>イベント申し込み</h1>
+    <!-- 工夫: 中身は {{ }}、属性は : と使い分ける。
+         リンク先や案内文を変えたいときは data だけ直せばよい -->
+    <p><a :href="url">{{ siteName }}</a></p>
+    <input :placeholder="hint">
+    <!-- isClosed が true の間はボタンが無効になる -->
+    <p><button :disabled="isClosed">申し込む</button></p>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          siteName: "イベント詳細ページ",
+          url: "https://ja.vuejs.org/",
+          hint: "参加者の名前を入力",
+          isClosed: true
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

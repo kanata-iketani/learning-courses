@@ -1,0 +1,16 @@
+{
+  "lesson": 15,
+  "chapter": 1,
+  "kind": "web",
+  "title": "computed：データから自動計算される値",
+  "priority": "🔴",
+  "text": "**computed**(算出プロパティ。data から自動で計算される値)を学びます。data と同じように `{{ total }}` と書くだけで使え、計算に使っている data が変わると自動で再計算されます。methods との違いは 2 つあります。呼び出しの `()` が不要なことと、元の data が変わらない限り前回の結果を**キャッシュ**(結果の一時保存)して使い回すので、無駄な再計算が起きないことです。🔴 「表示のために加工した値」は computed に書く、と覚えましょう。\n\n```js\ncomputed: {\n  total() {\n    return this.price * this.count;\n  }\n}\n```\n\nprice か count が変われば、{{ total }} の表示は勝手に新しくなります。",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>computed で自動計算</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>単価: <input type=\"number\" v-model=\"price\"> 円</p>\n    <p>個数: <input type=\"number\" v-model=\"count\"> 個</p>\n    <hr>\n    <p>合計(税抜): {{ total }} 円</p>\n    <p>合計(税込 10%): {{ totalWithTax }} 円</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { price: 120, count: 2 };\n      },\n      computed: {\n        total() {\n          return this.price * this.count;\n        },\n        // computed の中から別の computed も使える\n        totalWithTax() {\n          return Math.round(this.total * 1.1);\n        }\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "SNS 風の文字数カウンタを作りましょう。メッセージ入力欄の下に「いま何文字か」と「あと何文字書けるか(140 文字まで)」を表示します。どちらも methods ではなく computed で作ってください。\n\n**確認ポイント**\n\n1. 入力欄に文字を打つたびに「いま ○ 文字」が自動で増減する\n2. 「あと ○ 文字書けます」が computed(`remaining`)で計算され、140 から入力文字数を引いた値になっている\n3. 表示側は `{{ remaining }}` のように `()` なしで書けている(methods 呼び出しではない)\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>文字数カウンタ</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>メッセージ(140 文字まで):</p>\n    <textarea v-model=\"message\" rows=\"4\" cols=\"40\"></textarea>\n    <p>いま ??? 文字 / あと ??? 文字書けます</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { message: \"\" };\n      },\n      computed: {\n        // length と remaining をここに書く\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>文字数カウンタ</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>メッセージ(140 文字まで):</p>\n    <textarea v-model=\"message\" rows=\"4\" cols=\"40\"></textarea>\n    <!-- 工夫した点: computed は () なしで data と同じ感覚で使える -->\n    <p>いま {{ length }} 文字 / あと {{ remaining }} 文字書けます</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { message: \"\" };\n      },\n      computed: {\n        length() {\n          return this.message.length;\n        },\n        // remaining は length を使って書ける。message が変われば自動で再計算される\n        remaining() {\n          return 140 - this.length;\n        }\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

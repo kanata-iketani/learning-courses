@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 1,
+  "title": "moduleブロックとsource",
+  "priority": "🔴",
+  "text": "**モジュール**(複数の Terraform 定義をひとまとめにして再利用する仕組み)は、`module` ブロックで呼び出します。読解の第一歩は **source**(モジュールのコードの置き場所を示す引数)の見分けです。`./` や `../` で始まればローカル(同じリポジトリ内のディレクトリ)、`terraform-aws-modules/vpc/aws` のような 3 分割形式はレジストリ(公開モジュール。version 指定とセット)、`git::https://...` は git リポジトリ直接参照です。🔴 実務コードで module を見たら、まず source を読んで「実体のコードがどこにあるか」を特定しましょう。\n\n```hcl\nmodule \"vpc\" {\n  source  = \"terraform-aws-modules/vpc/aws\" # レジストリ\n  version = \"5.8.1\"\n}\n\nmodule \"naming\" {\n  source = \"./modules/naming\" # ローカル(相対パス)\n}\n```",
+  "sample": "# module ブロックでローカルモジュールを呼び出します。\n# エディタでは「# === file: パス ===」の区切り行から下が別ファイルになります。\n\nmodule \"hello\" {\n  source = \"./modules/greet\" # ./ 始まり = ローカルモジュール\n  name   = \"terraform\"\n}\n\n# モジュールの output は module.<呼び出し名>.<output名> で参照します\noutput \"message\" {\n  value = module.hello.message\n}\n\n# === file: modules/greet/main.tf ===\n# ここから下は modules/greet/main.tf として保存されます\n\nvariable \"name\" {\n  type = string\n}\n\noutput \"message\" {\n  value = \"hello, ${var.name}\"\n}\n",
+  "exercise": {
+    "description": "starter に用意されたローカルモジュール `./modules/greet` を呼び出してください。\n\n1. `module \"welcome\"` ブロックを書き、source に `\"./modules/greet\"` を指定する\n2. 引数 `name` に `\"module\"` を渡す\n3. output `greeting` で `module.welcome.message` を表示する\n\n**期待出力**\n\n```text\ngreeting = \"hello, module\"\n```",
+    "starter": "# ここに module ブロックと output を書く\n\n# === file: modules/greet/main.tf ===\nvariable \"name\" {\n  type = string\n}\n\noutput \"message\" {\n  value = \"hello, ${var.name}\"\n}\n",
+    "stdin": "",
+    "expected_stdout": "greeting = \"hello, module\"\n",
+    "answer": "# source が ./ で始まるのでローカルモジュール。実体は modules/greet/main.tf です。\n# name = \"module\" は、モジュール側の variable \"name\" への入力になります。\nmodule \"welcome\" {\n  source = \"./modules/greet\"\n  name   = \"module\"\n}\n\noutput \"greeting\" {\n  value = module.welcome.message\n}\n\n# === file: modules/greet/main.tf ===\nvariable \"name\" {\n  type = string\n}\n\noutput \"message\" {\n  value = \"hello, ${var.name}\"\n}\n"
+  }
+}

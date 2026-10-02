@@ -1,0 +1,16 @@
+{
+  "lesson": 11,
+  "chapter": 3,
+  "kind": "web",
+  "title": ":style と省略記法まとめ",
+  "priority": "🟡",
+  "text": "style 属性にもオブジェクト構文でバインドできます。`:style=\"{ color: textColor, fontSize: size + 'px' }\"` のように、CSS のプロパティ名は `font-size` → `fontSize` と**キャメルケース**(区切りを大文字にするつなぎ方)で書きます。値には data や式が使えるので、「数値データ + 'px'」のような組み立てが便利です。🟡 ここまでの省略記法を整理しましょう。`v-bind:href` → `:href`。class・style はその中の特別対応(オブジェクト構文)という位置づけです。\n\n```html\n<p :style=\"{ color: textColor, fontSize: size + 'px' }\">\n  文字色とサイズをデータで制御\n</p>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>:style で見た目を制御</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>文字プレビュー</h1>\n    <!-- CSS プロパティはキャメルケース(font-size → fontSize)で書く -->\n    <p :style=\"{ color: textColor, fontSize: size + 'px' }\">\n      あア Aa 123 — この文字の色とサイズはデータで決まっています\n    </p>\n    <p>いまのサイズ: {{ size }}px / 色: {{ textColor }}</p>\n\n    <!-- ボタンでデータを変えると、style も追従する -->\n    <button @click=\"size += 4\">大きく</button>\n    <button @click=\"size -= 4\">小さく</button>\n    <button @click=\"textColor = 'tomato'\">トマト色にする</button>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          textColor: \"steelblue\",\n          size: 20\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "「見出しデザイナー」を作りましょう。data の `headColor`(色)と `headSize`(数値)を `:style` のオブジェクト構文で見出しに割り当ててください。starter には色とサイズを変えるボタン(`@click`)を用意してあります。\n\n**確認ポイント**\n\n1. 見出しが data の `headColor` の色・`headSize` px のサイズで表示される\n2. 「大きく」ボタンを押すたびに見出しが少しずつ大きくなる\n3. 色のボタンを押すと見出しの色が変わる\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>見出しデザイナー</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <!-- この <h1> に :style を付けて、headColor と headSize を割り当てる -->\n    <h1>見出しデザイナー</h1>\n    <button @click=\"headSize += 4\">大きく</button>\n    <button @click=\"headColor = 'seagreen'\">緑にする</button>\n    <button @click=\"headColor = 'tomato'\">赤にする</button>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          headColor: \"steelblue\",\n          headSize: 24\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>見出しデザイナー</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <!-- 工夫: fontSize は「数値データ + 'px'」で組み立てる。\n         数値のまま data に持っておくと += 4 のような計算がしやすい -->\n    <h1 :style=\"{ color: headColor, fontSize: headSize + 'px' }\">見出しデザイナー</h1>\n    <button @click=\"headSize += 4\">大きく</button>\n    <button @click=\"headColor = 'seagreen'\">緑にする</button>\n    <button @click=\"headColor = 'tomato'\">赤にする</button>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          headColor: \"steelblue\",\n          headSize: 24\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

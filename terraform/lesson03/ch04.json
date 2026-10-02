@@ -1,0 +1,15 @@
+{
+  "lesson": 3,
+  "chapter": 4,
+  "title": "tfvarsと優先順位・validation",
+  "priority": "⚪",
+  "text": "variable の値は default 以外からも渡せます。**tfvars ファイル**(`terraform.tfvars` など、変数値だけを書くファイル)、環境変数 `TF_VAR_名前`、コマンドの `-var` オプションがあり、後勝ちの優先順位は「環境変数 < terraform.tfvars < `-var-file` < `-var`」です。実務では環境ごとに `prod.tfvars` / `stg.tfvars` を切り替える構成をよく見ます(lesson11 で扱います)。また **validation ブロック**(variable の中に書く入力チェック。`condition` が false だと `error_message` を出して失敗)で不正値を弾けます。⚪ この仕組みは存在だけ知っておけば十分です。\n\n```hcl\n# terraform.tfvars(値だけを書くファイル)\nenv = \"prod\"\n```\n\n```sh\nterraform apply -var 'env=stg'  # -var は tfvars より優先\n```",
+  "sample": "# lesson03 ch04: validation\n# condition が false になる値を渡すと error_message を出して失敗します。\n\nvariable \"env\" {\n  type    = string\n  default = \"dev\"\n\n  validation {\n    condition     = contains([\"dev\", \"stg\", \"prod\"], var.env)\n    error_message = \"env は dev / stg / prod のいずれかにしてください。\"\n  }\n}\n\n# default の \"dev\" は条件を満たすので、そのまま apply が通ります\n\noutput \"current_env\" {\n  value = var.env\n}\n",
+  "exercise": {
+    "description": "variable `env` を定義してください。\n\n- `type` は `string`、`default` は `\"dev\"`\n- validation ブロックを付け、`condition` に `contains([\"dev\", \"stg\", \"prod\"], var.env)`、`error_message` に好きなメッセージ(文字列)を設定\n\nさらに output `current_env` で `var.env` を表示してください。\n\n**期待出力**\n\n```text\ncurrent_env = \"dev\"\n```",
+    "starter": "variable \"env\" {\n  # default と validation を書く\n}\n",
+    "stdin": "",
+    "expected_stdout": "current_env = \"dev\"\n",
+    "answer": "# validation は variable の中に書く入力チェック。condition が false だと\n# error_message を出して apply 前に失敗します。default の \"dev\" は条件を満たします。\nvariable \"env\" {\n  type    = string\n  default = \"dev\"\n\n  validation {\n    condition     = contains([\"dev\", \"stg\", \"prod\"], var.env)\n    error_message = \"env は dev / stg / prod のいずれかにしてください。\"\n  }\n}\n\noutput \"current_env\" {\n  value = var.env\n}\n"
+  }
+}

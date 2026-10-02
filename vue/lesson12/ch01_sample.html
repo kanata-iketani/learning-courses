@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>いいねボタン</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>いいねボタン</h1>
+    <!-- @click="メソッド名" でクリック時に実行される -->
+    <button @click="addLike">♥ いいね</button>
+    <p>{{ likes }} いいね {{ likes >= 10 ? "🎉 大人気！" : "" }}</p>
+
+    <button @click="reset">リセット</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { likes: 0 };
+      },
+      methods: {
+        addLike() {
+          // メソッドの中では this.データ名 で読み書きする
+          this.likes = this.likes + 1;
+        },
+        reset() {
+          this.likes = 0;
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

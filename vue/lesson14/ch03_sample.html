@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v-for でリスト表示</title>
+</head>
+<body>
+  <div id="app">
+    <p>好きな果物リスト({{ fruits.length }} 件)</p>
+    <ul>
+      <li v-for="(fruit, index) in fruits">{{ index + 1 }} 番目: {{ fruit }}</li>
+    </ul>
+    <input v-model="newFruit" placeholder="果物の名前">
+    <button v-on:click="addFruit">追加</button>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          fruits: ["りんご", "バナナ", "みかん"],
+          newFruit: ""
+        };
+      },
+      methods: {
+        addFruit() {
+          this.fruits.push(this.newFruit);
+          this.newFruit = "";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

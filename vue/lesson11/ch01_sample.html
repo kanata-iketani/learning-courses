@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v-bind の基本</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>{{ siteName }} の案内</h1>
+    <!-- 属性に data の値を割り当てるのが v-bind。: は省略形 -->
+    <p><a :href="url">{{ siteName }} を開く</a></p>
+
+    <!-- placeholder(入力欄のうすい案内文)にもバインドできる -->
+    <input :placeholder="hint">
+
+    <!-- disabled に true を割り当てると、ボタンが押せなくなる -->
+    <p><button :disabled="isClosed">申し込む</button>
+       {{ isClosed ? "(受付終了)" : "(受付中)" }}</p>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          siteName: "Vue 公式サイト",
+          url: "https://ja.vuejs.org/",
+          hint: "お名前を入力",
+          isClosed: true
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

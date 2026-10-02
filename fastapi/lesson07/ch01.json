@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 1,
+  "title": "response_model の指定",
+  "priority": "🔴",
+  "text": "**response_model** とは、デコレータに指定する「レスポンスの形」の宣言です。`@app.get(\"/items/1\", response_model=Item)` のように書くと、関数が返した値は Item の形に整えられ、モデルにないキーは自動で取り除かれます。返す形が明文化されるので、API の仕様がコードから読み取れるようになります。🔴 response_model の指定は基本の型として手が覚えるまで書きましょう。\n\n```python\n@app.get(\"/items/1\", response_model=Item)\ndef get_item():\n    return {\"name\": \"apple\", \"price\": 120, \"secret\": \"内部情報\"}\n    # → レスポンスは {\"name\": \"apple\", \"price\": 120}\n```",
+  "sample": "# lesson07 ch01: response_model でレスポンスの形を宣言する\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Item(BaseModel):\n    name: str\n    price: int\n\n# response_model に指定した形にレスポンスが整えられる\n@app.get(\"/items/1\", response_model=Item)\ndef get_item():\n    # secret は Item にないキーなので、レスポンスからは消える\n    return {\"name\": \"apple\", \"price\": 120, \"secret\": \"仕入れ値は 60 円\"}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.get(\"/items/1\")\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "書籍取得 API のレスポンスの形を宣言します。\n\n- `title`(文字列)と `price`(整数)を持つモデル `Book` を定義する\n- `GET /books/1` に `response_model=Book` を指定し、関数からは辞書 `{\"title\": \"FastAPI入門\", \"price\": 2500, \"memo\": \"在庫わずか\"}` を返す\n\n`memo` は `Book` にないキーなので、レスポンスには含まれません。\n\n**期待出力**\n\n```text\n200\n{'title': 'FastAPI入門', 'price': 2500}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# ここに Book モデルと GET /books/1 を書く\n# (関数からは memo キーを含む辞書を返すこと)\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/books/1\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'title': 'FastAPI入門', 'price': 2500}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Book(BaseModel):\n    title: str\n    price: int\n\n# response_model=Book により、返した辞書は Book の形に整えられます。\n# memo は Book にないキーなので、レスポンスから自動で取り除かれます。\n@app.get(\"/books/1\", response_model=Book)\ndef get_book():\n    return {\"title\": \"FastAPI入門\", \"price\": 2500, \"memo\": \"在庫わずか\"}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/books/1\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

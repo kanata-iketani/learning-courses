@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ダークモード切替</title>
+<style>
+  body { transition: background-color 0.3s, color 0.3s; }
+  /* .dark が付いたときだけ適用されるスタイル */
+  body.dark {
+    background-color: #222;
+    color: #eee;
+  }
+</style>
+</head>
+<body>
+  <h1>ダークモード切替</h1>
+  <p>ボタンを押すたびに、ページ全体の配色が切り替わります。</p>
+  <button id="mode-btn">切り替える</button>
+
+  <script>
+    document.getElementById("mode-btn").addEventListener("click", () => {
+      // toggle: .dark が付いていれば外し、なければ付ける
+      document.body.classList.toggle("dark");
+    });
+  </script>
+</body>
+</html>

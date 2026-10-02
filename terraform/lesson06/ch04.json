@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 4,
+  "title": "splat[*]とflatten — ネストの平坦化",
+  "priority": "🟡",
+  "text": "**splat**(`[*]` で、オブジェクトのリストから特定の属性だけをまとめて取り出す記法)は `var.servers[*].name` のように書き、`[for s in var.servers : s.name]` の省略形です。取り出した結果がリストのリストになる場合は、`flatten`(ネストしたリストを1段のリストに平坦化する関数)と組み合わせます。実務では「全 VPC のサブネット ID を1本のリストにまとめる」ような場面で `flatten(var.vpcs[*].subnets)` の形をよく見ます。🟡 splat はリソース参照でも多用されるので、`[*]` を見たら「全要素の属性をまとめて取る」と読んでください。\n\n```hcl\nlocals {\n  names   = var.servers[*].name            # 属性だけをまとめて取り出す\n  all_ips = flatten(var.servers[*].ips)    # リストのリストを平坦化\n}\n```",
+  "sample": "# lesson06 ch04: splat と flatten\nvariable \"servers\" {\n  type = list(object({\n    name = string\n    ips  = list(string)\n  }))\n  default = [\n    { name = \"web\", ips = [\"10.0.0.1\", \"10.0.0.2\"] },\n    { name = \"db\", ips = [\"10.0.1.1\"] },\n  ]\n}\n\n# splat: [*] は「全要素の name をまとめて取り出す」\noutput \"names\" {\n  value = join(\",\", var.servers[*].name)\n}\n\n# ips を splat すると「リストのリスト」になるので flatten で1段にします\noutput \"all_ips\" {\n  value = join(\",\", flatten(var.servers[*].ips))\n}\n\noutput \"ip_count\" {\n  value = length(flatten(var.servers[*].ips))\n}\n",
+  "exercise": {
+    "description": "variable `vpcs` を type `list(object({ name = string, subnets = list(string) }))`、default を\n\n```hcl\n[\n  { name = \"main\", subnets = [\"10.0.1.0/24\", \"10.0.2.0/24\"] },\n  { name = \"edge\", subnets = [\"10.9.1.0/24\"] },\n]\n```\n\nとして宣言し、次の3つを出力してください。\n\n- output `subnet_count`: 全 VPC のサブネットを平坦化したリストの要素数\n- output `subnets`: 平坦化したサブネットのリストを `,` 区切りで join した文字列\n- output `vpc_names`: splat で取り出した VPC 名を `,` 区切りで join した文字列\n\n**期待出力**\n\n```text\nsubnet_count = 3\nsubnets = \"10.0.1.0/24,10.0.2.0/24,10.9.1.0/24\"\nvpc_names = \"main,edge\"\n```",
+    "starter": "variable \"vpcs\" {\n  type = list(object({\n    name    = string\n    subnets = list(string)\n  }))\n  default = [\n    { name = \"main\", subnets = [\"10.0.1.0/24\", \"10.0.2.0/24\"] },\n    { name = \"edge\", subnets = [\"10.9.1.0/24\"] },\n  ]\n}\n\n# ここに locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "subnet_count = 3\nsubnets = \"10.0.1.0/24,10.0.2.0/24,10.9.1.0/24\"\nvpc_names = \"main,edge\"\n",
+    "answer": "variable \"vpcs\" {\n  type = list(object({\n    name    = string\n    subnets = list(string)\n  }))\n  default = [\n    { name = \"main\", subnets = [\"10.0.1.0/24\", \"10.0.2.0/24\"] },\n    { name = \"edge\", subnets = [\"10.9.1.0/24\"] },\n  ]\n}\n\n# var.vpcs[*].subnets は list(list(string)) になるため flatten で1段に平坦化します。\n# 「全 VPC のサブネット ID を1本にまとめる」実務パターンそのままの形です。\nlocals {\n  all_subnets = flatten(var.vpcs[*].subnets)\n}\n\noutput \"subnet_count\" {\n  value = length(local.all_subnets)\n}\n\noutput \"subnets\" {\n  value = join(\",\", local.all_subnets)\n}\n\noutput \"vpc_names\" {\n  value = join(\",\", var.vpcs[*].name)\n}\n"
+  }
+}

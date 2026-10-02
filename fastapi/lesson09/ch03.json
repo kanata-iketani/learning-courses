@@ -1,0 +1,15 @@
+{
+  "lesson": 9,
+  "chapter": 3,
+  "title": "「見つからなければ404」の定番パターン",
+  "priority": "🔴",
+  "text": "「見つからなければ先に 404 を raise して抜け、その後は正常系だけを書く」のが FastAPI の定番パターンです(先に異常系で抜ける書き方を**ガード節**と呼びます)。else が不要になりネストが浅くなるうえ、GET・PUT・DELETE のどのエンドポイントでも冒頭に同じ 2 行を置くだけで済みます。総合演習でもこの形をそのまま使います。🔴 この 2 行 + 正常系の形を手が覚えるまで書きましょう。\n\n```python\n@app.get(\"/books/{book_id}\")\ndef read_book(book_id: int):\n    if book_id not in books:  # ガード節: 異常系で先に抜ける\n        raise HTTPException(status_code=404, detail=f\"book {book_id} は見つかりません\")\n    return books[book_id]     # ここからは正常系だけ\n```",
+  "sample": "# lesson09 ch03: 「見つからなければ404、あれば200」の定番パターン\nfrom fastapi import FastAPI, HTTPException\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nbooks = {\n    1: {\"title\": \"Python入門\", \"price\": 2500},\n    2: {\"title\": \"FastAPI入門\", \"price\": 2800},\n}\n\n@app.get(\"/books/{book_id}\")\ndef read_book(book_id: int):\n    # ガード節: 異常系を先に片付ける\n    if book_id not in books:\n        raise HTTPException(status_code=404, detail=f\"book {book_id} は見つかりません\")\n    return books[book_id]\n\n@app.get(\"/books/{book_id}/price\")\ndef read_price(book_id: int):\n    # 別のエンドポイントでも冒頭は同じ 2 行\n    if book_id not in books:\n        raise HTTPException(status_code=404, detail=f\"book {book_id} は見つかりません\")\n    return {\"price\": books[book_id][\"price\"]}\n\nclient = TestClient(app)\nfor path in [\"/books/1\", \"/books/2/price\", \"/books/9\"]:\n    r = client.get(path)\n    print(r.status_code)\n    print(r.json())\n",
+  "exercise": {
+    "description": "メニュー辞書を持つ API に `GET /menu/{item_id}` を定番パターンで作ってください。\n\n- `item_id` が `menu` になければ 404 を raise し、detail は `menu {item_id} は見つかりません`(f-string)\n- あれば `menu[item_id]`(name と price の辞書)をそのまま返す\n\n**期待出力**\n\n```text\n200\n{'name': 'コーヒー', 'price': 480}\n404\n{'detail': 'menu 3 は見つかりません'}\n```",
+    "starter": "from fastapi import FastAPI, HTTPException\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nmenu = {\n    1: {\"name\": \"コーヒー\", \"price\": 480},\n    2: {\"name\": \"紅茶\", \"price\": 520},\n}\n\n# ここに GET /menu/{item_id} を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor item_id in [1, 3]:\n    r = client.get(f\"/menu/{item_id}\")\n    print(r.status_code)\n    print(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'name': 'コーヒー', 'price': 480}\n404\n{'detail': 'menu 3 は見つかりません'}\n",
+    "answer": "from fastapi import FastAPI, HTTPException\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nmenu = {\n    1: {\"name\": \"コーヒー\", \"price\": 480},\n    2: {\"name\": \"紅茶\", \"price\": 520},\n}\n\n@app.get(\"/menu/{item_id}\")\ndef read_menu(item_id: int):\n    # ガード節: 異常系(404)を先に raise で片付けると\n    # 以降は正常系だけになり、else もネストも不要になる\n    if item_id not in menu:\n        raise HTTPException(status_code=404, detail=f\"menu {item_id} は見つかりません\")\n    return menu[item_id]\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor item_id in [1, 3]:\n    r = client.get(f\"/menu/{item_id}\")\n    print(r.status_code)\n    print(r.json())\n"
+  }
+}

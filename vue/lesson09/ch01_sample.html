@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>DOM 入門</title>
+</head>
+<body>
+  <h1 id="greeting">(ここは JS が書きかえます)</h1>
+  <p>今日は <span id="today">?</span> です。</p>
+  <p id="message"></p>
+
+  <script>
+    // 1. 要素を取り出す → 2. textContent で書きかえる
+    const greeting = document.getElementById("greeting");
+    greeting.textContent = "こんにちは、DOM！";
+
+    // 今日の日付を作って書き込む
+    const now = new Date();
+    const todayText = (now.getMonth() + 1) + "月" + now.getDate() + "日";
+    document.getElementById("today").textContent = todayText;
+
+    // 変数に入れず、その場で使ってもかまいません
+    document.getElementById("message").textContent =
+      "この文章は JavaScript が書き込みました。";
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 3,
+  "title": "for_eachリソースの参照 — [キー]とvalues()",
+  "priority": "🟡",
+  "text": "for_each で作ったリソースは**マップ**なので、count のような `[0]` の index 参照はできません。個別には `リソース[\"キー\"]`、全要素まとめては `values(リソース)`(キーのアルファベット順の値リスト)にしてから splat で属性を取り出します。`values(terraform_data.queue)[*].output` のような形です。実務コードで `values(aws_subnet.private)[*].id` といった参照を見たら「for_each で作った全サブネットの ID をリスト化している」と読めます。🟡 「for_each 化されたリソース = マップ」という頭の切り替えが、このレッスンの読解ポイントです。\n\n```hcl\nlocals {\n  subnet_ids = values(aws_subnet.private)[*].id   # 読解例: 全要素の id\n  main_id    = aws_subnet.private[\"main\"].id      # キーで個別参照\n}\n```",
+  "sample": "# lesson08 ch03: for_each リソースの参照\nvariable \"queues\" {\n  default = [\"mail\", \"sync\"]\n}\n\nresource \"terraform_data\" \"queue\" {\n  for_each = toset(var.queues)\n  input    = format(\"queue-%s\", each.value)\n}\n\n# マップなので [0] ではなく [\"キー\"] で個別参照します\noutput \"mail\" {\n  value = terraform_data.queue[\"mail\"].output\n}\n\n# 全要素は values() でリスト化してから splat で属性を取り出します\noutput \"all\" {\n  value = join(\",\", values(terraform_data.queue)[*].output)\n}\n\noutput \"queue_count\" {\n  value = length(terraform_data.queue)\n}\n",
+  "exercise": {
+    "description": "variable `topics`(default `[\"audit\", \"mail\", \"sync\"]`)を宣言し、`terraform_data` リソース `topic` を `for_each = toset(var.topics)` で作成、`input` には `topic-要素名` を設定してください。そのうえで次の2つを出力してください。\n\n- output `all_topics`: `values()` と splat を使い、全リソースの `output` 属性を `,` 区切りで join した文字列\n- output `mail`: キー `\"mail\"` のリソースの `output` 属性\n\n**期待出力**\n\n```text\nall_topics = \"topic-audit,topic-mail,topic-sync\"\nmail = \"topic-mail\"\n```",
+    "starter": "variable \"topics\" {\n  default = [\"audit\", \"mail\", \"sync\"]\n}\n\nresource \"terraform_data\" \"topic\" {\n  # ここに for_each と input を書く\n}\n\n# ここに output を書く\n",
+    "stdin": "",
+    "expected_stdout": "all_topics = \"topic-audit,topic-mail,topic-sync\"\nmail = \"topic-mail\"\n",
+    "answer": "variable \"topics\" {\n  default = [\"audit\", \"mail\", \"sync\"]\n}\n\nresource \"terraform_data\" \"topic\" {\n  for_each = toset(var.topics)\n  input    = format(\"topic-%s\", each.value)\n}\n\n# for_each のリソースはマップなので、全要素は values() でリスト化 → [*] で属性取得します。\n# values() はキーのアルファベット順なので audit → mail → sync の順に並びます。\noutput \"all_topics\" {\n  value = join(\",\", values(terraform_data.topic)[*].output)\n}\n\noutput \"mail\" {\n  value = terraform_data.topic[\"mail\"].output\n}\n"
+  }
+}

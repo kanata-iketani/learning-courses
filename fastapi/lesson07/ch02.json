@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 2,
+  "title": "見せたくない項目を隠す",
+  "priority": "🔴",
+  "text": "パスワードのような秘密の値は、レスポンスに絶対に含めてはいけません。定石は、**入力用モデル**(パスワードあり)と**出力用モデル**(パスワードなし)の 2 つに分け、`response_model` に出力用を指定することです。関数が入力用モデルをそのまま返しても、レスポンスは出力用の形に絞られ、パスワードは消えます。🔴 「入力用と出力用を分ける」設計は Web API の必須知識なので、必ず書けるようにしましょう。\n\n```python\n@app.post(\"/users\", response_model=UserOut)\ndef create_user(user: UserIn):\n    return user  # password は UserOut にないので消える\n```",
+  "sample": "# lesson07 ch02: 入力用と出力用のモデルを分ける\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# 入力用: パスワードを受け取る\nclass UserIn(BaseModel):\n    name: str\n    password: str\n\n# 出力用: パスワードを持たない\nclass UserOut(BaseModel):\n    name: str\n\n@app.post(\"/users\", response_model=UserOut)\ndef create_user(user: UserIn):\n    # そのまま返しても、レスポンスは UserOut の形に絞られる\n    return user\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.post(\"/users\", json={\"name\": \"demo\", \"password\": \"himitsu123\"})\nprint(r.status_code)\nprint(r.json())  # password は含まれない\n",
+  "exercise": {
+    "description": "アカウント登録 API からパスワードを隠します。\n\n- 入力用モデル `AccountIn`(`email`: 文字列、`password`: 文字列)と、出力用モデル `AccountOut`(`email` のみ)を定義する\n- `POST /accounts` で `AccountIn` を受け取り、`response_model=AccountOut` を指定して、受け取ったモデルをそのまま返す\n\n**期待出力**\n\n```text\n200\n{'email': 'demo@example.com'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# ここに AccountIn / AccountOut モデルと POST /accounts を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/accounts\", json={\"email\": \"demo@example.com\", \"password\": \"secret777\"})\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'email': 'demo@example.com'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# 入力用はパスワードを受け取り、出力用は持たない、と分けるのが定石です。\nclass AccountIn(BaseModel):\n    email: str\n    password: str\n\nclass AccountOut(BaseModel):\n    email: str\n\n# response_model=AccountOut のおかげで、user をそのまま返しても\n# レスポンスには email しか含まれず、パスワードが漏れません。\n@app.post(\"/accounts\", response_model=AccountOut)\ndef create_account(account: AccountIn):\n    return account\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/accounts\", json={\"email\": \"demo@example.com\", \"password\": \"secret777\"})\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

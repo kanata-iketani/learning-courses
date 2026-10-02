@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>:style で見た目を制御</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>文字プレビュー</h1>
+    <!-- CSS プロパティはキャメルケース(font-size → fontSize)で書く -->
+    <p :style="{ color: textColor, fontSize: size + 'px' }">
+      あア Aa 123 — この文字の色とサイズはデータで決まっています
+    </p>
+    <p>いまのサイズ: {{ size }}px / 色: {{ textColor }}</p>
+
+    <!-- ボタンでデータを変えると、style も追従する -->
+    <button @click="size += 4">大きく</button>
+    <button @click="size -= 4">小さく</button>
+    <button @click="textColor = 'tomato'">トマト色にする</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          textColor: "steelblue",
+          size: 20
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

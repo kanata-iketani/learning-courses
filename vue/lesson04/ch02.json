@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 2,
+  "title": "let と const 〜変数をつくる",
+  "priority": "🔴",
+  "text": "**変数**(値に名前を付けて入れておく箱)を作るとき、Python では `name = \"太郎\"` と書くだけでしたが、JavaScript では宣言のキーワードが必要です。**const**(再代入できない宣言)と **let**(再代入できる宣言)の 2 つがあります。**再代入**とは、あとから別の値を入れ直すことです。🔴 基本は const で書き、あとで値を変えたい変数だけ let にする、と覚えましょう。古い書き方の `var` は使いません。\n\n```js\nconst name = \"太郎\";  // 再代入できない(基本はこちら)\nlet count = 0;        // 再代入できる\ncount = count + 1;    // OK\n```",
+  "sample": "// const: 再代入しない変数(基本はこちら)\nconst language = \"JavaScript\";\nconsole.log(language);\n\n// let: あとから値を入れ直す変数\nlet count = 0;\nconsole.log(count);\ncount = count + 1;  // 再代入\nconsole.log(count);\n\n// const に再代入するとエラーになります\n// language = \"Python\";  // TypeError になるのでコメントにしています\n\n// Python:     name = \"太郎\"\n// JavaScript: const name = \"太郎\";\nconst name = \"太郎\";\nconsole.log(name);\n",
+  "exercise": {
+    "description": "次の手順どおりに変数を作って出力してください。\n\n1. `const` で変数 `city` を作り、`\"東京\"` を入れて出力する\n2. `let` で変数 `year` を作り、`2025` を入れて出力する\n3. `year` に `2026` を再代入して、もう一度出力する\n\n**期待出力**\n\n```text\n東京\n2025\n2026\n```",
+    "starter": "// 1. const で city を作る\n\n// 2. let で year を作る\n\n// 3. year を再代入する\n",
+    "stdin": "",
+    "expected_stdout": "東京\n2025\n2026\n",
+    "answer": "// 変えない値は const、あとで入れ直す値だけ let にします\nconst city = \"東京\";\nlet year = 2025;\nconsole.log(city);\nconsole.log(year);\n// let で宣言したので再代入できます(const だとここでエラーになります)\nyear = 2026;\nconsole.log(year);\n"
+  }
+}

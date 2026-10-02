@@ -1,0 +1,16 @@
+{
+  "lesson": 10,
+  "chapter": 2,
+  "kind": "web",
+  "title": "createApp と data — アプリの起動と状態",
+  "priority": "🔴",
+  "text": "Vue アプリは 3 ステップで動きます。(1) `<script>` タグで Vue 本体を読み込む、(2) `createApp(設定)` でアプリを作る、(3) `.mount(\"#app\")` で「この要素の中を Vue が担当する」と割り当てる(**マウント**と呼びます)。設定の `data()` は、アプリの**状態**(アプリが覚えておく値)をオブジェクトで返す関数です。ここで返したプロパティは、マウント先の HTML の中で `{{ 名前 }}` として表示できます。🔴 この 3 ステップの型は、今後すべてのチャプターで使う土台です。\n\n```js\nconst { createApp } = Vue;\ncreateApp({\n  data() {\n    return { name: \"いけたに\", age: 20 };\n  }\n}).mount(\"#app\");\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>はじめての Vue アプリ</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <!-- mount(\"#app\") した要素の中だけを Vue が担当する -->\n  <div id=\"app\">\n    <h1>{{ title }}</h1>\n    <p>担当: {{ name }}</p>\n    <p>好きな食べ物: {{ food }}</p>\n  </div>\n\n  <!-- ここは #app の外なので、Vue は関知しない({{ }} も動かない) -->\n  <p>この行は Vue の外側です: {{ title }}</p>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      // data(): アプリの状態を返す関数。ここの値を書きかえて再プレビューすると表示も変わる\n      data() {\n        return {\n          title: \"はじめての Vue アプリ\",\n          name: \"いけたに\",\n          food: \"カレー\"\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "`createApp` と `data` を使って「自己紹介アプリ」を作りましょう。starter には HTML 側の `{{ name }}` と `{{ hobby }}` だけ用意してあります。`<script>` 内に Vue アプリの起動コードを書き、データを表示させてください。\n\n**確認ポイント**\n\n1. プレビューに `{{ name }}` という文字がそのまま出ておらず、data に入れた名前が表示される\n2. 趣味も同じように data の値が表示される\n3. data の値を別の文字列に書きかえて再プレビューすると、HTML を触らなくても表示が変わる\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>自己紹介アプリ</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>自己紹介</h1>\n    <p>名前: {{ name }}</p>\n    <p>趣味: {{ hobby }}</p>\n  </div>\n\n  <script>\n    // ここに createApp → data() → mount(\"#app\") の 3 ステップを書く\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>自己紹介アプリ</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>自己紹介</h1>\n    <p>名前: {{ name }}</p>\n    <p>趣味: {{ hobby }}</p>\n  </div>\n\n  <script>\n    // 工夫: HTML には「どこに何を表示するか」だけを書き、値そのものは data に集める。\n    // 表示内容を変えたいときは data だけ直せばよい\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          name: \"いけたに\",\n          hobby: \"プログラミング\"\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

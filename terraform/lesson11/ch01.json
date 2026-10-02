@@ -1,0 +1,15 @@
+{
+  "lesson": 11,
+  "chapter": 1,
+  "title": "ディレクトリ分割方式",
+  "priority": "🟡",
+  "text": "同じ構成を prod / stg に展開する最も一般的な流儀が**ディレクトリ分割方式**(環境ごとにディレクトリを分け、それぞれが同じモジュールを呼ぶ構成)です。`environments/prod` と `environments/stg` の main.tf はほぼ同じで、違いは module へ渡す引数(env 名やスペックなど)だけに現れます。🟡 読解時は 2 つの環境ディレクトリの diff を取るのが近道で、そこに現れた差分こそが「環境ごとの設定差」です。\n\n```text\nenvironments/\n  prod/main.tf  # module \"service\" { source = \"../../modules/service\"  env = \"prod\" }\n  stg/main.tf   # module \"service\" { source = \"../../modules/service\"  env = \"stg\" }\nmodules/\n  service/main.tf # 共通ロジック本体\n```",
+  "sample": "# 同じモジュールに違う env を渡すと出力が変わることを 1 ファイルで体験します。\n# 実際は prod/ と stg/ の別ディレクトリに置かれる 2 つの呼び出しです。\n\nmodule \"prod\" {\n  source = \"./modules/service\"\n  env    = \"prod\"\n}\n\nmodule \"stg\" {\n  source = \"./modules/service\"\n  env    = \"stg\"\n}\n\noutput \"prod_name\" {\n  value = module.prod.name\n}\n\noutput \"stg_name\" {\n  value = module.stg.name\n}\n\n# === file: modules/service/main.tf ===\nvariable \"env\" {\n  type = string\n}\n\noutput \"name\" {\n  value = \"app-${var.env}\"\n}\n",
+  "exercise": {
+    "description": "starter のモジュール `./modules/service` は env を受け取り、名前とインスタンスタイプを返します。prod と stg から同じモジュールを呼ぶ構成を再現してください。\n\n1. `module \"prod\"`(env = `\"prod\"`)と `module \"stg\"`(env = `\"stg\"`)の 2 つの呼び出しを書く\n2. output `prod_type` と `stg_type` で各モジュールの `instance_type` を表示する\n\n**期待出力**\n\n```text\nprod_type = \"m5.large\"\nstg_type = \"t3.small\"\n```",
+    "starter": "# ここに 2 つの module ブロックと 2 つの output を書く\n\n# === file: modules/service/main.tf ===\nvariable \"env\" {\n  type = string\n}\n\noutput \"name\" {\n  value = \"app-${var.env}\"\n}\n\noutput \"instance_type\" {\n  value = var.env == \"prod\" ? \"m5.large\" : \"t3.small\"\n}\n",
+    "stdin": "",
+    "expected_stdout": "prod_type = \"m5.large\"\nstg_type = \"t3.small\"\n",
+    "answer": "# モジュール本体は 1 つだけ。渡す env が違うだけで結果が変わります。\n# 実務ではこの 2 ブロックが environments/prod と environments/stg に分かれて置かれます。\nmodule \"prod\" {\n  source = \"./modules/service\"\n  env    = \"prod\"\n}\n\nmodule \"stg\" {\n  source = \"./modules/service\"\n  env    = \"stg\"\n}\n\noutput \"prod_type\" {\n  value = module.prod.instance_type\n}\n\noutput \"stg_type\" {\n  value = module.stg.instance_type\n}\n\n# === file: modules/service/main.tf ===\nvariable \"env\" {\n  type = string\n}\n\noutput \"name\" {\n  value = \"app-${var.env}\"\n}\n\noutput \"instance_type\" {\n  value = var.env == \"prod\" ? \"m5.large\" : \"t3.small\"\n}\n"
+  }
+}

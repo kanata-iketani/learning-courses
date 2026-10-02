@@ -1,0 +1,15 @@
+{
+  "lesson": 9,
+  "chapter": 2,
+  "title": "contentとiterator",
+  "priority": "🟡",
+  "text": "dynamic の中の **content ブロック**(生成される 1 ブロック分の中身を書く場所)には、通常のブロックと同じ引数を書きます。**iterator**(ループ変数の名前を変える引数)を指定すると、既定の「ブロック名と同じ変数」を別名にできます。for_each にオブジェクトのリストを渡す実務コードでは、`rule.value.port` のように「変数名.value.属性名」の形で読みます。🟡 iterator があるコードでは「どの変数がループ 1 周分を指すか」を最初に確認しましょう。\n\n```hcl\ndynamic \"ingress\" {\n  for_each = var.ingress_rules # [{ port = 80, cidr = \"10.0.0.0/16\" }, ...]\n  iterator = rule              # 変数名を ingress → rule に変更\n  content {\n    from_port   = rule.value.port\n    to_port     = rule.value.port\n    cidr_blocks = [rule.value.cidr]\n  }\n}\n```",
+  "sample": "# text の dynamic + iterator が生成するルールを for 式で再現します。\n# rule.value.port / rule.value.cidr の読み方は、for 式の r.port / r.cidr と同じです。\n\nlocals {\n  ingress_rules = [\n    { port = 80, cidr = \"10.0.0.0/16\" },\n    { port = 443, cidr = \"0.0.0.0/0\" },\n  ]\n\n  # 1 要素が content 1 回分に対応する\n  lines = [for r in local.ingress_rules : \"${r.port} from ${r.cidr}\"]\n}\n\noutput \"ingress\" {\n  value = join(\", \", local.lines)\n}\n",
+  "exercise": {
+    "description": "text の dynamic ブロックが次のルールリストを受け取ったときに生成する内容を、for 式で再現してください。\n\n1. `variable \"ingress_rules\"` を `list(object({ port = number, cidr = string }))` 型で定義し、default に `{ port = 22, cidr = \"10.0.0.0/8\" }` と `{ port = 443, cidr = \"0.0.0.0/0\" }` の 2 件を入れる\n2. for 式で各ルールを `\"22 from 10.0.0.0/8\"` 形式の文字列にする\n3. output `ingress` で `join(\", \", ...)` した結果を表示する\n\n**期待出力**\n\n```text\ningress = \"22 from 10.0.0.0/8, 443 from 0.0.0.0/0\"\n```",
+    "starter": "variable \"ingress_rules\" {\n  type = list(object({ port = number, cidr = string }))\n  default = [\n    # ここに 2 件のルールを書く\n  ]\n}\n\n# ここに for 式の locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "ingress = \"22 from 10.0.0.0/8, 443 from 0.0.0.0/0\"\n",
+    "answer": "variable \"ingress_rules\" {\n  type = list(object({ port = number, cidr = string }))\n  default = [\n    { port = 22, cidr = \"10.0.0.0/8\" },\n    { port = 443, cidr = \"0.0.0.0/0\" },\n  ]\n}\n\n# iterator = rule のときの rule.value.port は、for 式では r.port に対応します。\n# dynamic の content 1 回分 = for 式の 1 要素、という対応で読み替えます。\nlocals {\n  lines = [for r in var.ingress_rules : \"${r.port} from ${r.cidr}\"]\n}\n\noutput \"ingress\" {\n  value = join(\", \", local.lines)\n}\n"
+  }
+}

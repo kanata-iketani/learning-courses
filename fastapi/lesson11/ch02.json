@@ -1,0 +1,15 @@
+{
+  "lesson": 11,
+  "chapter": 2,
+  "title": "prefix と tags",
+  "priority": "🟡",
+  "text": "APIRouter には **prefix**(その router の全パスに付く共通の接頭辞)と **tags**(自動ドキュメント /docs でのグループ名)を指定できます。`APIRouter(prefix=\"/items\", tags=[\"items\"])` とすると、router 側は `\"/\"` や `\"/{item_id}\"` と書くだけで実際のパスは `/items/`・`/items/{item_id}` になります。パスの書き間違いが減り、/docs もグループごとに整理されます。🟡 「router 内のパス + prefix = 実際のパス」という対応を理解しましょう。\n\n```python\nrouter = APIRouter(prefix=\"/items\", tags=[\"items\"])\n\n@router.get(\"/\")          # 実際は GET /items/\ndef list_items(): ...\n\n@router.get(\"/{item_id}\")  # 実際は GET /items/{item_id}\ndef read_item(item_id: int): ...\n```",
+  "sample": "# lesson11 ch02: prefix と tags\nfrom fastapi import APIRouter, FastAPI\nfrom fastapi.testclient import TestClient\n\n# prefix: パスの共通接頭辞 / tags: /docs でのグループ名\nrouter = APIRouter(prefix=\"/items\", tags=[\"items\"])\n\nitems = {1: \"ペン\", 2: \"ノート\"}\n\n@router.get(\"/\")\ndef list_items():\n    # 実際のパスは prefix が付いて /items/ になる\n    return list(items.values())\n\n@router.get(\"/{item_id}\")\ndef read_item(item_id: int):\n    # 実際のパスは /items/{item_id}\n    return {\"name\": items[item_id]}\n\napp = FastAPI()\napp.include_router(router)\n\nclient = TestClient(app)\nr = client.get(\"/items/\")\nprint(r.status_code)\nprint(r.json())\nr = client.get(\"/items/2\")\nprint(r.json())\n\n# 登録された実際のパスを確認してみる\nprint(sorted(app.openapi()[\"paths\"].keys()))\n",
+  "exercise": {
+    "description": "prefix と tags 付きの router でユーザー API を作ってください。\n\n- `router = APIRouter(prefix=\"/users\", tags=[\"users\"])` を作る\n- `@router.get(\"/\")` で `[\"佐藤\", \"鈴木\"]` を返す(実際のパスは `/users/`)\n- `@router.get(\"/{user_id}\")` で `{\"id\": user_id}` を返す\n- `app.include_router(router)` で合体させる\n\n**期待出力**\n\n```text\n200\n['佐藤', '鈴木']\n200\n{'id': 1}\n```",
+    "starter": "from fastapi import APIRouter, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに prefix と tags 付きの router・2 つの GET・include_router を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/users/\")\nprint(r.status_code)\nprint(r.json())\nr = client.get(\"/users/1\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n['佐藤', '鈴木']\n200\n{'id': 1}\n",
+    "answer": "from fastapi import APIRouter, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# prefix を付けると router 内は \"/\" や \"/{user_id}\" だけ書けばよい\nrouter = APIRouter(prefix=\"/users\", tags=[\"users\"])\n\n@router.get(\"/\")\ndef list_users():\n    # 実際のパスは /users/\n    return [\"佐藤\", \"鈴木\"]\n\n@router.get(\"/{user_id}\")\ndef read_user(user_id: int):\n    # 実際のパスは /users/{user_id}\n    return {\"id\": user_id}\n\napp.include_router(router)\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/users/\")\nprint(r.status_code)\nprint(r.json())\nr = client.get(\"/users/1\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 1,
+  "chapter": 3,
+  "title": "planとapplyとstate",
+  "priority": "🟡",
+  "text": "この講座の「▶ 実行」ボタンは `terraform init`(プラグインなどの初期化)→ `terraform apply`(あるべき状態を実際に反映)→ `terraform output`(結果の表示)を一気に実行しています。実務では apply の前に `terraform plan`(何が作成・変更・削除されるかの予告)を見て確認します。apply の結果は **state**(terraform.tfstate。Terraform が「今なにを管理しているか」を記録するファイル)に保存され、次回の plan はコードと state の差分から計算されます。実務では state を S3 などのリモートに置いてチームで共有するのが定番です(詳しくは lesson12)。🟡 まずは「plan は予告、apply は反映、state は記録」という役割分担を理解しましょう。\n\n```sh\nterraform init   # 初期化(最初の1回)\nterraform plan   # 変更の予告(まだ何も変えない)\nterraform apply  # 反映して state に記録\n```",
+  "sample": "# lesson01 ch03: apply すると state に記録されます\n# 「▶ 実行」は init → apply → output の一括実行です。\n\nresource \"terraform_data\" \"tracked\" {\n  input = \"stateで管理\"\n}\n\n# apply が終わると、このリソースは state に記録されます。\n# もう一度 apply しても差分がなければ何も起きません(冪等性)。\n\noutput \"tracked\" {\n  value = terraform_data.tracked.output\n}\n\noutput \"cycle\" {\n  value = \"init-plan-apply\"\n}\n",
+  "exercise": {
+    "description": "`terraform_data` リソース `tracked` を作り、`input` に `\"stateで管理\"` を設定してください。さらに output ブロックを2つ書きます。\n\n- output `cycle`: 文字列 `\"plan-apply\"` を表示\n- output `tracked`: リソース `tracked` の `output` 属性を表示\n\n書けたら「▶ 実行」を2回押してみてください。2回目も同じ結果になります(state に記録済みなので差分がありません)。\n\n**期待出力**\n\n```text\ncycle = \"plan-apply\"\ntracked = \"stateで管理\"\n```",
+    "starter": "# resource と output を書いて「▶ 実行」(init → apply → output が走ります)\n",
+    "stdin": "",
+    "expected_stdout": "cycle = \"plan-apply\"\ntracked = \"stateで管理\"\n",
+    "answer": "# apply されたリソースは state に記録され、output は apply 後の値を表示します。\n# 同じコードを何度 apply しても結果が変わらないのが宣言的スタイルの利点です。\nresource \"terraform_data\" \"tracked\" {\n  input = \"stateで管理\"\n}\n\noutput \"cycle\" {\n  value = \"plan-apply\"\n}\n\noutput \"tracked\" {\n  value = terraform_data.tracked.output\n}\n"
+  }
+}

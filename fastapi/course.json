@@ -1,0 +1,14 @@
+[
+  { "lesson": 1, "title": "FastAPIとは" },
+  { "lesson": 2, "title": "はじめてのAPI" },
+  { "lesson": 3, "title": "パスパラメータ" },
+  { "lesson": 4, "title": "クエリパラメータ" },
+  { "lesson": 5, "title": "リクエストボディとPydantic" },
+  { "lesson": 6, "title": "バリデーション" },
+  { "lesson": 7, "title": "レスポンスモデルとステータスコード" },
+  { "lesson": 8, "title": "CRUDを作る" },
+  { "lesson": 9, "title": "エラー処理" },
+  { "lesson": 10, "title": "依存性注入（Depends）" },
+  { "lesson": 11, "title": "ルーター分割と非同期" },
+  { "lesson": 12, "title": "総合演習：ミニCRUD API" }
+]

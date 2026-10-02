@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 1,
+  "title": "リストのfor式 — [for x in ...]",
+  "priority": "🔴",
+  "text": "**for式**(リストやマップの各要素を変換して、新しいリストやマップを作る式)のリスト版です。`[for x in var.list : 式]` で全要素に同じ変換をかけた新しいリストが得られます。`[for i, x in var.list : ...]` と書くと index も使えます。実務では「ユーザー名のリストからメールアドレスのリストを作る」「名前のリストからリソース定義用の値を組み立てる」という前処理として必ず登場します。🔴 なお、リストをそのまま output すると複数行の `tolist([...])` 形式で表示されます。この見た目にも慣れておきましょう。\n\n```hcl\nlocals {\n  upper_names = [for n in var.names : upper(n)]           # 全要素を大文字に\n  hosts       = [for i, n in var.names : \"${i}-${n}\"]     # index 付き\n}\n```",
+  "sample": "# lesson06 ch01: リストの for 式\nvariable \"names\" {\n  default = [\"ayame\", \"botan\", \"kaede\"]\n}\n\nlocals {\n  # 各要素に upper をかけた新しいリストを作ります\n  upper_names = [for n in var.names : upper(n)]\n\n  # i には 0 始まりの index が入ります\n  hosts = [for i, n in var.names : format(\"%02d-%s\", i + 1, n)]\n}\n\noutput \"upper_joined\" {\n  value = join(\",\", local.upper_names)\n}\n\noutput \"hosts\" {\n  value = join(\",\", local.hosts)\n}\n",
+  "exercise": {
+    "description": "variable `users`(default `[\"sato\", \"suzuki\", \"takahashi\"]`)を宣言し、for式で各ユーザーのメールアドレス(`ユーザー名@example.com`)のリストを作って、次の3つを出力してください。\n\n- output `email_count`: リストの要素数\n- output `emails`: リストを `tolist(...)` で包んでそのまま出力(複数行の表示形式を確認します)\n- output `joined`: リストを `,` 区切りで join した文字列\n\n**期待出力**\n\n```text\nemail_count = 3\nemails = tolist([\n  \"sato@example.com\",\n  \"suzuki@example.com\",\n  \"takahashi@example.com\",\n])\njoined = \"sato@example.com,suzuki@example.com,takahashi@example.com\"\n```",
+    "starter": "variable \"users\" {\n  default = [\"sato\", \"suzuki\", \"takahashi\"]\n}\n\n# ここに locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "email_count = 3\nemails = tolist([\n  \"sato@example.com\",\n  \"suzuki@example.com\",\n  \"takahashi@example.com\",\n])\njoined = \"sato@example.com,suzuki@example.com,takahashi@example.com\"\n",
+    "answer": "variable \"users\" {\n  default = [\"sato\", \"suzuki\", \"takahashi\"]\n}\n\n# for 式は「元のリストは変えず、変換後の新しいリストを作る」のがポイントです。\n# \"${u}@...\" のような文字列テンプレートとの組み合わせが実務の定番です。\nlocals {\n  emails = [for u in var.users : \"${u}@example.com\"]\n}\n\noutput \"email_count\" {\n  value = length(local.emails)\n}\n\n# リストの output は複数行の tolist([...]) 形式で表示されます\noutput \"emails\" {\n  value = tolist(local.emails)\n}\n\noutput \"joined\" {\n  value = join(\",\", local.emails)\n}\n"
+  }
+}

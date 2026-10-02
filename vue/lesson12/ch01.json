@@ -1,0 +1,16 @@
+{
+  "lesson": 12,
+  "chapter": 1,
+  "kind": "web",
+  "title": "@click と methods",
+  "priority": "🔴",
+  "text": "クリックに反応させるには **v-on**(ブイオン)ディレクティブを使います。`v-on:click=\"処理\"` の省略形が `@click=\"処理\"` です。短い処理は直接書けますが、ふつうは設定オブジェクトの **methods**(アプリが実行できる関数をまとめる場所)に**メソッド**(オブジェクトに属する関数)を定義し、`@click=\"メソッド名\"` で呼びます。data の値には `this.count` のように **this**(動いているアプリ自身を指すことば)を付けてアクセスします。🔴 「@click → methods → this.データ名」の流れを手で覚えましょう。\n\n```js\ncreateApp({\n  data() { return { message: \"こんにちは\" }; },\n  methods: {\n    change() {\n      this.message = \"クリックされました！\";  // this を忘れずに\n    }\n  }\n}).mount(\"#app\");\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>いいねボタン</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>いいねボタン</h1>\n    <!-- @click=\"メソッド名\" でクリック時に実行される -->\n    <button @click=\"addLike\">♥ いいね</button>\n    <p>{{ likes }} いいね {{ likes >= 10 ? \"🎉 大人気！\" : \"\" }}</p>\n\n    <button @click=\"reset\">リセット</button>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { likes: 0 };\n      },\n      methods: {\n        addLike() {\n          // メソッドの中では this.データ名 で読み書きする\n          this.likes = this.likes + 1;\n        },\n        reset() {\n          this.likes = 0;\n        }\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "「あいさつ切り替えアプリ」を作りましょう。ボタンを押すと、表示中のメッセージが「おはようございます！」に変わるようにしてください。`methods` に `sayMorning` メソッドを定義し、`this.message` を書きかえ、ボタンの `@click` から呼び出します。\n\n**確認ポイント**\n\n1. 最初は「こんにちは」と表示されている\n2. ボタンを押すと表示が「おはようございます！」に変わる\n3. `@click` には式ではなくメソッド名(`sayMorning`)が書かれており、処理は `methods` の中にある\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>あいさつ切り替え</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>{{ message }}</h1>\n    <!-- この <button> に @click=\"sayMorning\" を付ける -->\n    <button>朝のあいさつにする</button>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { message: \"こんにちは\" };\n      },\n      methods: {\n        // ここに sayMorning() を定義する(this.message を書きかえる)\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>あいさつ切り替え</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>{{ message }}</h1>\n    <!-- 工夫: HTML には「どのメソッドを呼ぶか」だけを書き、処理の中身は methods に置く -->\n    <button @click=\"sayMorning\">朝のあいさつにする</button>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { message: \"こんにちは\" };\n      },\n      methods: {\n        sayMorning() {\n          // this を付けると data の message にアクセスできる\n          this.message = \"おはようございます！\";\n        }\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

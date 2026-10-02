@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 4,
+  "title": "ステータスコードの使い分け",
+  "priority": "🟡",
+  "text": "よく使うステータスコードは 4 つです。**200**(OK: 取得や更新の成功)、**201**(Created: 新しく作成した)、**204**(No Content: 成功したが返す中身がない。削除でよく使う)、**404**(Not Found: 見つからない)。204 のレスポンスにはボディを入れない決まりなので、関数は `return None`(何も返さない)にします。存在しない URL へのアクセスには FastAPI が自動で 404 を返します。🟡 4 つのコードの意味を説明できるようになりましょう。\n\n```python\n@app.delete(\"/items/1\", status_code=204)\ndef delete_item():\n    return None  # 204 ではボディを返さない\n```",
+  "sample": "# lesson07 ch04: 200 / 201 / 204 / 404 の使い分け\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 200: 取得の成功 (既定)\n@app.get(\"/items\")\ndef list_items():\n    return []\n\n# 201: 新しく作成した\n@app.post(\"/items\", status_code=201)\ndef create_item():\n    return {\"created\": True}\n\n# 204: 成功したが返す中身がない (削除でよく使う)\n@app.delete(\"/items/1\", status_code=204)\ndef delete_item():\n    return None\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/items\").status_code)       # 200\nprint(client.post(\"/items\").status_code)      # 201\nprint(client.delete(\"/items/1\").status_code)  # 204\nprint(client.get(\"/nothing\").status_code)     # 404: URL が存在しない\n",
+  "exercise": {
+    "description": "4 種類のステータスコードを返す API を作ります。\n\n- `GET /ping`: `{\"message\": \"pong\"}` を返す(既定の 200)\n- `POST /notes`: `{\"created\": True}` を返す。`status_code=201` を指定する\n- `DELETE /notes/1`: `status_code=204` を指定し、`return None` にする\n\n動作確認では上の 3 つに加えて、存在しない URL `/nothing` にもアクセスします(404 になります)。\n\n**期待出力**\n\n```text\n200\n201\n204\n404\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /ping、POST /notes、DELETE /notes/1 を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/ping\").status_code)\nprint(client.post(\"/notes\").status_code)\nprint(client.delete(\"/notes/1\").status_code)\nprint(client.get(\"/nothing\").status_code)\n",
+    "stdin": "",
+    "expected_stdout": "200\n201\n204\n404\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 取得の成功は既定の 200 のままでよいので、何も指定しません。\n@app.get(\"/ping\")\ndef ping():\n    return {\"message\": \"pong\"}\n\n# 作成は 201 (Created) で伝えます。\n@app.post(\"/notes\", status_code=201)\ndef create_note():\n    return {\"created\": True}\n\n# 削除は 204 (No Content)。ボディを返さない決まりなので return None にします。\n@app.delete(\"/notes/1\", status_code=204)\ndef delete_note():\n    return None\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/ping\").status_code)\nprint(client.post(\"/notes\").status_code)\nprint(client.delete(\"/notes/1\").status_code)\nprint(client.get(\"/nothing\").status_code)\n"
+  }
+}

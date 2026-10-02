@@ -1,0 +1,16 @@
+{
+  "lesson": 14,
+  "chapter": 3,
+  "kind": "web",
+  "title": "v-for でリストを表示する",
+  "priority": "🔴",
+  "text": "**v-for**(配列の要素の数だけタグをくり返すディレクティブ)を学びます。`v-for=\"item in items\"` と書くと、配列 items の要素が 1 つずつ item に入り、そのタグが要素の数だけ描画されます。`(item, index)` の形にすると **index**(0 から始まる「何番目か」の番号)も一緒に使えます。配列に push で要素を足すと、画面のリストも自動で増えます。🔴 一覧表示はほぼすべてのアプリに登場する、v-if と並ぶ最重要ディレクティブです。\n\n```html\n<li v-for=\"(fruit, index) in fruits\">{{ index + 1 }} 番目: {{ fruit }}</li>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>v-for でリスト表示</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>好きな果物リスト({{ fruits.length }} 件)</p>\n    <ul>\n      <li v-for=\"(fruit, index) in fruits\">{{ index + 1 }} 番目: {{ fruit }}</li>\n    </ul>\n    <input v-model=\"newFruit\" placeholder=\"果物の名前\">\n    <button v-on:click=\"addFruit\">追加</button>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          fruits: [\"りんご\", \"バナナ\", \"みかん\"],\n          newFruit: \"\"\n        };\n      },\n      methods: {\n        addFruit() {\n          this.fruits.push(this.newFruit);\n          this.newFruit = \"\";\n        }\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "「行きたい場所リスト」を作りましょう。starter の配列 `places` には 2 か所だけ入っています。v-for で番号付きの一覧にして、入力欄とボタンで増やせるようにしてください。\n\n**確認ポイント**\n\n1. ページを開くと、配列に入っている場所が「1 番目: ○○」のように番号付きで表示される\n2. 入力欄に場所を書いて追加ボタンを押すと、一覧の最後に増え、件数の表示も 1 増える\n3. 追加したあと、入力欄が自動で空に戻る\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>行きたい場所リスト</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>行きたい場所({{ places.length }} 件)</p>\n    <ul>\n      <!-- v-for で places を番号付きで表示する -->\n    </ul>\n    <input v-model=\"newPlace\" placeholder=\"例: 北海道\">\n    <button>追加</button>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          places: [\"京都\", \"沖縄\"],\n          newPlace: \"\"\n        };\n      },\n      methods: {\n        // addPlace をここに書く\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>行きたい場所リスト</title>\n</head>\n<body>\n  <div id=\"app\">\n    <!-- fruits.length と同じように、配列の length で件数も自動更新される -->\n    <p>行きたい場所({{ places.length }} 件)</p>\n    <ul>\n      <li v-for=\"(place, index) in places\">{{ index + 1 }} 番目: {{ place }}</li>\n    </ul>\n    <input v-model=\"newPlace\" placeholder=\"例: 北海道\">\n    <button v-on:click=\"addPlace\">追加</button>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          places: [\"京都\", \"沖縄\"],\n          newPlace: \"\"\n        };\n      },\n      methods: {\n        addPlace() {\n          // 工夫した点: push した直後に入力欄を空へ戻す。v-model なので画面も空になる\n          this.places.push(this.newPlace);\n          this.newPlace = \"\";\n        }\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

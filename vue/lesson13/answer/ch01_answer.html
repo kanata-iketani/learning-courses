@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>自己紹介カード</title>
+</head>
+<body>
+  <div id="app">
+    <p>ニックネーム: <input v-model="nickname"></p>
+    <!-- 工夫した点: placeholder で入力例を示すと親切です -->
+    <p>ひとこと: <input v-model="comment" placeholder="例: Vue を勉強中です"></p>
+    <hr>
+    <p>{{ nickname }} です。よろしくお願いします！</p>
+    <p>ひとこと: {{ comment }}</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          nickname: "ゲスト",
+          // comment の初期値は空文字。入力すると即座に紹介文へ反映される
+          comment: ""
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

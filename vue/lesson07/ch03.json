@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 3,
+  "title": "オブジェクト 〜 {key: value}",
+  "priority": "🔴",
+  "text": "**オブジェクト**は、値に名前(キー)を付けてまとめて入れる箱で、`{key: value}` の形で作ります。Python の辞書に相当しますが、キーをクォートで囲む必要がなく、取り出しも `user[\"name\"]` ではなく**ドット記法**(`user.name` のようにドットでキーを指定する書き方)を使うのが基本です。値の変更も `user.age = 23;` のように書けます。Vue では画面に表示するデータをオブジェクトの形で持つため、この書き方は今後ずっと使います。🔴 「作るときは `キー: 値`、使うときはドット」と覚えましょう。\n\n```js\nconst user = { name: \"さくら\", age: 22 };\nconsole.log(user.name);  // Python: user[\"name\"]\n```",
+  "sample": "// オブジェクト: 名前(キー)付きで値をまとめる箱(Python の辞書に相当)\nconst user = {\n  name: \"さくら\",\n  age: 22,\n  city: \"大阪\",\n};\n\n// 取り出しはドット記法 (Python: user[\"name\"])\nconsole.log(user.name);\nconsole.log(user.age);\n\n// 値の変更もドット記法でできます\nuser.age = 23;\nconsole.log(user.age);\n\n// テンプレートリテラルと組み合わせると便利です\nconsole.log(`${user.name}さんは${user.city}在住です`);\n",
+  "exercise": {
+    "description": "オブジェクト `const book = { title: \"Vue入門\", price: 2800, pages: 320 };` について、次の 3 つを順に行ってください。\n\n1. テンプレートリテラルで `Vue入門は2800円です` と出力する(タイトルと価格をドット記法で埋め込む)\n2. ページ数を出力する\n3. `price` を 2500 に変更してから、価格だけをもう一度出力する\n\n**期待出力**\n\n```text\nVue入門は2800円です\n320\n2500\n```",
+    "starter": "const book = { title: \"Vue入門\", price: 2800, pages: 320 };\n// 1. 「〇〇は〇〇円です」と出力\n\n// 2. ページ数を出力\n\n// 3. price を 2500 に変更して出力\n",
+    "stdin": "",
+    "expected_stdout": "Vue入門は2800円です\n320\n2500\n",
+    "answer": "const book = { title: \"Vue入門\", price: 2800, pages: 320 };\n// 取り出しはドット記法。${} の中でもそのまま使えます\nconsole.log(`${book.title}は${book.price}円です`);\nconsole.log(book.pages);\n// const でも中身(プロパティ)の変更はできます。再代入だけが禁止です\nbook.price = 2500;\nconsole.log(book.price);\n"
+  }
+}

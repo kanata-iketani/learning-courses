@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 1,
+  "title": "countとcount.index — 連番リソース",
+  "priority": "🔴",
+  "text": "**count**(リソースを指定した個数まとめて作るメタ引数)を使うと、同じ定義から N 個のリソースを作れます。**メタ引数**とはリソースの種類によらず使える共通の引数のことです。ブロック内では `count.index` で 0 始まりの番号が使え、`format(\"web-%02d\", count.index + 1)` のような連番名の組み立てが定番です。作られたリソースは**リスト**になるため、`リソース[0]` の index 参照や `リソース[*].属性` の splat 参照で読み書きします。🔴 実務では EC2 やサブネットの複数作成で頻出です。`[*]` 参照とセットで読めるようにしましょう。\n\n```hcl\nresource \"aws_instance\" \"web\" {\n  count = 3\n  tags  = { Name = format(\"web-%02d\", count.index + 1) }  # 読解例\n}\n```",
+  "sample": "# lesson07 ch01: count と count.index\nvariable \"replicas\" {\n  default = 3\n}\n\nresource \"terraform_data\" \"web\" {\n  count = var.replicas\n  # count.index は 0 始まり。+1 して 1 始まりの連番にするのが定番です\n  input = format(\"web-%02d\", count.index + 1)\n}\n\n# count 付きリソースはリストになるので [0] で個別参照できます\noutput \"first\" {\n  value = terraform_data.web[0].output\n}\n\n# [*] (splat) で全要素の属性をまとめて取り出せます\noutput \"all\" {\n  value = join(\",\", terraform_data.web[*].output)\n}\n",
+  "exercise": {
+    "description": "variable `node_count`(default `4`)を宣言し、`terraform_data` リソース `node` を `count = var.node_count` で作成、`input` には `node-0` のように `count.index` をそのまま使った名前を設定してください。そのうえで次の3つを出力してください。\n\n- output `all_nodes`: 全ノードの `output` 属性を `,` 区切りで join した文字列\n- output `last`: 最後のノード(`[3]`)の `output` 属性\n- output `total`: `length` で数えたノードの個数\n\n**期待出力**\n\n```text\nall_nodes = \"node-0,node-1,node-2,node-3\"\nlast = \"node-3\"\ntotal = 4\n```",
+    "starter": "variable \"node_count\" {\n  default = 4\n}\n\nresource \"terraform_data\" \"node\" {\n  # ここに count と input を書く\n}\n\n# ここに output を書く\n",
+    "stdin": "",
+    "expected_stdout": "all_nodes = \"node-0,node-1,node-2,node-3\"\nlast = \"node-3\"\ntotal = 4\n",
+    "answer": "variable \"node_count\" {\n  default = 4\n}\n\n# count = 変数 で個数を外から差し替えられるようにするのが実務の形です。\n# count.index は 0 始まりなので、そのまま使うと node-0 〜 node-3 になります。\nresource \"terraform_data\" \"node\" {\n  count = var.node_count\n  input = format(\"node-%d\", count.index)\n}\n\noutput \"all_nodes\" {\n  value = join(\",\", terraform_data.node[*].output)\n}\n\noutput \"last\" {\n  value = terraform_data.node[3].output\n}\n\noutput \"total\" {\n  value = length(terraform_data.node)\n}\n"
+  }
+}

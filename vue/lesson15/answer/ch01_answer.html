@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>文字数カウンタ</title>
+</head>
+<body>
+  <div id="app">
+    <p>メッセージ(140 文字まで):</p>
+    <textarea v-model="message" rows="4" cols="40"></textarea>
+    <!-- 工夫した点: computed は () なしで data と同じ感覚で使える -->
+    <p>いま {{ length }} 文字 / あと {{ remaining }} 文字書けます</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { message: "" };
+      },
+      computed: {
+        length() {
+          return this.message.length;
+        },
+        // remaining は length を使って書ける。message が変われば自動で再計算される
+        remaining() {
+          return 140 - this.length;
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

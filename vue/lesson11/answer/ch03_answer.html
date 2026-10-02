@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>見出しデザイナー</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- 工夫: fontSize は「数値データ + 'px'」で組み立てる。
+         数値のまま data に持っておくと += 4 のような計算がしやすい -->
+    <h1 :style="{ color: headColor, fontSize: headSize + 'px' }">見出しデザイナー</h1>
+    <button @click="headSize += 4">大きく</button>
+    <button @click="headColor = 'seagreen'">緑にする</button>
+    <button @click="headColor = 'tomato'">赤にする</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          headColor: "steelblue",
+          headSize: 24
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

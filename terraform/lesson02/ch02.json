@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 2,
+  "title": "リソース参照 型.名前.属性",
+  "priority": "🔴",
+  "text": "あるリソースの値は `型.名前.属性`(例: `terraform_data.origin.output`)で**参照**(他のブロックの値を式の中で使うこと)できます。参照を書くと Terraform は**依存関係**(どちらを先に作るべきかの順序)を自動で認識し、参照先を先に作成します。順序を手で書く必要はありません。実務コードでは `vpc_id = aws_vpc.main.id` のような参照が至るところに出てくるので、「= の右辺に `型.名前.属性` があれば別リソースへの依存」と読めるようになるのが目標です。🔴 参照の形は読解の要なので、手が覚えるまで書きましょう。\n\n```hcl\nresource \"aws_subnet\" \"app\" {\n  vpc_id = aws_vpc.main.id  # aws_vpc.main への参照 → VPC が先に作られる\n}\n```",
+  "sample": "# lesson02 ch02: リソース参照\n# 「型.名前.属性」で他のリソースの値を使えます。\n\nresource \"terraform_data\" \"origin\" {\n  input = \"origin-value\"\n}\n\noutput \"from_resource\" {\n  # 参照を書いた時点で origin への依存関係が自動でできます\n  value = terraform_data.origin.output\n}\n\noutput \"from_literal\" {\n  # こちらはただのリテラル。参照ではありません\n  value = \"origin-value\"\n}\n",
+  "exercise": {
+    "description": "`terraform_data` リソース `origin` を作り、`input` に `\"参照元\"` を設定してください。さらに output ブロックを2つ書きます。\n\n- output `from_resource`: リソース `origin` の `output` 属性を**参照**で表示\n- output `ref_style`: 文字列 `\"型.名前.属性\"` を表示\n\n**期待出力**\n\n```text\nfrom_resource = \"参照元\"\nref_style = \"型.名前.属性\"\n```",
+    "starter": "# 参照は 型.名前.属性 の形\nresource \"terraform_data\" \"origin\" {\n}\n",
+    "stdin": "",
+    "expected_stdout": "from_resource = \"参照元\"\nref_style = \"型.名前.属性\"\n",
+    "answer": "# 参照は 型.名前.属性。ここでは terraform_data.origin.output です。\n# 参照を書くと Terraform が「origin を先に作る」という依存関係を自動で組みます。\nresource \"terraform_data\" \"origin\" {\n  input = \"参照元\"\n}\n\noutput \"from_resource\" {\n  value = terraform_data.origin.output\n}\n\noutput \"ref_style\" {\n  value = \"型.名前.属性\"\n}\n"
+  }
+}

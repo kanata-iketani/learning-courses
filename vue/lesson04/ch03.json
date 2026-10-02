@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 3,
+  "title": "数値と計算 〜 + - * / %",
+  "priority": "🔴",
+  "text": "数値は Python と同じくクォートなしで書きます。計算に使う記号は `+ - * /` と、**%**(割り算の余りを求める演算子)です。割り算 `/` は整数どうしでも小数の結果になります(Python 3 の `/` と同じ)。注意したいのは `+` です。文字列に `+` を使うと**連結**(文字列どうしをつなげること)になり、`\"10\" + 5` は `105` という文字列になってしまいます。🔴 数値のつもりがクォートで囲まれていないか、サンプルの `\"10\" + 5` で確認しましょう。\n\n```js\nconsole.log(10 + 5);    // 15\nconsole.log(\"10\" + 5);  // 105 (文字列の連結！)\n```",
+  "sample": "// 四則演算は Python とほぼ同じです\nconsole.log(10 + 3);  // 13\nconsole.log(10 - 3);  // 7\nconsole.log(10 * 3);  // 30\nconsole.log(10 / 4);  // 2.5 (整数どうしでも小数になります)\nconsole.log(10 % 3);  // 1 (割り算の余り)\n\n// 注意: 文字列に + を使うと「連結」になります\nconsole.log(\"10\" + 5);  // 105 (数値の 15 ではありません)\n\n// 変数を使った計算も同じです\nconst price = 120;\nconst count = 3;\nconsole.log(price * count);  // 360\n",
+  "exercise": {
+    "description": "1 個 80 円のりんごを 6 個買います。`const` で変数 `price`(80)と `count`(6)を作り、次の 3 つを順に出力してください。\n\n1. 合計金額\n2. 1000 円払ったときのおつり\n3. りんご 6 個を 4 人に同じ数ずつ配ったときの、余りの個数\n\n**期待出力**\n\n```text\n480\n520\n2\n```",
+    "starter": "const price = 80;\nconst count = 6;\n// 1. 合計金額\n\n// 2. 1000 円払ったときのおつり\n\n// 3. 4 人に配ったときの余り\n",
+    "stdin": "",
+    "expected_stdout": "480\n520\n2\n",
+    "answer": "// 数値はクォートで囲みません(\"80\" と書くと + が連結になってしまいます)\nconst price = 80;\nconst count = 6;\nconsole.log(price * count);         // 合計金額\nconsole.log(1000 - price * count);  // おつり\n// 余りを求めるときは % を使います(Python と同じ)\nconsole.log(count % 4);\n"
+  }
+}

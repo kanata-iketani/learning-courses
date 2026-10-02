@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 2,
+  "title": "Field で制約を付ける",
+  "priority": "🔴",
+  "text": "型だけでなく「値の範囲」も検証するには、`from pydantic import Field` の **Field** を使います。`Field(gt=0)` は「0 より大きい」、`Field(max_length=10)` は「10 文字以内」という制約です。数値には gt(より大きい)・ge(以上)・lt(より小さい)・le(以下)、文字列には min_length / max_length が使えます。制約に反すると 422 が返ります。🔴 Field の書き方は実務でも頻出なので、手が覚えるまで書きましょう。\n\n```python\nclass Item(BaseModel):\n    name: str = Field(max_length=10)\n    price: int = Field(gt=0)\n```",
+  "sample": "# lesson06 ch02: Field で値の範囲を検証する\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel, Field\n\napp = FastAPI()\n\nclass Item(BaseModel):\n    name: str = Field(max_length=10)  # 10 文字以内\n    price: int = Field(gt=0)          # 0 より大きい\n\n@app.post(\"/items\")\ndef create_item(item: Item):\n    return {\"name\": item.name, \"price\": item.price}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.post(\"/items\", json={\"name\": \"apple\", \"price\": 120})\nprint(r.status_code)   # 制約を満たす → 200\nr2 = client.post(\"/items\", json={\"name\": \"apple\", \"price\": 0})\nprint(r2.status_code)  # gt=0 に違反 → 422\nr3 = client.post(\"/items\", json={\"name\": \"とても長い商品名なので通らない\", \"price\": 120})\nprint(r3.status_code)  # max_length=10 に違反 → 422\n",
+  "exercise": {
+    "description": "在庫登録 API に制約を付けます。\n\n- `name`(文字列、`Field(max_length=5)` で 5 文字以内)と `stock`(整数、`Field(ge=0)` で 0 以上)を持つモデル `Product` を定義する\n- `POST /products` で `Product` を受け取り、そのまま返す\n\n動作確認では「正しいデータ」「stock が負のデータ」「name が長すぎるデータ」の 3 パターンを送ります。\n\n**期待出力**\n\n```text\n200\n{'name': 'pen', 'stock': 0}\n422\n422\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel, Field\n\napp = FastAPI()\n\n# ここに Product モデルと POST /products を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/products\", json={\"name\": \"pen\", \"stock\": 0})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/products\", json={\"name\": \"pen\", \"stock\": -1})\nprint(r2.status_code)\nr3 = client.post(\"/products\", json={\"name\": \"ボールペンセット\", \"stock\": 3})\nprint(r3.status_code)\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'name': 'pen', 'stock': 0}\n422\n422\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel, Field\n\napp = FastAPI()\n\n# ge=0 は「0 以上」。在庫は 0 個ならあり得るので gt=0 ではなく ge=0 にします。\n# max_length=5 で 6 文字以上の名前は 422 になります。\nclass Product(BaseModel):\n    name: str = Field(max_length=5)\n    stock: int = Field(ge=0)\n\n@app.post(\"/products\")\ndef create_product(product: Product):\n    return product\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/products\", json={\"name\": \"pen\", \"stock\": 0})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/products\", json={\"name\": \"pen\", \"stock\": -1})\nprint(r2.status_code)\nr3 = client.post(\"/products\", json={\"name\": \"ボールペンセット\", \"stock\": 3})\nprint(r3.status_code)\n"
+  }
+}

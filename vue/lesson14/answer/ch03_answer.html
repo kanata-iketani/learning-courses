@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>行きたい場所リスト</title>
+</head>
+<body>
+  <div id="app">
+    <!-- fruits.length と同じように、配列の length で件数も自動更新される -->
+    <p>行きたい場所({{ places.length }} 件)</p>
+    <ul>
+      <li v-for="(place, index) in places">{{ index + 1 }} 番目: {{ place }}</li>
+    </ul>
+    <input v-model="newPlace" placeholder="例: 北海道">
+    <button v-on:click="addPlace">追加</button>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          places: ["京都", "沖縄"],
+          newPlace: ""
+        };
+      },
+      methods: {
+        addPlace() {
+          // 工夫した点: push した直後に入力欄を空へ戻す。v-model なので画面も空になる
+          this.places.push(this.newPlace);
+          this.newPlace = "";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

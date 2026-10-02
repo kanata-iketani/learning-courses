@@ -1,0 +1,16 @@
+{
+  "lesson": 13,
+  "chapter": 2,
+  "kind": "web",
+  "title": "checkbox と select で v-model を使う",
+  "priority": "🟡",
+  "text": "v-model はテキスト以外の部品でも使えます。**チェックボックス**(オン/オフを切り替える四角い部品)に付けると、data は `true` / `false` の**真偽値**(はい/いいえを表す型)と同期します。**セレクトボックス**(選択肢から 1 つ選ぶ部品)に付けると、選ばれた `<option>` の value と同期します。🟡 部品の種類に合わせて同期のしかたが自動で切り替わるのが v-model の便利なところです。\n\n```html\n<input type=\"checkbox\" v-model=\"agree\"> 同意する\n<select v-model=\"color\">\n  <option value=\"red\">赤</option>\n</select>\n```\n\nチェックの付け外し、選択肢の変更が、そのまま data の変化になります。",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>チェックボックスとセレクト</title>\n</head>\n<body>\n  <div id=\"app\">\n    <label><input type=\"checkbox\" v-model=\"agree\"> 利用規約に同意する</label>\n    <p>agree の値: {{ agree }}</p>\n    <hr>\n    <p>文字の色を選んでください:</p>\n    <select v-model=\"color\">\n      <option value=\"tomato\">赤系(tomato)</option>\n      <option value=\"royalblue\">青系(royalblue)</option>\n      <option value=\"seagreen\">緑系(seagreen)</option>\n    </select>\n    <p v-bind:style=\"{ color: color }\">この文字が選んだ色に変わります。</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { agree: false, color: \"tomato\" };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "簡単なアンケートフォームを作りましょう。starter を編集して、チェックボックスとセレクトボックスを v-model で data と同期させてください。\n\n**確認ポイント**\n\n1. 「メルマガを受け取る」のチェックを付け外しすると、下の表示が `true` / `false` に切り替わる\n2. 好きな季節のセレクトボックスに選択肢を 3 つ以上用意し、選び直すと下の文章が即座に変わる\n3. ページを開いた時点で、data の初期値(`season: \"春\"`)がセレクトボックスに選ばれた状態になっている\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>アンケートフォーム</title>\n</head>\n<body>\n  <div id=\"app\">\n    <label><input type=\"checkbox\"> メルマガを受け取る</label>\n    <p>受け取る設定: ここに mailmaga の値を表示する</p>\n    <hr>\n    <p>好きな季節:\n      <select>\n        <option value=\"春\">春</option>\n        <!-- 選択肢を増やす -->\n      </select>\n    </p>\n    <p>あなたは ??? が好きなのですね。</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { mailmaga: false, season: \"春\" };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>アンケートフォーム</title>\n</head>\n<body>\n  <div id=\"app\">\n    <!-- 工夫した点: label で囲むと文字クリックでもチェックが切り替わる -->\n    <label><input type=\"checkbox\" v-model=\"mailmaga\"> メルマガを受け取る</label>\n    <p>受け取る設定: {{ mailmaga }}</p>\n    <hr>\n    <p>好きな季節:\n      <select v-model=\"season\">\n        <option value=\"春\">春</option>\n        <option value=\"夏\">夏</option>\n        <option value=\"秋\">秋</option>\n        <option value=\"冬\">冬</option>\n      </select>\n    </p>\n    <!-- season の初期値が「春」なので、開いた瞬間から文章が成立する -->\n    <p>あなたは {{ season }} が好きなのですね。</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { mailmaga: false, season: \"春\" };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

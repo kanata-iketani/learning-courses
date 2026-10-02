@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 2,
+  "title": "個別の GET",
+  "priority": "🔴",
+  "text": "一覧の次は、ID を指定して 1 件だけ取り出す Read です。パスパラメータで ID を受け取り、for 文でリストから探します。id が一致した辞書を return すれば、その時点で関数が終わります。最後まで見つからなければ、エラーを表す辞書を返しておきます(HTTPException を使った本格的なエラー処理は lesson09 で学びます)。🔴 「ID で探して返す」は CRUD の中心パターンなので、何度も書いて覚えましょう。\n\n```python\n@app.get(\"/books/{book_id}\")\ndef get_book(book_id: int):\n    for book in books:\n        if book[\"id\"] == book_id:\n            return book\n    return {\"error\": \"not found\"}\n```",
+  "sample": "# lesson08 ch02: ID を指定して 1 件取り出す (Read)\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nbooks = [\n    {\"id\": 1, \"title\": \"Python入門\", \"price\": 2000},\n    {\"id\": 2, \"title\": \"FastAPI入門\", \"price\": 2500},\n]\n\n@app.get(\"/books/{book_id}\")\ndef get_book(book_id: int):\n    # for 文で探し、id が一致したものを返す\n    for book in books:\n        if book[\"id\"] == book_id:\n            return book\n    # 最後まで見つからなかったとき (本格的なエラーは lesson09 で)\n    return {\"error\": \"not found\"}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/books/2\").json())\nprint(client.get(\"/books/99\").json())\n",
+  "exercise": {
+    "description": "タスクを 1 件取り出す API を作ります。\n\n- `GET /tasks/{task_id}` でパスパラメータ `task_id`(整数)を受け取る\n- リスト `tasks` を for 文で探し、`id` が一致した辞書を返す\n- 見つからなければ `{\"error\": \"not found\"}` を返す\n\n**期待出力**\n\n```text\n200\n{'id': 1, 'name': '買い物', 'done': False}\n{'error': 'not found'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# データベースの代わりのリスト (変更しない)\ntasks = [\n    {\"id\": 1, \"name\": \"買い物\", \"done\": False},\n    {\"id\": 2, \"name\": \"掃除\", \"done\": True},\n]\n\n# ここに GET /tasks/{task_id} を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/tasks/1\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/tasks/99\")\nprint(r2.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'id': 1, 'name': '買い物', 'done': False}\n{'error': 'not found'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# データベースの代わりのリスト (変更しない)\ntasks = [\n    {\"id\": 1, \"name\": \"買い物\", \"done\": False},\n    {\"id\": 2, \"name\": \"掃除\", \"done\": True},\n]\n\n# id が一致した時点で return すると、for 文ごと関数が終わります。\n# for 文を最後まで抜けた = 見つからなかった、なのでエラーの辞書を返します。\n@app.get(\"/tasks/{task_id}\")\ndef get_task(task_id: int):\n    for task in tasks:\n        if task[\"id\"] == task_id:\n            return task\n    return {\"error\": \"not found\"}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/tasks/1\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/tasks/99\")\nprint(r2.json())\n"
+  }
+}

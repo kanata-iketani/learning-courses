@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 4,
+  "title": "model_dump とレスポンス",
+  "priority": "🟡",
+  "text": "`model_dump()` は、モデルを Python の辞書に変換するメソッドです(Pydantic v2 の書き方。古い `dict()` は使いません)。モデルには後からキーを追加できませんが、辞書にすればできます。レスポンスに ID や計算結果などのキーを足したいときは、「いったん辞書にしてからキーを足す」のが定石です。🟡 「モデル → 辞書 → 加工して返す」という流れを理屈で理解しましょう。\n\n```python\ndata = item.model_dump()  # モデル → 辞書\ndata[\"id\"] = 1            # 辞書ならキーを追加できる\n```",
+  "sample": "# lesson05 ch04: model_dump でモデルを辞書にする\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Item(BaseModel):\n    name: str\n    price: int\n\n@app.post(\"/items\")\ndef create_item(item: Item):\n    data = item.model_dump()  # モデル → 辞書\n    data[\"id\"] = 1            # 辞書にすればキーを追加できる\n    return data\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.post(\"/items\", json={\"name\": \"apple\", \"price\": 120})\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "ユーザー登録 API を作ります。\n\n- `name`(文字列)と `age`(整数)を持つモデル `User` を定義する\n- `POST /users` で `User` を受け取り、`model_dump()` で辞書にしてから、18 歳以上かどうかの真偽値をキー `adult` として追加して返す\n\n**期待出力**\n\n```text\n200\n{'name': 'demo', 'age': 20, 'adult': True}\n{'name': 'python', 'age': 13, 'adult': False}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# ここに User モデルと POST /users を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/users\", json={\"name\": \"demo\", \"age\": 20})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/users\", json={\"name\": \"python\", \"age\": 13})\nprint(r2.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'name': 'demo', 'age': 20, 'adult': True}\n{'name': 'python', 'age': 13, 'adult': False}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass User(BaseModel):\n    name: str\n    age: int\n\n# モデルのままではキーを追加できないので、model_dump() で辞書にします。\n# age >= 18 の比較結果 (True / False) をそのまま adult に入れます。\n@app.post(\"/users\")\ndef create_user(user: User):\n    data = user.model_dump()\n    data[\"adult\"] = user.age >= 18\n    return data\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/users\", json={\"name\": \"demo\", \"age\": 20})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/users\", json={\"name\": \"python\", \"age\": 13})\nprint(r2.json())\n"
+  }
+}

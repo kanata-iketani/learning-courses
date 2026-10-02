@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 4,
+  "title": "try・coalesce・jsonencode — 壊れにくい書き方",
+  "priority": "🟡",
+  "text": "値が「無いかもしれない」場面を安全に扱う関数です。`try(式, 既定値)` は式の評価が失敗したら既定値に倒します。`coalesce(a, b, ...)` は null と空文字 `\"\"` を飛ばして最初に値があるものを返します。`jsonencode` は HCL の値を JSON 文字列に変換する関数で、IAM ポリシーなど「JSON をそのまま書く」設定で多用されます。🟡 実務コードでは `try(var.cfg[\"port\"], \"8080\")` のように、キーが無くてもエラーにしない防御的な書き方として頻出します。読めれば十分ですが、意図(既定値へのフォールバック)まで取れるようにしましょう。\n\n```hcl\nlocals {\n  port    = try(var.cfg[\"port\"], \"8080\")       # キーが無ければ \"8080\"\n  display = coalesce(var.nickname, \"anonymous\") # \"\" なら \"anonymous\"\n}\n```",
+  "sample": "# lesson05 ch04: try / coalesce / jsonencode\nvariable \"nickname\" {\n  default = \"\" # 「未設定」を空文字で表しています\n}\n\nvariable \"cfg\" {\n  type = map(string)\n  default = {\n    name = \"app\"\n  }\n}\n\nlocals {\n  # coalesce は null と \"\" を飛ばして最初に値があるものを返します\n  display = coalesce(var.nickname, \"anonymous\")\n\n  # cfg に port キーは無いので try が既定値 \"8080\" に倒します\n  port = try(var.cfg[\"port\"], \"8080\")\n}\n\noutput \"display\" {\n  value = local.display\n}\n\noutput \"port\" {\n  value = local.port\n}\n\n# jsonencode は HCL の値を JSON 文字列にします(キーはアルファベット順)\noutput \"as_json\" {\n  value = jsonencode({\n    name = var.cfg[\"name\"]\n    port = local.port\n  })\n}\n",
+  "exercise": {
+    "description": "variable `owner`(default `\"\"`)と `tags`(type `map(string)`、default `{ Team = \"core\" }`)を宣言し、次の3つを出力してください。\n\n- output `owner`: `coalesce` を使い、`var.owner` が空文字なら `\"platform\"` にフォールバックした値\n- output `team`: `try` を使って `var.tags[\"Team\"]` を取り出す。失敗したら `\"none\"`\n- output `cost_center`: `try` を使って `var.tags[\"CostCenter\"]` を取り出す。失敗したら `\"none\"`\n\n**期待出力**\n\n```text\ncost_center = \"none\"\nowner = \"platform\"\nteam = \"core\"\n```",
+    "starter": "variable \"owner\" {\n  default = \"\"\n}\n\nvariable \"tags\" {\n  type = map(string)\n  default = {\n    Team = \"core\"\n  }\n}\n\n# ここに output を書く\n",
+    "stdin": "",
+    "expected_stdout": "cost_center = \"none\"\nowner = \"platform\"\nteam = \"core\"\n",
+    "answer": "variable \"owner\" {\n  default = \"\"\n}\n\nvariable \"tags\" {\n  type = map(string)\n  default = {\n    Team = \"core\"\n  }\n}\n\n# coalesce は \"\" も「値なし」とみなすので、未設定時のフォールバックに便利です。\n# try はマップにキーが無くてもエラーで止めず既定値へ倒す、防御的な定番の書き方です。\noutput \"owner\" {\n  value = coalesce(var.owner, \"platform\")\n}\n\noutput \"team\" {\n  value = try(var.tags[\"Team\"], \"none\")\n}\n\noutput \"cost_center\" {\n  value = try(var.tags[\"CostCenter\"], \"none\")\n}\n"
+  }
+}

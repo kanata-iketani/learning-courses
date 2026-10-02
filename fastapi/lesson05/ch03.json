@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 3,
+  "title": "モデルの属性を使う",
+  "priority": "🔴",
+  "text": "受け取ったモデルは普通の Python オブジェクトです。値は `order.price` のように**属性**(ドットでアクセスする値)として取り出し、計算や加工に使えます。辞書のように `order[\"price\"]` とは書けない点に注意してください。型ヒントどおりの型であることが保証されているので、そのまま安心して計算に使えます。🔴 「属性で取り出す → 計算する → 辞書で返す」の流れを、手が覚えるまで書きましょう。\n\n```python\n@app.post(\"/orders\")\ndef create_order(order: Order):\n    total = order.price * order.quantity\n    return {\"item\": order.item, \"total\": total}\n```",
+  "sample": "# lesson05 ch03: モデルの属性を使って計算する\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Order(BaseModel):\n    item: str\n    price: int\n    quantity: int\n\n@app.post(\"/orders\")\ndef create_order(order: Order):\n    # モデルの値は「モデル名.フィールド名」で取り出して計算に使える\n    total = order.price * order.quantity\n    return {\"item\": order.item, \"total\": total}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.post(\"/orders\", json={\"item\": \"コーヒー\", \"price\": 480, \"quantity\": 3})\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "長方形の面積を計算する API を作ります。\n\n- `width`(整数)と `height`(整数)を持つモデル `Rectangle` を定義する\n- `POST /rectangles` で `Rectangle` を受け取り、面積(width × height)を `{\"area\": 面積}` の形で返す\n\n**期待出力**\n\n```text\n200\n{'area': 35}\n{'area': 9}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# ここに Rectangle モデルと POST /rectangles を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/rectangles\", json={\"width\": 7, \"height\": 5})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/rectangles\", json={\"width\": 3, \"height\": 3})\nprint(r2.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'area': 35}\n{'area': 9}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Rectangle(BaseModel):\n    width: int\n    height: int\n\n# 受け取った値は rect.width のように属性で取り出して計算に使います。\n# int どうしの掛け算になることが型ヒントで保証されています。\n@app.post(\"/rectangles\")\ndef create_rectangle(rect: Rectangle):\n    return {\"area\": rect.width * rect.height}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/rectangles\", json={\"width\": 7, \"height\": 5})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/rectangles\", json={\"width\": 3, \"height\": 3})\nprint(r2.json())\n"
+  }
+}

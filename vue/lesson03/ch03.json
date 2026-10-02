@@ -1,0 +1,16 @@
+{
+  "lesson": 3,
+  "chapter": 3,
+  "kind": "web",
+  "title": "余白の考え方(margin と padding の違い)",
+  "priority": "🟡",
+  "text": "要素のまわりの**余白**(何も表示しない空間)を学びます。CSS では要素を「箱」と考え、`border`(箱の枠線)を境に、**外側**の余白を `margin`、**内側**の余白を `padding` と呼び分けます。margin を増やすと箱どうしの間隔が広がり、padding を増やすと枠線と中身の文字の間が広がります。`border: 2px solid black;` は「太さ 2px・実線・黒」の枠線の指定で、これを付けると余白の違いが目で見て分かります。🟡 同じ 30px でも margin と padding で見た目が全く違うことを、枠線付きの箱で確かめましょう。\n\n```html\n<style>\n  .a { border: 2px solid tomato; margin: 30px; }\n  .b { border: 2px solid seagreen; padding: 30px; }\n</style>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>margin と padding</title>\n<style>\n  div { border: 2px solid tomato; background-color: lightyellow; }\n  .m  { margin: 30px; }\n  .p  { padding: 30px; }\n</style>\n</head>\n<body>\n  <h1>margin と padding のちがい</h1>\n  <div>余白なしの箱。枠線と文字がくっついています。</div>\n  <div class=\"m\">margin: 30px の箱。枠線の外側に空間ができて、箱ごと内側に寄ります。</div>\n  <div class=\"p\">padding: 30px の箱。枠線の内側に空間ができて、文字が枠から離れます。</div>\n  <div>ふつうの箱に戻ると、上の箱との間隔のちがいがよく分かります。</div>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "starter には枠線だけ付けた「お知らせカード」が 3 枚あります。margin と padding を追加して、読みやすいカードに整えましょう。\n\n**確認ポイント**\n\n1. すべてのカードに `padding` を付けて、枠線と文字の間に空間ができている\n2. すべてのカードに `margin` を付けて、カードどうしの間隔が空いている\n3. `padding` の値を大きくすると枠線の内側が広がり、`margin` の値を大きくするとカードの間隔が広がることを、値を変えて確かめた\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>お知らせカード</title>\n<style>\n  .card { border: 2px solid steelblue; background-color: aliceblue; }\n</style>\n</head>\n<body>\n  <h1>お知らせ</h1>\n  <div class=\"card\">4月1日: 新しい講座が始まります。</div>\n  <div class=\"card\">4月8日: 質問会をオンラインで開きます。</div>\n  <div class=\"card\">4月15日: 演習のふりかえり会があります。</div>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>お知らせカード</title>\n<style>\n  /* 工夫した点: padding で文字を枠から離し、margin でカードの間隔を空けました。\n     .card にまとめて書けば 3 枚全部に同じ余白が付きます */\n  .card {\n    border: 2px solid steelblue;\n    background-color: aliceblue;\n    padding: 16px;\n    margin: 12px;\n  }\n</style>\n</head>\n<body>\n  <h1>お知らせ</h1>\n  <div class=\"card\">4月1日: 新しい講座が始まります。</div>\n  <div class=\"card\">4月8日: 質問会をオンラインで開きます。</div>\n  <div class=\"card\">4月15日: 演習のふりかえり会があります。</div>\n</body>\n</html>\n"
+  }
+}

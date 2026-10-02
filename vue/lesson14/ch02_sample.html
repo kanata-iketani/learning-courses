@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v-if と v-show の違い</title>
+</head>
+<body>
+  <div id="app">
+    <button v-on:click="visible = !visible">表示を切り替える</button>
+    <p>いまの visible: {{ visible }}</p>
+    <p v-if="visible">私は v-if。false になると DOM から丸ごと消えます。</p>
+    <p v-show="visible">私は v-show。false になっても DOM に残り、CSS で隠れるだけです。</p>
+    <p>(見た目の動きは同じですが、消え方の仕組みが違います)</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { visible: true };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

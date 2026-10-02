@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>はじめての Vue アプリ</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <!-- mount("#app") した要素の中だけを Vue が担当する -->
+  <div id="app">
+    <h1>{{ title }}</h1>
+    <p>担当: {{ name }}</p>
+    <p>好きな食べ物: {{ food }}</p>
+  </div>
+
+  <!-- ここは #app の外なので、Vue は関知しない({{ }} も動かない) -->
+  <p>この行は Vue の外側です: {{ title }}</p>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      // data(): アプリの状態を返す関数。ここの値を書きかえて再プレビューすると表示も変わる
+      data() {
+        return {
+          title: "はじめての Vue アプリ",
+          name: "いけたに",
+          food: "カレー"
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 2,
+  "title": "引数と戻り値",
+  "priority": "🔴",
+  "text": "**引数**(関数に渡す値。`( )` の中で受け取る)と**戻り値**(`return` で呼び出し元に返す値)を使うと、関数が「値を受け取って値を返す」部品になります。戻り値は変数に入れたり、そのまま console.log に渡したりできます。`return` を実行するとその場で関数が終わるため、return より後の行は動きません。このあたりの考え方は Python とまったく同じです。🔴 「console.log は画面に表示するだけ、return は値を呼び出し元に返す」という違いを意識しましょう。\n\n```js\nfunction add(a, b) {\n  return a + b;  // Python: return a + b\n}\nconst sum = add(3, 5);  // sum は 8\n```",
+  "sample": "// 引数 name を受け取る関数\nfunction greet(name) {\n  console.log(`こんにちは、${name}さん`);\n}\ngreet(\"たろう\");\ngreet(\"はなこ\");\n\n// return で計算結果を呼び出し元に返します\nfunction add(a, b) {\n  return a + b;\n}\n\n// 戻り値は変数に入れられます\nconst sum = add(3, 5);\nconsole.log(sum);  // 8\n\n// そのまま console.log に渡すこともできます\nconsole.log(add(10, 20));  // 30\n",
+  "exercise": {
+    "description": "横幅 `width` と高さ `height` を受け取り、長方形の面積(かけ算の結果)を return する関数 `rectangleArea` を作ってください。作ったら、`rectangleArea(3, 5)` と `rectangleArea(10, 10)` の結果を順に出力しましょう。\n\n**期待出力**\n\n```text\n15\n100\n```",
+    "starter": "// 関数 rectangleArea を定義しましょう\n\n// 2 つの結果を出力しましょう\n",
+    "stdin": "",
+    "expected_stdout": "15\n100\n",
+    "answer": "// 面積を「表示する」のではなく「返す」ことで、結果を自由に使い回せます\nfunction rectangleArea(width, height) {\n  return width * height;\n}\n\n// 戻り値をそのまま console.log に渡して表示します\nconsole.log(rectangleArea(3, 5));\nconsole.log(rectangleArea(10, 10));\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 13,
+  "chapter": 4,
+  "title": "変数駆動の度合いを見抜く",
+  "priority": "🟡",
+  "text": "同じ構成でも「全部 variable 化する派」と「ほぼハードコードする派」がいます。設定値の出どころは次の順で追います。(1) resource 内に値が直接書いてあればそこで確定 (2) `var.xxx` なら variable ブロックの `default` を見る (3) さらに tfvars やモジュール呼び出しの引数で上書きされていないか確認する。\n\n```hcl\n# var 派: 値は variable / tfvars を見ないと分からない\ncpu = var.container_cpu\n\n# ハードコード派: その場で確定\ncpu = 256\n\n# 折衷: 0 (未指定)なら既定値、という条件式もよく見ます\ncpu = var.container_cpu > 0 ? var.container_cpu : 256\n```\n\n🟡 `var.` を見たら default と上書き経路を必ず確認する癖をつけましょう。",
+  "sample": "# 「0 や空なら既定値」という折衷パターン。値の出どころを条件式で明示します。\nvariable \"container_cpu\" {\n  default = 0 # 0 は「未指定」の意味で使う流儀\n}\n\nlocals {\n  default_cpu   = 256\n  effective_cpu = var.container_cpu > 0 ? var.container_cpu : local.default_cpu\n  cpu_source    = var.container_cpu > 0 ? \"variable\" : \"hardcoded-default\"\n}\n\noutput \"cpu_source\" {\n  value = local.cpu_source\n}\n\noutput \"effective_cpu\" {\n  value = local.effective_cpu\n}\n",
+  "exercise": {
+    "description": "次のタスク定義を読み、`cpu` と `memory` の最終値と出どころを答えてください。\n\n```hcl\nvariable \"container_cpu\" {\n  default = 0 # 0 なら既定値を使う\n}\n\nvariable \"container_memory\" {\n  default = 1024\n}\n\nlocals {\n  cpu    = var.container_cpu > 0 ? var.container_cpu : 256\n  memory = var.container_memory\n}\n\nresource \"aws_ecs_task_definition\" \"api\" {\n  family = \"api\"\n  cpu    = local.cpu\n  memory = local.memory\n}\n```\n\n上の variable と locals をそのまま再現し、\n\n- output `cpu`: cpu の最終値\n- output `cpu_source`: variable 由来なら `variable`、条件式の既定値に落ちたなら `hardcoded-default`\n- output `memory`: memory の最終値\n- output `memory_source`: この構成では `variable-default`(default 値がそのまま使われる)\n\nを出力してください。\n\n**期待出力**\n\n```text\ncpu = 256\ncpu_source = \"hardcoded-default\"\nmemory = 1024\nmemory_source = \"variable-default\"\n```",
+    "starter": "variable \"container_cpu\" {\n  default = 0\n}\n\nvariable \"container_memory\" {\n  default = 1024\n}\n",
+    "stdin": "",
+    "expected_stdout": "cpu = 256\ncpu_source = \"hardcoded-default\"\nmemory = 1024\nmemory_source = \"variable-default\"\n",
+    "answer": "# cpu は var.container_cpu が 0(未指定)なので条件式の右側 256 に確定します。\n# memory は var.container_memory の default 1024 がそのまま使われます。\n# 「var. を見たら default と上書き経路を確認する」のが読解の基本です。\nvariable \"container_cpu\" {\n  default = 0\n}\n\nvariable \"container_memory\" {\n  default = 1024\n}\n\nlocals {\n  cpu    = var.container_cpu > 0 ? var.container_cpu : 256\n  memory = var.container_memory\n}\n\noutput \"cpu\" {\n  value = local.cpu\n}\n\noutput \"cpu_source\" {\n  value = var.container_cpu > 0 ? \"variable\" : \"hardcoded-default\"\n}\n\noutput \"memory\" {\n  value = local.memory\n}\n\noutput \"memory_source\" {\n  value = \"variable-default\"\n}\n"
+  }
+}

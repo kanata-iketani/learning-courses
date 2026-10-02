@@ -1,0 +1,15 @@
+{
+  "lesson": 1,
+  "chapter": 2,
+  "title": "FastAPIと自動ドキュメント",
+  "priority": "🟡",
+  "text": "作った FastAPI アプリは、**uvicorn**(FastAPI アプリを動かすためのサーバプログラム)で起動します。\n\n```sh\nuvicorn main:app --reload\n```\n\n`main:app` は「main.py の中の `app` という変数」という意味で、`--reload` はコードを保存するたびに自動で再起動するオプションです。起動中にブラウザで `http://127.0.0.1:8000/docs` を開くと、**Swagger UI** という画面が表示されます。これは FastAPI がコードから自動生成する API ドキュメントで、定義した API を画面上から試すこともできます。コードを書くだけでドキュメントまで手に入るのが FastAPI の大きな特長です。🟡 この学習画面ではサーバを起動できないため、演習では次章で学ぶ TestClient を使って API を呼び出します。",
+  "sample": "# lesson01 ch02: 最小の FastAPI アプリと動作確認\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# FastAPI() で作ったこの app が、uvicorn main:app で起動するときの「app」\napp = FastAPI()\n\n# 「GET / に来たリクエストをこの関数で処理する」という登録\n@app.get(\"/\")\ndef read_root():\n    return {\"message\": \"Hello FastAPI\"}\n\n# --- 動作確認: サーバを起動せずに TestClient で呼び出す ---\nclient = TestClient(app)\nr = client.get(\"/\")\nprint(r.status_code)  # 200 なら成功\nprint(r.json())       # レスポンスの JSON を辞書として取得\n",
+  "exercise": {
+    "description": "GET `/` で辞書 `{\"framework\": \"FastAPI\"}` を返すアプリを作ってください。`app = FastAPI()` でアプリを作り、`@app.get(\"/\")` を付けた関数で辞書を返します。動作確認部分が、ステータスコードとレスポンスの JSON を出力します。\n\n**期待出力**\n\n```text\n200\n{'framework': 'FastAPI'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# ここに app の定義と、GET / で {\"framework\": \"FastAPI\"} を返す関数を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'framework': 'FastAPI'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# uvicorn で起動するときも TestClient で試すときも、この app が入り口になります。\napp = FastAPI()\n\n# 「GET / はこの関数で処理する」と登録します。辞書を返すと自動で JSON になります。\n@app.get(\"/\")\ndef read_root():\n    return {\"framework\": \"FastAPI\"}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>自己紹介フォーム</title>
+</head>
+<body>
+  <div id="app">
+    <p>名前: <input v-model="name" placeholder="例: さくら"></p>
+    <p>好きな食べ物: <input v-model="food" placeholder="例: カレー"></p>
+    <p>あいさつ:
+      <select v-model="greeting">
+        <option>おはよう</option>
+        <option>こんにちは</option>
+        <option>こんばんは</option>
+      </select>
+    </p>
+    <!-- 3 つの data をひとつの文章にまとめて表示 -->
+    <h2>{{ greeting }}、{{ name }} です。好きな食べ物は {{ food }} です。</h2>
+    <button v-on:click="reset">リセット</button>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { name: "", food: "", greeting: "こんにちは" };
+      },
+      methods: {
+        // 工夫した点: data を初期値に戻すだけで、入力欄もセレクトも一緒に戻る
+        reset() {
+          this.name = "";
+          this.food = "";
+          this.greeting = "こんにちは";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

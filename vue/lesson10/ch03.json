@@ -1,0 +1,16 @@
+{
+  "lesson": 10,
+  "chapter": 3,
+  "kind": "web",
+  "title": "{{ }} で表示 — マスタッシュ構文",
+  "priority": "🔴",
+  "text": "`{{ }}` は**マスタッシュ構文**(口ひげのような見た目から付いた名前)といい、中に書いた結果をその場に表示します。data の値をそのまま出すだけでなく、**式**(計算して 1 つの値になるもの)なら何でも書けます。計算式、文字列の連結、`length` などのプロパティ、三項演算子も使えます。ただし `if` 文や `for` 文などの**文**は書けません。🔴 「{{ }} の中は式だけ」というルールを、サンプルを動かしながら確かめましょう。\n\n```html\n<p>{{ price * count }} 円</p>\n<p>{{ name.length }} 文字</p>\n<p>{{ stock > 0 ? \"在庫あり\" : \"売り切れ\" }}</p>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>マスタッシュ構文</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>{{ shopName }}</h1>\n    <p>商品名: {{ item }}({{ item.length }} 文字)</p>\n    <p>単価: {{ price }} 円 × {{ count }} 個</p>\n    <!-- {{ }} の中では計算もできる -->\n    <p>合計: {{ price * count }} 円</p>\n    <!-- 三項演算子(条件 ? 真のとき : 偽のとき)も式なので書ける -->\n    <p>在庫: {{ stock > 0 ? \"あり(残り\" + stock + \"個)\" : \"売り切れ\" }}</p>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          shopName: \"Vue 商店\",\n          item: \"りんごジュース\",\n          price: 120,\n          count: 3,\n          stock: 5\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "「買い物メモ」アプリを作りましょう。data に単価 `price` と個数 `count` を持たせ、`{{ }}` の中の式で小計と税込価格(10% 増し)を表示してください。税込価格は `Math.floor(price * count * 1.1)` のように、`{{ }}` の中で関数を呼んで小数点以下を切り捨てます。\n\n**確認ポイント**\n\n1. 小計として `price × count` の計算結果が表示される(単価 150・個数 2 なら 300)\n2. 税込価格が小計の 1.1 倍(小数点以下切り捨て)で表示される(300 なら 330)\n3. data の `count` を変えて再プレビューすると、小計と税込の両方が計算し直される\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>買い物メモ</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>買い物メモ</h1>\n    <p>{{ item }}: {{ price }} 円 × {{ count }} 個</p>\n    <p>小計: (ここに式を書く) 円</p>\n    <p>税込: (ここに式を書く) 円</p>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          item: \"おにぎり\",\n          price: 150,\n          count: 2\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>買い物メモ</title>\n<script src=\"/vendor/vue.global.prod.js\"></script>\n</head>\n<body>\n  <div id=\"app\">\n    <h1>買い物メモ</h1>\n    <p>{{ item }}: {{ price }} 円 × {{ count }} 個</p>\n    <!-- 工夫: 計算結果を data に持たず、{{ }} の式で毎回計算する。\n         data の price や count を変えるだけで、小計も税込も自動で合う -->\n    <p>小計: {{ price * count }} 円</p>\n    <p>税込: {{ Math.floor(price * count * 1.1) }} 円</p>\n  </div>\n\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          item: \"おにぎり\",\n          price: 150,\n          count: 2\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

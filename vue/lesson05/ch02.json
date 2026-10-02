@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 2,
+  "title": "比較演算子と ===",
+  "priority": "🔴",
+  "text": "**比較演算子**(2 つの値を比べた結果を返す記号)には `>` `<` `>=` `<=` があり、結果は**真偽値**(正しいか正しくないかを表す `true` / `false` という値)になります。「等しい」は **===**、「等しくない」は **!==** で調べます。`===` は値だけでなく型も比べるので、`5 === \"5\"` は false です。JavaScript には `==` もありますが、型を勝手に変換して事故のもとになるため、必ず `===` を使ってください(覚えるのはこの 1 行だけで十分です)。Python の `==` にあたるのが JavaScript の `===` です。🔴 「等しいはイコール 3 つ」と覚えましょう。\n\n```js\nconsole.log(5 === 5);    // true\nconsole.log(5 === \"5\");  // false (型が違う)\n```",
+  "sample": "// 大小の比較は Python と同じです。結果は true / false になります\nconsole.log(10 > 3);    // true\nconsole.log(10 < 3);    // false\nconsole.log(10 >= 10);  // true\n\n// 「等しい」は === (Python の == に相当)\nconsole.log(5 === 5);    // true\nconsole.log(5 === \"5\");  // false (数値と文字列は別物)\n\n// 「等しくない」は !== (Python の != に相当)\nconsole.log(5 !== 3);    // true\n\n// 比較の結果は変数にも入れられます\nconst isAdult = 20 >= 18;\nconsole.log(isAdult);  // true\n",
+  "exercise": {
+    "description": "次の 4 つの比較結果(`true` または `false`)を、console.log で順に出力してください。出力する前に、それぞれどちらになるか予想してから実行しましょう。\n\n1. `7 > 5`\n2. `7 === \"7\"`\n3. `\"abc\" === \"abc\"`\n4. `10 !== 10`\n\n**期待出力**\n\n```text\ntrue\nfalse\ntrue\nfalse\n```",
+    "starter": "// 比較式をそのまま console.log の ( ) に入れましょう\n",
+    "stdin": "",
+    "expected_stdout": "true\nfalse\ntrue\nfalse\n",
+    "answer": "// 比較式をそのまま console.log に渡すと、結果の true / false が表示されます\nconsole.log(7 > 5);\n// === は型まで比べるので、数値の 7 と文字列の \"7\" は等しくありません\nconsole.log(7 === \"7\");\nconsole.log(\"abc\" === \"abc\");\n// 10 と 10 は等しいので、「等しくない」を調べる !== は false になります\nconsole.log(10 !== 10);\n"
+  }
+}

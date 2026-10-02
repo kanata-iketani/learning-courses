@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 3,
+  "title": "else if と && ||",
+  "priority": "🔴",
+  "text": "3 つ以上に分岐したいときは **else if** を使います(Python の `elif` にあたります)。上から順に条件を調べ、最初に成り立ったブロックだけが実行されます。また、複数の条件を組み合わせるときは **&&**(かつ。両方 true なら true)と **||**(または。どちらかが true なら true)を使います。Python の `and` / `or` にあたる記号です。🔴 else if は「上から順に判定される」ことを意識して条件の順番を決めましょう。\n\n```js\nif (score >= 80) {\n  console.log(\"優\");\n} else if (score >= 60) {\n  console.log(\"良\");\n} else {\n  console.log(\"がんばろう\");\n}\n```",
+  "sample": "const score = 65;\n\n// Python の elif は else if と書きます(上から順に判定されます)\nif (score >= 80) {\n  console.log(\"優\");\n} else if (score >= 60) {\n  console.log(\"良\");\n} else {\n  console.log(\"がんばろう\");\n}\n\n// && は「かつ」(Python の and)、|| は「または」(Python の or)\nconst age = 25;\nconst hasTicket = true;\nif (age >= 18 && hasTicket) {\n  console.log(\"入場できます\");\n}\n\nconst day = \"日\";\nif (day === \"土\" || day === \"日\") {\n  console.log(\"休みです\");\n}\n",
+  "exercise": {
+    "description": "次の 2 つを書いてください。\n\n1. `const temp = 22;` を作り、28 以上なら `暑い`、そうでなく 15 以上なら `ちょうどいい`、どちらでもなければ `寒い` と出力する(else if を使う)\n2. `const isRainy = false;` と `const isCold = false;` を作り、どちらかが true なら `家にいる`、そうでなければ `出かける` と出力する(|| を使う)\n\n**期待出力**\n\n```text\nちょうどいい\n出かける\n```",
+    "starter": "const temp = 22;\n// 1. if / else if / else で 3 つに分岐\n\nconst isRainy = false;\nconst isCold = false;\n// 2. || でまとめて判定\n",
+    "stdin": "",
+    "expected_stdout": "ちょうどいい\n出かける\n",
+    "answer": "const temp = 22;\n// 上から順に判定されるので、大きい数字の条件から書きます\nif (temp >= 28) {\n  console.log(\"暑い\");\n} else if (temp >= 15) {\n  console.log(\"ちょうどいい\");\n} else {\n  console.log(\"寒い\");\n}\n\nconst isRainy = false;\nconst isCold = false;\n// || は「どちらかが true なら true」。今回は両方 false なので else 側です\nif (isRainy || isCold) {\n  console.log(\"家にいる\");\n} else {\n  console.log(\"出かける\");\n}\n"
+  }
+}

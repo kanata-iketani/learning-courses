@@ -1,0 +1,15 @@
+{
+  "lesson": 1,
+  "chapter": 1,
+  "title": "Web APIとは",
+  "priority": "🟡",
+  "text": "**Web API** とは、プログラム同士が HTTP(ブラウザと同じ通信のしくみ)でデータをやり取りするための窓口です。ブラウザが人間に HTML を返すのに対し、API はプログラムに **JSON**(辞書や配列をテキストにした形式)を返します。FastAPI は、この API を Python で最速レベルに簡単に作れるフレームワークです。🟡 まずは「API = リクエストを受けて JSON を返すもの」という全体像を理解しましょう。\n\nPython の辞書はこう書きました:\n\n```python\nuser = {\"name\": \"demo\", \"age\": 13}\n```\n\nAPI はこれを JSON 文字列にして返します:\n\n```json\n{\"name\": \"demo\", \"age\": 13}\n```",
+  "sample": "# lesson01 ch01: 辞書と JSON\nimport json\n\nuser = {\"name\": \"demo\", \"age\": 13}\n\n# 辞書 → JSON 文字列 (API がレスポンスで返す形)\ntext = json.dumps(user, ensure_ascii=False)\nprint(text)\nprint(type(text))\n\n# JSON 文字列 → 辞書 (API のレスポンスを受け取った側の処理)\ndata = json.loads(text)\nprint(data[\"name\"])\nprint(type(data))\n",
+  "exercise": {
+    "description": "辞書 `{\"item\": \"コーヒー\", \"price\": 480}` を `json.dumps`(辞書を JSON 文字列に変換する関数)で JSON 文字列にして出力してください。日本語をそのまま出すため `ensure_ascii=False` を付けること。\n\n**期待出力**\n\n```text\n{\"item\": \"コーヒー\", \"price\": 480}\n```",
+    "starter": "import json\n\n# ここに書く\n",
+    "stdin": "",
+    "expected_stdout": "{\"item\": \"コーヒー\", \"price\": 480}\n",
+    "answer": "import json\n\n# ensure_ascii=False を付けないと \"\\u30b3\\u30fc...\" のようにエスケープされてしまいます。\n# API のレスポンスはこの JSON 文字列の形でネットワークを流れます。\nmenu = {\"item\": \"コーヒー\", \"price\": 480}\nprint(json.dumps(menu, ensure_ascii=False))\n"
+  }
+}

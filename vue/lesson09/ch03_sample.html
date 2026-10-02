@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>あいさつマシン</title>
+</head>
+<body>
+  <h1>あいさつマシン</h1>
+  <input id="name-input" placeholder="名前を入力">
+  <button id="greet-btn">あいさつする</button>
+  <p id="greeting"></p>
+
+  <script>
+    const input = document.getElementById("name-input");
+    const greeting = document.getElementById("greeting");
+
+    document.getElementById("greet-btn").addEventListener("click", () => {
+      // .value で、いま入力欄に書かれている文字列を取り出す
+      const name = input.value;
+      if (name === "") {
+        greeting.textContent = "名前を入力してください";
+      } else {
+        greeting.textContent = "こんにちは、" + name + "さん！";
+      }
+    });
+  </script>
+</body>
+</html>

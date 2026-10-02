@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 1,
+  "title": "console.log で文字列を表示する",
+  "priority": "🔴",
+  "text": "ここから JavaScript を書いていきます。**console.log**(画面に値を表示する命令)は、Python の `print()` に相当します。**文字列**(文字の並びのデータ)はクォートで囲みます。JavaScript のクォートは 3 種類ありますが、まずは `'` と `\"` の 2 つを覚えれば十分です(どちらも意味は同じ。この教材では `\"` で統一します)。文末には**セミコロン** `;` を付けるスタイルで統一します。🔴 まずは console.log で文字を表示できるようになりましょう。\n\n```js\nconsole.log(\"こんにちは\");   // Python の print(\"こんにちは\") と同じ\nconsole.log('シングルでも同じ');\n```",
+  "sample": "// console.log は ( ) の中身を画面に表示します\nconsole.log(\"こんにちは、JavaScript！\");\n\n// ' と \" はどちらも使えます(この教材では \" で統一します)\nconsole.log('シングルクォートでも同じです');\n\n// カンマで区切ると、スペース区切りで並べて表示されます\nconsole.log(\"好きな言語:\", \"JavaScript\");\n\n// Python:     print(\"ようこそ\")\n// JavaScript: console.log(\"ようこそ\");\nconsole.log(\"ようこそ\");\n",
+  "exercise": {
+    "description": "console.log を 3 回使って、次の 3 行をこの通りに出力してください。文字列は `\"` で囲み、文末のセミコロンを忘れずに書きましょう。\n\n**期待出力**\n\n```text\nはじめての JavaScript\n私は Python を知っています\n次は Vue を学びます\n```",
+    "starter": "// console.log を 3 回使って出力しましょう\n",
+    "stdin": "",
+    "expected_stdout": "はじめての JavaScript\n私は Python を知っています\n次は Vue を学びます\n",
+    "answer": "// Python の print() と同じ感覚で、1 行ずつ console.log で出力します\n// 文字列は \" で囲み、文末にセミコロンを付けるスタイルで統一します\nconsole.log(\"はじめての JavaScript\");\nconsole.log(\"私は Python を知っています\");\nconsole.log(\"次は Vue を学びます\");\n"
+  }
+}

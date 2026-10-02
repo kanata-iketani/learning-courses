@@ -1,0 +1,15 @@
+{
+  "lesson": 14,
+  "chapter": 2,
+  "title": "リファクタの痕跡を読む",
+  "priority": "⚪",
+  "text": "リファクタの痕跡が読めると、コードの歴史が分かります。代表例が count → for_each 移行です。**moved ブロック**(state 上のリソースアドレスの付け替えをコードで宣言する仕組み)が残っていれば、その移行の記録です。\n\n```hcl\nresource \"aws_instance\" \"web\" {\n  for_each = toset(var.names)\n  # ...\n}\n\nmoved {\n  from = aws_instance.web[0]\n  to   = aws_instance.web[\"blue\"]\n}\n```\n\n`[0]`(count の添字)から `[\"blue\"]`(for_each のキー)への moved を見たら「昔は count で書かれていた」と読めます。一方 `terraform state mv`(コマンドで state 内のアドレスを直接移す操作)で移行するとコードに痕跡は残りません。⚪ moved の from / to を読めれば十分です。",
+  "sample": "# count 時代の [0] から for_each のキーへ移行した「痕跡」の実例です。\nvariable \"names\" {\n  default = [\"blue\"]\n}\n\nresource \"terraform_data\" \"web\" {\n  for_each = toset(var.names)\n  input    = \"web-${each.key}\"\n}\n\n# 以前 count だったころのアドレスからの付け替えを宣言(新規 apply では何もしない)\nmoved {\n  from = terraform_data.web[0]\n  to   = terraform_data.web[\"blue\"]\n}\n\noutput \"web_addresses\" {\n  value = join(\", \", [for k in keys(terraform_data.web) : \"terraform_data.web[\\\"${k}\\\"]\"])\n}\n",
+  "exercise": {
+    "description": "count → for_each 移行の moved ブロックに書かれる「移行前後のアドレス」を for 式で並べてください。\n\nvariable `names`(default `[\"blue\", \"green\"]`)を定義し、\n\n- output `new_addresses`: for_each 移行後の `terraform_data.web[\"<名前>\"]` 形式を `\", \"` で連結\n- output `old_addresses`: count 時代の `terraform_data.web[<添字>]` 形式(添字は 0 から)を `\", \"` で連結\n\nを出力してください。\n\n(ヒント: for 式は `[for i, n in var.names : ...]` と書くと添字も取れます。文字列内の `\"` は `\\\"` でエスケープします)\n\n**期待出力**\n\n```text\nnew_addresses = \"terraform_data.web[\\\"blue\\\"], terraform_data.web[\\\"green\\\"]\"\nold_addresses = \"terraform_data.web[0], terraform_data.web[1]\"\n```",
+    "starter": "variable \"names\" {\n  default = [\"blue\", \"green\"]\n}\n\n# for 式で old / new のアドレス一覧を作る\n",
+    "stdin": "",
+    "expected_stdout": "new_addresses = \"terraform_data.web[\\\"blue\\\"], terraform_data.web[\\\"green\\\"]\"\nold_addresses = \"terraform_data.web[0], terraform_data.web[1]\"\n",
+    "answer": "# count のアドレスはリストの添字、for_each のアドレスは名前(キー)です。\n# moved ブロックには from = 旧アドレス / to = 新アドレスとしてこの対応が\n# そのまま書かれるので、この変換が読めれば移行の痕跡を追えます。\nvariable \"names\" {\n  default = [\"blue\", \"green\"]\n}\n\noutput \"new_addresses\" {\n  value = join(\", \", [for n in var.names : \"terraform_data.web[\\\"${n}\\\"]\"])\n}\n\noutput \"old_addresses\" {\n  value = join(\", \", [for i, n in var.names : \"terraform_data.web[${i}]\"])\n}\n"
+  }
+}

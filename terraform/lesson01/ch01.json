@@ -1,0 +1,15 @@
+{
+  "lesson": 1,
+  "chapter": 1,
+  "title": "IaCとTerraformのサイクル",
+  "priority": "🟡",
+  "text": "**IaC**(Infrastructure as Code。サーバーやネットワークなどのインフラをコードで定義して管理する考え方)の代表的なツールが Terraform です。Terraform は **HCL**(HashiCorp Configuration Language。Terraform 専用の設定言語)で「あるべき状態」を書き、`terraform plan`(何が変わるかの予告)→ `terraform apply`(実際に反映)のサイクルで運用します。手順書ではなく「最終形」を書くのが特徴で、同じコードを何度 apply しても結果が同じになります(冪等性)。🟡 まずは plan → apply のサイクルと「宣言的に書く」感覚を理解しましょう。\n\n手作業ではこうしていました:\n\n```\n1. AWSコンソールを開く → 2. S3を選ぶ → 3. バケット作成ボタン...\n```\n\nTerraform ではこう書きます(あるべき状態の宣言):\n\n```hcl\nresource \"aws_s3_bucket\" \"logs\" {\n  bucket = \"app-prod-logs\"\n}\n```",
+  "sample": "# lesson01 ch01: はじめての Terraform\n# この講座の「▶ 実行」は terraform init → apply → output を一気に実行します。\n# terraform_data はクラウド不要の練習用リソースです。\n\nresource \"terraform_data\" \"hello\" {\n  input = \"Hello, Terraform!\"\n}\n\n# output は apply 後に値を表示するブロックです(採点にも使います)\noutput \"message\" {\n  value = terraform_data.hello.output\n}\n\noutput \"tool\" {\n  value = \"IaC\"\n}\n",
+  "exercise": {
+    "description": "`terraform_data` リソース `greeting` を作り、`input` に `\"Terraformをはじめます\"` を設定してください。さらに output ブロック `greeting` でそのリソースの `output` 属性を表示してください。\n\n(ヒント: リソースの値は `terraform_data.greeting.output` で参照できます)\n\n**期待出力**\n\n```text\ngreeting = \"Terraformをはじめます\"\n```",
+    "starter": "# ここに書く\n",
+    "stdin": "",
+    "expected_stdout": "greeting = \"Terraformをはじめます\"\n",
+    "answer": "# terraform_data は input に入れた値を output 属性としてそのまま持つ練習用リソースです。\n# resource \"型\" \"名前\" { ... } が HCL の基本形で、参照は 型.名前.属性 と書きます。\nresource \"terraform_data\" \"greeting\" {\n  input = \"Terraformをはじめます\"\n}\n\noutput \"greeting\" {\n  value = terraform_data.greeting.output\n}\n"
+  }
+}

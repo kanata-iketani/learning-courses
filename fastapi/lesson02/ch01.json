@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 1,
+  "title": "最小のアプリと @app.get(\"/\")",
+  "priority": "🔴",
+  "text": "FastAPI アプリの最小構成は「アプリ本体を作る」「パスに関数を割り当てる」の2つです。`@app.get(\"/\")` は「パス `/` に **GET**(データを取得するときに使う **HTTP メソッド**。HTTP メソッドとはリクエストの種類のことです)が来たら、直下の関数を実行する」という登録です。この「URL のパスと処理の組」を **エンドポイント** と呼びます。🔴 最小アプリは FastAPI のすべての土台なので、何も見ずに書けるようにしましょう。\n\n```python\napp = FastAPI()\n\n@app.get(\"/\")\ndef read_root():\n    return {\"message\": \"Hello\"}\n```",
+  "sample": "# lesson02 ch01: 最小のアプリと @app.get(\"/\")\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# アプリ本体を作る\napp = FastAPI()\n\n# パス \"/\" への GET を read_root 関数に割り当てる (これがエンドポイント)\n@app.get(\"/\")\ndef read_root():\n    return {\"message\": \"Hello\"}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "GET `/` で辞書 `{\"message\": \"Hello, API\"}` を返す最小のアプリを書いてください。\n\n**期待出力**\n\n```text\n200\n{'message': 'Hello, API'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# ここに app の定義と、GET / で {\"message\": \"Hello, API\"} を返す関数を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'message': 'Hello, API'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# app = FastAPI() が土台。すべてのエンドポイントはこの app に登録していきます。\napp = FastAPI()\n\n# @app.get(\"/\") で「GET / → この関数」というエンドポイントが1つできます。\n@app.get(\"/\")\ndef read_root():\n    return {\"message\": \"Hello, API\"}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>あいさつ屋さん</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1 :style="{ color: color }">{{ message }}</h1>
+
+    <!-- 同じ greet メソッドを、引数を変えて使い回す -->
+    <button @click="greet('おはようございます')">朝</button>
+    <button @click="greet('こんにちは')">昼</button>
+    <button @click="greet('こんばんは')">夜</button>
+
+    <!-- 引数は 2 つ以上でも渡せる(こちらは色を渡す例) -->
+    <p>文字色:
+      <button @click="setColor('steelblue')">青</button>
+      <button @click="setColor('tomato')">赤</button></p>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { message: "ボタンを押してください", color: "black" };
+      },
+      methods: {
+        greet(word) {
+          this.message = word + "！";
+        },
+        setColor(c) {
+          this.color = c;
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

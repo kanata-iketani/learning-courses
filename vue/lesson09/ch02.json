@@ -1,0 +1,16 @@
+{
+  "lesson": 9,
+  "chapter": 2,
+  "kind": "web",
+  "title": "ボタンと addEventListener(\"click\")",
+  "priority": "🔴",
+  "text": "**イベント**(クリックやキー入力など、ページ上で起きる出来事)に反応するには、要素の `addEventListener(\"click\", 関数)` を使います。「この要素がクリックされたら、この関数を実行して」という予約です。渡す関数には、前のレッスンで学んだアロー関数がよく使われます。🔴 「イベントが起きたら関数が動く」という流れは Vue でもそのまま登場する重要な考え方です。\n\n```js\nconst btn = document.getElementById(\"btn\");\nbtn.addEventListener(\"click\", () => {\n  // クリックされるたびに、ここが実行される\n  document.getElementById(\"msg\").textContent = \"押されました！\";\n});\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>おみくじ</title>\n</head>\n<body>\n  <h1>今日の運勢</h1>\n  <button id=\"draw-btn\">おみくじを引く</button>\n  <p id=\"result\">ボタンを押してください</p>\n\n  <script>\n    const results = [\"大吉\", \"中吉\", \"小吉\", \"末吉\", \"凶\"];\n    const btn = document.getElementById(\"draw-btn\");\n\n    // クリックされるたびに、この関数が実行される\n    btn.addEventListener(\"click\", () => {\n      // 0 以上 results.length 未満のランダムな整数を作る\n      const i = Math.floor(Math.random() * results.length);\n      document.getElementById(\"result\").textContent = \"結果: \" + results[i];\n    });\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "「押した回数カウンター」を作りましょう。ボタンを押すたびに、押した回数が 1 ずつ増えて表示されるようにしてください。回数は `let` の変数で覚えておき、クリックのたびに増やして `textContent` で表示します。\n\n**確認ポイント**\n\n1. 最初は「0 回」と表示されている\n2. ボタンを 1 回押すごとに、表示される数字がちょうど 1 増える\n3. 5 回押すと「5 回」と表示される\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>押した回数カウンター</title>\n</head>\n<body>\n  <h1>押した回数カウンター</h1>\n  <button id=\"count-btn\">押す</button>\n  <p id=\"count\">0 回</p>\n\n  <script>\n    let count = 0;\n    // ここに addEventListener で「押すたびに count を増やして表示」を書く\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>押した回数カウンター</title>\n</head>\n<body>\n  <h1>押した回数カウンター</h1>\n  <button id=\"count-btn\">押す</button>\n  <p id=\"count\">0 回</p>\n\n  <script>\n    // 工夫: 回数は変数 count で覚えておき、画面への反映は毎回自分で行う。\n    // 「値の管理」と「画面の書きかえ」を両方自分でやるのがポイント(Vue だとここが楽になります)\n    let count = 0;\n    const btn = document.getElementById(\"count-btn\");\n    const countEl = document.getElementById(\"count\");\n\n    btn.addEventListener(\"click\", () => {\n      count = count + 1;\n      countEl.textContent = count + \" 回\";\n    });\n  </script>\n</body>\n</html>\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 4,
+  "title": "Path で検証する",
+  "priority": "🟡",
+  "text": "パスパラメータの検証には `from fastapi import Path` の **Path** を使います。書き方は Query と同じで、`user_id: int = Path(ge=1)` のように既定値の位置に制約を書きます。ID のような値は「1 以上」が自然なので、`Path(ge=1)` で 0 や負の数を弾くのが定番です。違反すると 422 が返ります。🟡 「ID は Path(ge=1) で守る」というパターンを理解しましょう。\n\n```python\n@app.get(\"/users/{user_id}\")\ndef get_user(user_id: int = Path(ge=1)):\n    return {\"user_id\": user_id}\n```",
+  "sample": "# lesson06 ch04: Path でパスパラメータを検証する\nfrom fastapi import FastAPI, Path\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# user_id は 1 以上の整数だけ受け付ける\n@app.get(\"/users/{user_id}\")\ndef get_user(user_id: int = Path(ge=1)):\n    return {\"user_id\": user_id}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.get(\"/users/5\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/users/0\")\nprint(r2.status_code)  # ge=1 に違反 → 422\n",
+  "exercise": {
+    "description": "商品取得 API の ID に範囲を付けます。\n\n- `GET /items/{item_id}` を作り、`item_id`(整数)を `Path(ge=1, le=100)` で「1 以上 100 以下」に制限する\n- `{\"item_id\": 受け取った値}` の形で返す\n\n動作確認では 50・0・999 の 3 つの ID でアクセスします。\n\n**期待出力**\n\n```text\n200\n{'item_id': 50}\n422\n422\n```",
+    "starter": "from fastapi import FastAPI, Path\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /items/{item_id} を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/items/50\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/items/0\")\nprint(r2.status_code)\nr3 = client.get(\"/items/999\")\nprint(r3.status_code)\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'item_id': 50}\n422\n422\n",
+    "answer": "from fastapi import FastAPI, Path\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ge=1, le=100 で「1 以上 100 以下」だけを受け付けます。\n# 範囲外の 0 や 999 は、関数が呼ばれる前に 422 で弾かれます。\n@app.get(\"/items/{item_id}\")\ndef get_item(item_id: int = Path(ge=1, le=100)):\n    return {\"item_id\": item_id}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/items/50\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/items/0\")\nprint(r2.status_code)\nr3 = client.get(\"/items/999\")\nprint(r3.status_code)\n"
+  }
+}

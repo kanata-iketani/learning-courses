@@ -1,0 +1,15 @@
+{
+  "lesson": 11,
+  "chapter": 2,
+  "title": "tfvars方式とworkspace方式",
+  "priority": "🟡",
+  "text": "ディレクトリを分けず 1 つのコードで複数環境を扱う流儀が 2 つあります。**tfvars 方式**(環境ごとの変数ファイルを `-var-file=prod.tfvars` のように差し替えて apply する方式)は、ルートに `prod.tfvars` / `stg.tfvars` が並んでいるのが目印です。**workspace 方式**(`terraform workspace` コマンドで state を切り替える方式)は、コード内の `terraform.workspace` 参照と、それを使った条件式が目印です。🟡 どちらの方式でも「env 名で条件分岐して設定値を出し分ける」パターンが核になるので、条件式を読めることが重要です。\n\n```hcl\n# workspace 方式の典型: 環境名で設定値を出し分ける\nlocals {\n  env      = terraform.workspace # \"prod\" や \"stg\"\n  min_size = local.env == \"prod\" ? 4 : 1\n}\n```",
+  "sample": "# 「env 名で設定値を出し分ける」核のパターンです。\n# terraform.workspace の代わりに variable で環境名を受け取ります。\n\nvariable \"env\" {\n  type    = string\n  default = \"prod\"\n}\n\nlocals {\n  is_prod  = var.env == \"prod\"\n  min_size = local.is_prod ? 4 : 1\n}\n\noutput \"env\" {\n  value = var.env\n}\n\noutput \"min_size\" {\n  value = local.min_size\n}\n",
+  "exercise": {
+    "description": "env 名で設定値を出し分ける条件式を書いてください。\n\n1. `variable \"env\"` を string 型、default `\"stg\"` で定義する\n2. output `log_level` で、env が `\"prod\"` なら `\"warn\"`、そうでなければ `\"debug\"` を表示する\n3. output `min_capacity` で、env が `\"prod\"` なら `4`、そうでなければ `1` を表示する\n4. output `retention_days` で、env が `\"prod\"` なら `365`、そうでなければ `7` を表示する\n\n**期待出力**\n\n```text\nlog_level = \"debug\"\nmin_capacity = 1\nretention_days = 7\n```",
+    "starter": "variable \"env\" {\n  type    = string\n  default = \"stg\"\n}\n\n# ここに output を 3 つ書く\n",
+    "stdin": "",
+    "expected_stdout": "log_level = \"debug\"\nmin_capacity = 1\nretention_days = 7\n",
+    "answer": "variable \"env\" {\n  type    = string\n  default = \"stg\"\n}\n\n# tfvars 方式なら -var-file、workspace 方式なら terraform.workspace で\n# env の値が切り替わり、この 3 つの条件式の結果がまとめて変わります。\noutput \"log_level\" {\n  value = var.env == \"prod\" ? \"warn\" : \"debug\"\n}\n\noutput \"min_capacity\" {\n  value = var.env == \"prod\" ? 4 : 1\n}\n\noutput \"retention_days\" {\n  value = var.env == \"prod\" ? 365 : 7\n}\n"
+  }
+}

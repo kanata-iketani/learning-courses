@@ -1,0 +1,16 @@
+{
+  "lesson": 13,
+  "chapter": 1,
+  "kind": "web",
+  "title": "v-model の基本：入力欄と data が同期する",
+  "priority": "🔴",
+  "text": "**v-model**(入力欄と data を自動で同期させる仕組み)を学びます。v-bind が「データ→画面」の一方通行だったのに対し、v-model は「画面→データ」の向きも同時につながるので、**双方向バインディング**と呼ばれます。入力欄に 1 文字打つたびに data が書き換わり、その data を表示しているすべての場所が一緒に更新されます。🔴 フォーム作りの土台になる、Vue で最もよく使う機能のひとつです。\n\n```html\n<input v-model=\"name\">\n<p>こんにちは、{{ name }} さん</p>\n```\n\ndata の `name` に入れた初期値は最初から入力欄に表示され、入力欄を書きかえれば data も一緒に変わります。",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>v-model の基本</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>名前を入力してください:</p>\n    <input v-model=\"name\" placeholder=\"例: 山田太郎\">\n    <p>こんにちは、{{ name }} さん！</p>\n    <p>いま {{ name.length }} 文字です。</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { name: \"\" };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "自己紹介カードを作りましょう。starter には「ニックネーム」の入力欄だけがあります。「ひとこと」の入力欄を追加して、2 つの入力が下の紹介文へ打った瞬間に反映されるようにしてください。\n\n**確認ポイント**\n\n1. ニックネームの入力欄に文字を打つと、打った瞬間に下の紹介文が変わる\n2. 「ひとこと」の入力欄を自分で追加し(data には `comment` を用意)、同じように即座に紹介文へ反映される\n3. data の初期値(`nickname: \"ゲスト\"`)が、ページを開いた時点で入力欄の中に表示されている\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>自己紹介カード</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>ニックネーム: <input v-model=\"nickname\"></p>\n    <!-- ここに「ひとこと」の入力欄を追加する -->\n    <hr>\n    <p>{{ nickname }} です。よろしくお願いします！</p>\n    <!-- ここに ひとこと の表示を追加する -->\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          nickname: \"ゲスト\"\n          // ここに comment を追加する\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>自己紹介カード</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>ニックネーム: <input v-model=\"nickname\"></p>\n    <!-- 工夫した点: placeholder で入力例を示すと親切です -->\n    <p>ひとこと: <input v-model=\"comment\" placeholder=\"例: Vue を勉強中です\"></p>\n    <hr>\n    <p>{{ nickname }} です。よろしくお願いします！</p>\n    <p>ひとこと: {{ comment }}</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return {\n          nickname: \"ゲスト\",\n          // comment の初期値は空文字。入力すると即座に紹介文へ反映される\n          comment: \"\"\n        };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

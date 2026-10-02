@@ -1,0 +1,15 @@
+{
+  "lesson": 3,
+  "chapter": 3,
+  "title": "object型と実務のvariables.tf",
+  "priority": "🟡",
+  "text": "**object 型**(名前付きの属性をまとめた型。`object({ name = string, port = number })` のように書く)を使うと、関連する設定をひとつの variable に束ねられます。属性の参照は `var.db.name` とドットでつなぎます。実務の `variables.tf` では次のような定義がよく見られます。`var.db.port` のような参照を見たら「object 型 variable の属性アクセス」と読みます。🟡 まずは object 型の定義と参照が読めれば十分です。\n\n実務ではこう書かれることが多いです(読解例):\n\n```hcl\nvariable \"db\" {\n  description = \"DB 接続設定\"       # 実務では description も書く\n  type = object({\n    name = string\n    port = number\n  })\n  default = { name = \"app-db\", port = 5432 }\n}\n```",
+  "sample": "# lesson03 ch03: object 型\n# 関連する設定をひとつの variable に束ねます。\n\nvariable \"server\" {\n  type = object({\n    name  = string\n    port  = number\n    https = bool\n  })\n  default = {\n    name  = \"api-server\"\n    port  = 8080\n    https = true\n  }\n}\n\noutput \"server_name\" {\n  # 属性はドットで参照します\n  value = var.server.name\n}\n\noutput \"server_port\" {\n  value = var.server.port\n}\n",
+  "exercise": {
+    "description": "variable `db` を object 型で定義してください。\n\n- `type` は `object({ name = string, port = number })`\n- `default` は `{ name = \"app-db\", port = 5432 }`\n\nさらに output `db_name` で `var.db.name` を、output `db_port` で `var.db.port` を表示してください。\n\n**期待出力**\n\n```text\ndb_name = \"app-db\"\ndb_port = 5432\n```",
+    "starter": "variable \"db\" {\n  # object({ ... }) 型と default を書く\n}\n",
+    "stdin": "",
+    "expected_stdout": "db_name = \"app-db\"\ndb_port = 5432\n",
+    "answer": "# object 型は関連する設定の束。実務の variables.tf で多用されます。\n# 属性参照は var.db.name のようにドットでつなぎます。\nvariable \"db\" {\n  type = object({\n    name = string\n    port = number\n  })\n  default = {\n    name = \"app-db\"\n    port = 5432\n  }\n}\n\noutput \"db_name\" {\n  value = var.db.name\n}\n\noutput \"db_port\" {\n  value = var.db.port\n}\n"
+  }
+}

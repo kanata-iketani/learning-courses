@@ -1,0 +1,15 @@
+{
+  "lesson": 3,
+  "chapter": 1,
+  "title": "{item_id} で受け取る",
+  "priority": "🔴",
+  "text": "URL の一部を変数として受け取る仕組みが **パスパラメータ** です。パスの中に `{item_id}` のように波かっこで書くと、その部分の値が同じ名前の引数として関数に渡されます。`/items/1` でも `/items/abc` でも同じ関数が呼ばれるため、「商品 ID ごとの URL」を1つの関数で処理できます。型ヒントを付けない場合、値は文字列 (str) のまま渡されます。🔴 「パスの `{名前}` = 関数の引数」という対応を、何度も書いて覚えましょう。\n\n```python\n@app.get(\"/items/{item_id}\")\ndef read_item(item_id):\n    return {\"item_id\": item_id}\n```",
+  "sample": "# lesson03 ch01: パスパラメータ {item_id}\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# {item_id} の部分が、同じ名前の引数 item_id に渡される\n@app.get(\"/items/{item_id}\")\ndef read_item(item_id):\n    # 型ヒントなしなら文字列 (str) のまま\n    return {\"item_id\": item_id}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/items/1\").json())    # '1' は文字列として渡る\nprint(client.get(\"/items/abc\").json())  # どんな値でも同じ関数が処理する\n",
+  "exercise": {
+    "description": "GET `/users/{name}` で `{\"hello\": name}` を返すエンドポイントを書いてください。例えば `/users/demo` なら `{\"hello\": \"demo\"}` を返します。\n\n**期待出力**\n\n```text\n{'hello': 'demo'}\n{'hello': 'guest'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /users/{name} のエンドポイントを書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/users/demo\").json())\nprint(client.get(\"/users/guest\").json())\n",
+    "stdin": "",
+    "expected_stdout": "{'hello': 'demo'}\n{'hello': 'guest'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# パスの {name} と引数名 name を一致させることで、URL の値が関数に渡ります。\n# /users/demo でも /users/guest でも、この1つの関数が処理します。\n@app.get(\"/users/{name}\")\ndef read_user(name):\n    return {\"hello\": name}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/users/demo\").json())\nprint(client.get(\"/users/guest\").json())\n"
+  }
+}

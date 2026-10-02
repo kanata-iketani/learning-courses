@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>注文パネル</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>注文パネル</h1>
+    <!-- 工夫: ボタンが増えてもメソッドは 1 つ。違いは引数で表す。
+         テンプレート内の文字列はシングルクォートで囲む -->
+    <button @click="order('ラーメン', 900)">ラーメン 900円</button>
+    <button @click="order('チャーハン', 700)">チャーハン 700円</button>
+    <button @click="order('ぎょうざ', 400)">ぎょうざ 400円</button>
+    <p>{{ message }}</p>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { message: "メニューを選んでください" };
+      },
+      methods: {
+        order(name, price) {
+          this.message = name + "(" + price + "円)を注文しました";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

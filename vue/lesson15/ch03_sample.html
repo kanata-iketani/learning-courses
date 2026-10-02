@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>はじめてのコンポーネント</title>
+</head>
+<body>
+  <div id="app">
+    <p>同じ部品を 3 つ置いています。それぞれ独立して数えます。</p>
+    <count-button></count-button>
+    <count-button></count-button>
+    <count-button></count-button>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    const app = createApp({});
+    app.component("count-button", {
+      // data が関数なので、部品ごとに別々の count を持つ
+      data() {
+        return { count: 0 };
+      },
+      template: `<p><button v-on:click="count++">押してね</button> 押した回数: {{ count }} 回</p>`
+    });
+    app.mount("#app");
+  </script>
+</body>
+</html>

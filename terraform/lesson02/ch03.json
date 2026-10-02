@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 3,
+  "title": "複数リソースのチェーン",
+  "priority": "🔴",
+  "text": "参照は何段でもつなげられます。B が A を参照し、C が B を参照すれば、作成順は自動的に A → B → C になります。実務の AWS コードは「VPC → サブネット → EC2」のように参照のチェーンでできており、読むときは「= の右辺の参照をたどって依存の連鎖を追う」のが基本の読み方です。この講座では `terraform_data` の `input` に別リソースの `output` を渡してチェーンを作ります。🔴 参照をつないで依存の流れを作る感覚を、手が覚えるまで書きましょう。\n\n実務ではこう書かれることが多いです(読解例):\n\n```hcl\nresource \"aws_vpc\" \"main\" { cidr_block = \"10.0.0.0/16\" }\n\nresource \"aws_subnet\" \"app\" {\n  vpc_id = aws_vpc.main.id      # VPC → サブネット\n}\n\nresource \"aws_instance\" \"web\" {\n  subnet_id = aws_subnet.app.id # サブネット → EC2\n}\n```",
+  "sample": "# lesson02 ch03: 参照のチェーン\n# base → middle → last の順で自動的に作られます。\n\nresource \"terraform_data\" \"base\" {\n  input = \"base-v1\"\n}\n\nresource \"terraform_data\" \"middle\" {\n  # base への参照。base が先に作られます\n  input = terraform_data.base.output\n}\n\nresource \"terraform_data\" \"last\" {\n  # middle への参照。チェーンは何段でも OK\n  input = terraform_data.middle.output\n}\n\noutput \"chain_result\" {\n  value = terraform_data.last.output\n}\n",
+  "exercise": {
+    "description": "リソースを2つ作り、参照でつないでください。\n\n1. `terraform_data` リソース `network`: `input` に `\"vpc-main\"` を設定\n2. `terraform_data` リソース `server`: `input` にリソース `network` の `output` 属性を**参照**で設定\n\nさらに output `network_name` で `network` の `output` 属性を、output `server_network` で `server` の `output` 属性を表示してください。\n\n**期待出力**\n\n```text\nnetwork_name = \"vpc-main\"\nserver_network = \"vpc-main\"\n```",
+    "starter": "# network → server の順に自動で作られるように参照でつなぐ\nresource \"terraform_data\" \"network\" {\n}\n",
+    "stdin": "",
+    "expected_stdout": "network_name = \"vpc-main\"\nserver_network = \"vpc-main\"\n",
+    "answer": "# server の input に network の output を参照で渡すと、\n# 「network を先に作る」という依存関係が自動でできます(順序指定は不要)。\nresource \"terraform_data\" \"network\" {\n  input = \"vpc-main\"\n}\n\nresource \"terraform_data\" \"server\" {\n  input = terraform_data.network.output\n}\n\noutput \"network_name\" {\n  value = terraform_data.network.output\n}\n\noutput \"server_network\" {\n  value = terraform_data.server.output\n}\n"
+  }
+}

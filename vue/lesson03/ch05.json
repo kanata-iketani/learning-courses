@@ -1,0 +1,16 @@
+{
+  "lesson": 3,
+  "chapter": 5,
+  "kind": "web",
+  "title": "flexboxで横に並べる(display:flex)",
+  "priority": "🟡",
+  "text": "div は本来、縦に積み重なっていきます。横に並べたいときに使うのが **flexbox**(フレックスボックス。要素を柔軟に並べる CSS のしくみ)です。並べたい要素たちの**親**(それらを囲んでいる要素)に `display: flex;` と書くと、中の子要素が横一列に並びます。あわせて `gap`(子どうしの間隔)や `justify-content`(横方向の寄せ方。`center` で中央寄せ、`space-between` で両端に広げる)もよく使います。🟡 「指定するのは並べたい子ではなく親」という点が最大のポイントです。\n\n```html\n<style>\n  .row { display: flex; gap: 16px; justify-content: center; }\n</style>\n<div class=\"row\">\n  <div>A</div><div>B</div><div>C</div>\n</div>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>flexbox で横並び</title>\n<style>\n  .box { border: 2px solid seagreen; background-color: honeydew; padding: 16px; }\n  .row1 { display: flex; gap: 8px; }\n  .row2 { display: flex; gap: 8px; justify-content: center; }\n  .row3 { display: flex; justify-content: space-between; }\n</style>\n</head>\n<body>\n  <h1>flexbox で横並び</h1>\n  <p>親に display: flex(左寄せ・gap 8px):</p>\n  <div class=\"row1\"><div class=\"box\">A</div><div class=\"box\">B</div><div class=\"box\">C</div></div>\n  <p>justify-content: center(中央寄せ):</p>\n  <div class=\"row2\"><div class=\"box\">A</div><div class=\"box\">B</div><div class=\"box\">C</div></div>\n  <p>justify-content: space-between(両端に広げる):</p>\n  <div class=\"row3\"><div class=\"box\">A</div><div class=\"box\">B</div><div class=\"box\">C</div></div>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "starter には縦に積み重なった 3 枚のメニューカードがあります。flexbox で横一列に並べ替えましょう。\n\n**確認ポイント**\n\n1. 3 枚のカードを囲む親の div(`class=\"menu\"`)に `display: flex;` を指定して、カードが横一列に並んでいる\n2. `gap` を指定して、カードどうしの間にすき間が空いている\n3. `justify-content: center;` を指定して、カードの列がページの中央に寄っている\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>本日のメニュー</title>\n<style>\n  .card {\n    border: 2px solid darkorange;\n    background-color: papayawhip;\n    padding: 16px;\n  }\n  .menu {\n    /* ここに flexbox の指定を書く */\n  }\n</style>\n</head>\n<body>\n  <h1>本日のメニュー</h1>\n  <div class=\"menu\">\n    <div class=\"card\">カレー 600円</div>\n    <div class=\"card\">ラーメン 700円</div>\n    <div class=\"card\">オムライス 650円</div>\n  </div>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>本日のメニュー</title>\n<style>\n  .card {\n    border: 2px solid darkorange;\n    background-color: papayawhip;\n    padding: 16px;\n  }\n  /* 工夫した点: flex は並べたいカードではなく、囲んでいる親の .menu に指定します */\n  .menu {\n    display: flex;\n    gap: 16px;\n    justify-content: center;\n  }\n</style>\n</head>\n<body>\n  <h1>本日のメニュー</h1>\n  <div class=\"menu\">\n    <div class=\"card\">カレー 600円</div>\n    <div class=\"card\">ラーメン 700円</div>\n    <div class=\"card\">オムライス 650円</div>\n  </div>\n</body>\n</html>\n"
+  }
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>本の一覧</title>
+</head>
+<body>
+  <div id="app">
+    <h2>おすすめの本</h2>
+    <!-- 工夫した点: :title のように v-bind を使うと data の値が渡せる。
+         :key には重複しない id を使う -->
+    <book-card v-for="book in books" :key="book.id"
+               :title="book.title" :author="book.author"></book-card>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    const app = createApp({
+      data() {
+        return {
+          books: [
+            { id: 1, title: "はじめての Vue", author: "山田花子" },
+            { id: 2, title: "たのしい HTML", author: "佐藤一郎" },
+            { id: 3, title: "CSS 図鑑", author: "鈴木未来" }
+          ]
+        };
+      }
+    });
+    app.component("book-card", {
+      props: ["title", "author"],
+      template: `<div style="border: 1px solid #888; padding: 8px; margin: 4px;">
+        <strong>{{ title }}</strong><br>著者: {{ author }}
+      </div>`
+    });
+    app.mount("#app");
+  </script>
+</body>
+</html>

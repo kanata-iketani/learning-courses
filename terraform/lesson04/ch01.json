@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 1,
+  "title": "localsとlocal.",
+  "priority": "🔴",
+  "text": "**locals**(ファイル内だけで使う中間変数をまとめるブロック)は `locals { 名前 = 式 }` と書き、`local.名前` で参照します(定義は複数形、参照は単数形なことに注意)。variable が「外から受け取る入力」なのに対し、locals は「中で組み立てた値に名前を付ける」ためのものです。実務では計算結果や共通タグを locals に置き、`locals.tf` というファイルにまとめる流儀をよく見ます。コード中の `local.xxx` を見たら locals ブロックの定義元を探すのが読解の基本です。🔴 locals の定義と `local.` 参照は、手が覚えるまで書きましょう。\n\n```hcl\nlocals {\n  retention_days = 30\n}\n\noutput \"days\" {\n  value = local.retention_days  # 参照は local.名前\n}\n```",
+  "sample": "# lesson04 ch01: locals と local.\n# variable は「外からの入力」、locals は「中で付けた名前」です。\n\nvariable \"team\" {\n  type    = string\n  default = \"platform\"\n}\n\nlocals {\n  # 定義は locals(複数形)ブロックにまとめて書きます\n  retention_days = 14\n  managed_by     = \"terraform\"\n}\n\noutput \"owner_team\" {\n  value = var.team # 外からの入力は var.\n}\n\noutput \"managed_by\" {\n  value = local.managed_by # 中で付けた名前は local.\n}\n",
+  "exercise": {
+    "description": "variable と locals を組み合わせます。\n\n1. variable `team` を定義: `type` は `string`、`default` は `\"sre\"`\n2. locals ブロックで `retention_days = 30` を定義\n3. output `owner_team` で `var.team` を、output `retention` で `local.retention_days` を表示\n\n**期待出力**\n\n```text\nowner_team = \"sre\"\nretention = 30\n```",
+    "starter": "# variable(外からの入力)と locals(中で付けた名前)を書き分ける\n",
+    "stdin": "",
+    "expected_stdout": "owner_team = \"sre\"\nretention = 30\n",
+    "answer": "# 外から差し替えたい値は variable、中で組み立てる値は locals に置きます。\n# 定義は locals(複数形)、参照は local.名前(単数形)です。\nvariable \"team\" {\n  type    = string\n  default = \"sre\"\n}\n\nlocals {\n  retention_days = 30\n}\n\noutput \"owner_team\" {\n  value = var.team\n}\n\noutput \"retention\" {\n  value = local.retention_days\n}\n"
+  }
+}

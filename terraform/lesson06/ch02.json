@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 2,
+  "title": "mapを作るfor式 — {for k, v in ...}",
+  "priority": "🔴",
+  "text": "for式でマップを作るには `{for k, v in var.map : k => 変換式}` と波かっこで書きます。`k` にキー、`v` に値が入り、`=>` の右側が新しい値になります。リストから `{for x in var.list : x => 式}` とマップを作ることもでき、これは後のレッスンで学ぶ for_each の前処理として実務で多用されます。🔴 「`[...]` ならリストを作る for式、`{...}` と `=>` ならマップを作る for式」という見分け方を身につけると、実務コードの読解速度が大きく変わります。\n\n```hcl\nlocals {\n  # 値だけを変換した新しいマップ\n  upper_sizes = { for k, v in var.sizes : k => upper(v) }\n  # リスト → マップ(キー => 値 を自分で組み立てる)\n  name_len = { for n in var.names : n => length(n) }\n}\n```",
+  "sample": "# lesson06 ch02: マップを作る for 式\nvariable \"sizes\" {\n  default = {\n    api = \"t3.medium\"\n    web = \"t3.small\"\n  }\n}\n\nvariable \"names\" {\n  default = [\"sato\", \"suzuki\"]\n}\n\nlocals {\n  # k にキー、v に値。=> の右で新しい値を組み立てます\n  labels = { for k, v in var.sizes : k => \"${k} runs on ${v}\" }\n\n  # リストからマップを作ることもできます\n  name_len = { for n in var.names : n => length(n) }\n}\n\noutput \"web_label\" {\n  value = local.labels[\"web\"]\n}\n\noutput \"sato_len\" {\n  value = local.name_len[\"sato\"]\n}\n\noutput \"label_keys\" {\n  value = join(\",\", keys(local.labels))\n}\n",
+  "exercise": {
+    "description": "variable `sizes`(default `{ api = \"t3.medium\", web = \"t3.small\" }`)を宣言し、for式で「キーはそのまま、値を `キー:値` という文字列にした」マップを locals に作って、次の3つを出力してください。\n\n- output `label_keys`: 新しいマップのキー一覧を `,` 区切りで join した文字列\n- output `label_values`: 新しいマップの値一覧(values)を半角スペース区切りで join した文字列\n- output `web`: 新しいマップの `\"web\"` キーの値\n\n**期待出力**\n\n```text\nlabel_keys = \"api,web\"\nlabel_values = \"api:t3.medium web:t3.small\"\nweb = \"web:t3.small\"\n```",
+    "starter": "variable \"sizes\" {\n  default = {\n    api = \"t3.medium\"\n    web = \"t3.small\"\n  }\n}\n\n# ここに locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "label_keys = \"api,web\"\nlabel_values = \"api:t3.medium web:t3.small\"\nweb = \"web:t3.small\"\n",
+    "answer": "variable \"sizes\" {\n  default = {\n    api = \"t3.medium\"\n    web = \"t3.small\"\n  }\n}\n\n# {for k, v in マップ : k => 式} は「キーを保ったまま値だけ作り替える」定番形です。\n# keys / values はアルファベット順なので、label_values も api → web の順になります。\nlocals {\n  labels = { for k, v in var.sizes : k => \"${k}:${v}\" }\n}\n\noutput \"label_keys\" {\n  value = join(\",\", keys(local.labels))\n}\n\noutput \"label_values\" {\n  value = join(\" \", values(local.labels))\n}\n\noutput \"web\" {\n  value = local.labels[\"web\"]\n}\n"
+  }
+}

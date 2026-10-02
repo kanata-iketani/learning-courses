@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 2,
+  "title": "while と break",
+  "priority": "🟡",
+  "text": "**while 文**は、条件が true の間くり返す構文で、Python の while とほぼ同じ書き方です。回数が事前に決まっていないくり返しに向いています。ループの中で条件が false に近づく更新を忘れると、永遠に止まらない**無限ループ**になるので注意してください。**break** はループをその場で打ち切る命令です。`while (true)` と break を組み合わせると「条件を満たした瞬間にやめる」処理が書けます。🟡 回数が決まっているくり返しは for を優先し、while は「いつ終わるかわからない」場面で使い分けましょう。\n\n```js\nlet count = 3;\nwhile (count > 0) {\n  console.log(count);\n  count = count - 1;  // 更新を忘れると無限ループ！\n}\n```",
+  "sample": "// 条件が true の間くり返します(Python の while とほぼ同じ)\nlet count = 3;\nwhile (count > 0) {\n  console.log(count);\n  count = count - 1;  // 更新を忘れると無限ループになります\n}\nconsole.log(\"発射！\");\n\n// break はループをその場で打ち切る命令です\nlet n = 1;\nwhile (true) {\n  if (n > 3) {\n    break;  // ここでループ終了\n  }\n  console.log(n);\n  n++;\n}\n",
+  "exercise": {
+    "description": "`while (true)` と `break` を使って、1, 2, 3, … と順に足していき、合計が 20 を超えたら止めるプログラムを書いてください。止まったあとに「最後に足した数」と「そのときの合計」を 1 行ずつ出力します。\n\nヒント: 合計を入れる `total` と、いま足している数 `i` を `let` で用意しましょう(1+2+3+4+5+6 = 21 で初めて 20 を超えます)。\n\n**期待出力**\n\n```text\n6\n21\n```",
+    "starter": "let total = 0;\nlet i = 0;\n// while (true) と break でくり返しましょう\n",
+    "stdin": "",
+    "expected_stdout": "6\n21\n",
+    "answer": "let total = 0;\nlet i = 0;\n// 「何回で超えるか」が事前にわからないので while (true) + break で書きます\nwhile (true) {\n  i++;\n  total = total + i;\n  if (total > 20) {\n    break;  // 20 を超えた瞬間にループを抜けます\n  }\n}\nconsole.log(i);\nconsole.log(total);\n"
+  }
+}

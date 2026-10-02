@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 5,
+  "title": "DELETE で削除",
+  "priority": "🔴",
+  "text": "**DELETE** とは、データの削除に使う HTTP メソッドです。`enumerate`(番号付きで取り出す関数)で位置を調べながら探し、見つかったら `pop(位置)` でリストから取り除きます。成功したら 204(No Content)を返し、ボディは返しません。これで Create・Read・Update・Delete の 4 操作がそろい、CRUD API の完成です。🔴 CRUD の締めくくりとして、削除も手が覚えるまで書きましょう。\n\n```python\n@app.delete(\"/books/{book_id}\", status_code=204)\ndef delete_book(book_id: int):\n    for i, book in enumerate(books):\n        if book[\"id\"] == book_id:\n            books.pop(i)\n            return\n```",
+  "sample": "# lesson08 ch05: DELETE で削除する (Delete)\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nbooks = [\n    {\"id\": 1, \"title\": \"Python入門\", \"price\": 2000},\n    {\"id\": 2, \"title\": \"FastAPI入門\", \"price\": 2500},\n]\n\n@app.get(\"/books\")\ndef list_books():\n    return books\n\n# 削除に成功したら 204 (中身なし) を返す\n@app.delete(\"/books/{book_id}\", status_code=204)\ndef delete_book(book_id: int):\n    for i, book in enumerate(books):\n        if book[\"id\"] == book_id:\n            books.pop(i)  # 見つかった位置の要素を取り除く\n            return\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.delete(\"/books/1\").status_code)  # 204\nprint(client.get(\"/books\").json())            # 1 冊だけ残る\n",
+  "exercise": {
+    "description": "タスクを削除する API を作ります。一覧の `GET /tasks` はスターターに用意してあります。\n\n- `DELETE /tasks/{task_id}`(`status_code=204`)を作る\n- `enumerate` で位置を調べながらリスト `tasks` を探し、`id` が一致したら `pop` で取り除いて `return` する\n\n**期待出力**\n\n```text\n204\n200\n[{'id': 1, 'name': '買い物', 'done': False}]\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# データベースの代わりのリスト (変更しない)\ntasks = [\n    {\"id\": 1, \"name\": \"買い物\", \"done\": False},\n    {\"id\": 2, \"name\": \"掃除\", \"done\": True},\n]\n\n@app.get(\"/tasks\")\ndef list_tasks():\n    return tasks\n\n# ここに DELETE /tasks/{task_id} を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.delete(\"/tasks/2\").status_code)\nr = client.get(\"/tasks\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "204\n200\n[{'id': 1, 'name': '買い物', 'done': False}]\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# データベースの代わりのリスト (変更しない)\ntasks = [\n    {\"id\": 1, \"name\": \"買い物\", \"done\": False},\n    {\"id\": 2, \"name\": \"掃除\", \"done\": True},\n]\n\n@app.get(\"/tasks\")\ndef list_tasks():\n    return tasks\n\n# pop には「何番目か」が必要なので、enumerate で位置 i も受け取ります。\n# 204 (No Content) なのでボディは返さず、return だけで関数を終えます。\n@app.delete(\"/tasks/{task_id}\", status_code=204)\ndef delete_task(task_id: int):\n    for i, task in enumerate(tasks):\n        if task[\"id\"] == task_id:\n            tasks.pop(i)\n            return\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.delete(\"/tasks/2\").status_code)\nr = client.get(\"/tasks\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

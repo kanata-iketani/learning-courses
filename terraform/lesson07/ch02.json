@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 2,
+  "title": "count = 条件 ? 1 : 0 — オンオフパターン",
+  "priority": "🔴",
+  "text": "`count = var.enabled ? 1 : 0` は「フラグが true のときだけリソースを作る」ための定番イディオムで、実務コードで極めてよく見ます(監視をオプションにする、環境によってバックアップの有無を変える、など)。count が 0 ならリソースはリストとして空になるため、参照側は `try(リソース[0].output, \"既定値\")` のように「無いかもしれない」前提で書きます。🔴 `? 1 : 0` を見たら「このリソースはフラグでオンオフされる」と即読みできることが読解の鍵です。\n\n```hcl\nresource \"aws_cloudwatch_metric_alarm\" \"cpu\" {\n  count = var.enable_monitoring ? 1 : 0   # 読解例: フラグで作成を切替\n}\n```",
+  "sample": "# lesson07 ch02: count によるオンオフ\nvariable \"enable_backup\" {\n  default = true\n}\n\nvariable \"enable_debug\" {\n  default = false\n}\n\nresource \"terraform_data\" \"backup\" {\n  count = var.enable_backup ? 1 : 0\n  input = \"backup-plan\"\n}\n\nresource \"terraform_data\" \"debug\" {\n  count = var.enable_debug ? 1 : 0\n  input = \"debug-agent\"\n}\n\n# count = 0 のリソースは空リストになります\noutput \"backup_count\" {\n  value = length(terraform_data.backup)\n}\n\n# 「無いかもしれない」ものは try で既定値に倒して参照します\noutput \"backup_name\" {\n  value = try(terraform_data.backup[0].output, \"(none)\")\n}\n\noutput \"debug_name\" {\n  value = try(terraform_data.debug[0].output, \"(none)\")\n}\n",
+  "exercise": {
+    "description": "variable `enable_logging`(default `true`)と `enable_monitoring`(default `false`)を宣言し、`terraform_data` リソース `logging`(input は `\"logging-on\"`)と `monitoring`(input は `\"monitoring-on\"`)を、それぞれのフラグによる `条件 ? 1 : 0` パターンで作成してください。そのうえで次の3つを出力してください。\n\n- output `logging`: `try` を使い、logging リソースがあればその `output` 属性、無ければ `\"off\"`\n- output `logging_count`: logging リソースの個数\n- output `monitoring`: `try` を使い、monitoring リソースがあればその `output` 属性、無ければ `\"off\"`\n\n**期待出力**\n\n```text\nlogging = \"logging-on\"\nlogging_count = 1\nmonitoring = \"off\"\n```",
+    "starter": "variable \"enable_logging\" {\n  default = true\n}\n\nvariable \"enable_monitoring\" {\n  default = false\n}\n\n# ここに resource と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "logging = \"logging-on\"\nlogging_count = 1\nmonitoring = \"off\"\n",
+    "answer": "variable \"enable_logging\" {\n  default = true\n}\n\nvariable \"enable_monitoring\" {\n  default = false\n}\n\n# 「? 1 : 0」はフラグでリソースを作る/作らないを切り替える実務の定番イディオムです。\n# count = 0 のときは [0] 参照がエラーになるため、try で \"off\" に倒して参照します。\nresource \"terraform_data\" \"logging\" {\n  count = var.enable_logging ? 1 : 0\n  input = \"logging-on\"\n}\n\nresource \"terraform_data\" \"monitoring\" {\n  count = var.enable_monitoring ? 1 : 0\n  input = \"monitoring-on\"\n}\n\noutput \"logging\" {\n  value = try(terraform_data.logging[0].output, \"off\")\n}\n\noutput \"logging_count\" {\n  value = length(terraform_data.logging)\n}\n\noutput \"monitoring\" {\n  value = try(terraform_data.monitoring[0].output, \"off\")\n}\n"
+  }
+}

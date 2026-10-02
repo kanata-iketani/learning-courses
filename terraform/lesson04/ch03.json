@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 3,
+  "title": "条件式 cond ? a : b",
+  "priority": "🔴",
+  "text": "**条件式**(`条件 ? 真のときの値 : 偽のときの値` の三項演算子)は、環境によって値を切り替える定番の書き方です。実務では `var.env == \"prod\" ? \"r6g.large\" : \"t4g.micro\"` のように「本番だけ大きいインスタンス」を表現したり、後のレッスンで学ぶ `count = var.enabled ? 1 : 0`(リソースを作る/作らないの切り替え)に使われたりします。条件部には `==` などの比較演算子で作った bool 値を置きます。🔴 `? :` は実務コードで毎日見る形なので、手が覚えるまで書きましょう。\n\n実務ではこう書かれることが多いです(読解例):\n\n```hcl\nlocals {\n  instance_type = var.env == \"prod\" ? \"r6g.large\" : \"t4g.micro\"\n}\n```",
+  "sample": "# lesson04 ch03: 条件式\n# 条件 ? 真の値 : 偽の値 で切り替えます。\n\nvariable \"env\" {\n  type    = string\n  default = \"dev\"\n}\n\nlocals {\n  # env が prod なら large、それ以外は small\n  instance_type = var.env == \"prod\" ? \"large\" : \"small\"\n\n  # 比較演算子の結果は bool\n  is_production = var.env == \"prod\"\n}\n\noutput \"instance_type\" {\n  value = local.instance_type # default が dev なので small\n}\n\noutput \"is_production\" {\n  value = local.is_production\n}\n",
+  "exercise": {
+    "description": "環境によって値を切り替えます。\n\n1. variable `env` を定義: `type` は `string`、`default` は `\"prod\"`\n2. locals で `instance_type` を定義: `var.env` が `\"prod\"` なら `\"large\"`、それ以外なら `\"small\"` になる条件式\n3. output `instance_type` で `local.instance_type` を、output `is_production` で `var.env == \"prod\"` の結果を表示\n\n**期待出力**\n\n```text\ninstance_type = \"large\"\nis_production = true\n```",
+    "starter": "# 条件 ? 真の値 : 偽の値\n",
+    "stdin": "",
+    "expected_stdout": "instance_type = \"large\"\nis_production = true\n",
+    "answer": "# 条件式は 条件 ? 真の値 : 偽の値。env による切り替えの定番パターンです。\n# 比較 var.env == \"prod\" は bool になるので、そのまま output にも出せます。\nvariable \"env\" {\n  type    = string\n  default = \"prod\"\n}\n\nlocals {\n  instance_type = var.env == \"prod\" ? \"large\" : \"small\"\n}\n\noutput \"instance_type\" {\n  value = local.instance_type\n}\n\noutput \"is_production\" {\n  value = var.env == \"prod\"\n}\n"
+  }
+}

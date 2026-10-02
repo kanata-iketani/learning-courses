@@ -1,0 +1,15 @@
+{
+  "lesson": 9,
+  "chapter": 3,
+  "title": "dynamicの使いどころと使いすぎ問題",
+  "priority": "⚪",
+  "text": "dynamic が向くのは「ルールの件数が variable や環境によって変わる」場合だけです。固定の 2〜3 個なら、ブロックをそのまま並べて書くほうが読みやすく、plan の差分も追いやすくなります。実務レビューでは「dynamic の中に dynamic」のようなネストは可読性が大きく落ちるため避けられる傾向があり、HashiCorp のスタイルガイドも dynamic の乱用を戒めています。⚪ 読解時は「この dynamic は可変件数だから必要なのか、単に短く書きたかっただけか」を判断できれば十分です。\n\n```hcl\n# 固定 2 個なら直書きのほうが読みやすい\ningress {\n  from_port = 80\n  to_port   = 80\n}\ningress {\n  from_port = 443\n  to_port   = 443\n}\n```",
+  "sample": "# 「件数が可変かどうか」で dynamic を使うべきかを判定するロジックの例です。\n# 実務の判断基準を条件式にしてみます。\n\nlocals {\n  rules = [\"http\", \"https\", \"ssh\", \"monitoring\"]\n\n  # 件数が多い(またはリストが variable 由来)なら dynamic が候補になる\n  decision = length(local.rules) >= 3 ? \"dynamic\" : \"static\"\n}\n\noutput \"decision\" {\n  value = local.decision\n}\n\noutput \"rule_count\" {\n  value = length(local.rules)\n}\n",
+  "exercise": {
+    "description": "「固定 2 件なら直書き、3 件以上なら dynamic」という判断基準を条件式で表現してください。\n\n1. `variable \"rules\"` を `list(string)` 型、default `[\"https\", \"ssh\"]` で定義する\n2. output `decision` で、件数が 3 以上なら `\"dynamic\"`、そうでなければ `\"static\"` を表示する\n3. output `rule_count` で件数を表示する\n\n**期待出力**\n\n```text\ndecision = \"static\"\nrule_count = 2\n```",
+    "starter": "variable \"rules\" {\n  type    = list(string)\n  default = [\"https\", \"ssh\"]\n}\n\n# ここに output を 2 つ書く\n",
+    "stdin": "",
+    "expected_stdout": "decision = \"static\"\nrule_count = 2\n",
+    "answer": "variable \"rules\" {\n  type    = list(string)\n  default = [\"https\", \"ssh\"]\n}\n\n# 「件数が可変・多数なら dynamic、固定少数なら直書き」という実務の判断を\n# length + 条件式で表しています。2 件なので static(直書きで十分)になります。\noutput \"decision\" {\n  value = length(var.rules) >= 3 ? \"dynamic\" : \"static\"\n}\n\noutput \"rule_count\" {\n  value = length(var.rules)\n}\n"
+  }
+}

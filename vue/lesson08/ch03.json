@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 3,
+  "title": "アロー関数 〜 =>",
+  "priority": "🔴",
+  "text": "**アロー関数**は `=>` を使った関数の短い書き方で、`const add = (a, b) => a + b;` のように変数に入れて使います。処理が 1 行の式なら `{ }` と `return` を省略でき、`=>` の右の式がそのまま戻り値になります。複数行の処理を書くときは `{ }` で囲んで `return` を書きます。前レッスンの map / filter に渡していたのがまさにこの形で、Vue のイベント処理でも最もよく見る書き方です。🔴 「function 宣言と同じもの、短く書けるだけ」と理解した上で `=>` の形に目を慣らしましょう。\n\n```js\nfunction add1(a, b) { return a + b; }  // function 宣言\nconst add2 = (a, b) => a + b;          // 同じ意味のアロー関数\n```",
+  "sample": "// function 宣言\nfunction add1(a, b) {\n  return a + b;\n}\n\n// 同じものをアロー関数で(1 行の式なら { } と return を省略できます)\nconst add2 = (a, b) => a + b;\n\nconsole.log(add1(2, 3));  // 5\nconsole.log(add2(2, 3));  // 5\n\n// 引数が 1 つなら ( ) も省略できます\nconst double = n => n * 2;\nconsole.log(double(10));  // 20\n\n// 複数行の処理を書くときは { } と return が必要です\nconst hello = (name) => {\n  const message = `こんにちは、${name}さん`;\n  return message;\n};\nconsole.log(hello(\"みき\"));\n",
+  "exercise": {
+    "description": "次の 2 つのアロー関数を作り、結果を順に出力してください。\n\n1. 数値 `n` を受け取り 3 倍を返す `triple` を作り、`triple(7)` の結果を出力する\n2. 名前 `name` を受け取り `ようこそ、〇〇さん` という文字列を返す `greetTo` を作り、`greetTo(\"ゆい\")` の結果を出力する\n\n**期待出力**\n\n```text\n21\nようこそ、ゆいさん\n```",
+    "starter": "// 1. triple をアロー関数で定義\n\n// 2. greetTo をアロー関数で定義\n\n// 結果を出力しましょう\n",
+    "stdin": "",
+    "expected_stdout": "21\nようこそ、ゆいさん\n",
+    "answer": "// 1 行の式だけなら { } と return を省略でき、式の値がそのまま戻り値になります\nconst triple = n => n * 3;\n// 戻り値がテンプレートリテラルでも書き方は同じです\nconst greetTo = name => `ようこそ、${name}さん`;\n\nconsole.log(triple(7));\nconsole.log(greetTo(\"ゆい\"));\n"
+  }
+}

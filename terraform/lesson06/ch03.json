@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 3,
+  "title": "ifでフィルタするfor式",
+  "priority": "🔴",
+  "text": "for式の末尾に `if 条件` を付けると、条件を満たす要素だけを残せます。`[for x in var.list : x if 条件]` の形で、変換とフィルタを同時に行えます。実務では「本番用のリソースだけ」「特定のサフィックスを持つバケットだけ」を抜き出す前処理として頻出で、`endswith` / `startswith`(文字列が特定の接尾辞/接頭辞を持つかを返す関数)との組み合わせをよく見ます。🔴 for式に if が付いていたら「絞り込んでから使う」意図だと読めるようにしましょう。\n\n```hcl\nlocals {\n  prod_only = [for b in var.buckets : b if endswith(b, \"-prod\")]\n}\n```",
+  "sample": "# lesson06 ch03: if でフィルタする for 式\nvariable \"hosts\" {\n  default = [\"web-prod\", \"web-dev\", \"db-prod\", \"cache-dev\"]\n}\n\nlocals {\n  # if 条件を満たす要素だけが残ります\n  prod_hosts = [for h in var.hosts : h if endswith(h, \"-prod\")]\n\n  # フィルタと変換は同時にできます(dev だけを大文字に)\n  dev_upper = [for h in var.hosts : upper(h) if endswith(h, \"-dev\")]\n}\n\noutput \"prod_hosts\" {\n  value = join(\",\", local.prod_hosts)\n}\n\noutput \"prod_count\" {\n  value = length(local.prod_hosts)\n}\n\noutput \"dev_upper\" {\n  value = join(\",\", local.dev_upper)\n}\n",
+  "exercise": {
+    "description": "variable `buckets`(default `[\"logs-prod\", \"logs-dev\", \"assets-prod\", \"tmp-dev\"]`)を宣言し、for式の `if` で `-prod` で終わるものだけを残したリストを locals に作って、次の2つを出力してください。\n\n- output `prod_buckets`: 残ったリストを `,` 区切りで join した文字列\n- output `prod_count`: 残った要素数\n\n**期待出力**\n\n```text\nprod_buckets = \"logs-prod,assets-prod\"\nprod_count = 2\n```",
+    "starter": "variable \"buckets\" {\n  default = [\"logs-prod\", \"logs-dev\", \"assets-prod\", \"tmp-dev\"]\n}\n\n# ここに locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "prod_buckets = \"logs-prod,assets-prod\"\nprod_count = 2\n",
+    "answer": "variable \"buckets\" {\n  default = [\"logs-prod\", \"logs-dev\", \"assets-prod\", \"tmp-dev\"]\n}\n\n# if は「: 式」の後ろに置きます。endswith でサフィックス判定するのが実務の定番です。\n# 元リストの順序は保たれるので、logs-prod → assets-prod の順になります。\nlocals {\n  prod = [for b in var.buckets : b if endswith(b, \"-prod\")]\n}\n\noutput \"prod_buckets\" {\n  value = join(\",\", local.prod)\n}\n\noutput \"prod_count\" {\n  value = length(local.prod)\n}\n"
+  }
+}

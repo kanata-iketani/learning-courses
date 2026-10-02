@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 4,
+  "title": "countとfor_eachの使い分け — 現場の流儀",
+  "priority": "🟡",
+  "text": "count と for_each はどちらも複数リソースを作りますが、現場では**キーの安定性**から for_each が好まれることが多いです。count は「リストの位置」で管理するため要素の増減で index がずれます(lesson07 参照)。for_each は「キー」で管理するため、途中の要素を消しても他のリソースに影響しません。使い分けの目安は「まったく同質な複製やオンオフ(`? 1 : 0`)は count、名前で区別できる集まりは for_each」です。ただしこれは流儀であり、既存コードベースの慣習に合わせるのが実務の基本です。🟡 コードレビューで「count を for_each にしませんか」という指摘は定番なので、理由を説明できるようにしましょう。\n\n```hcl\n# count 版(位置で管理)         # for_each 版(キーで管理・増減に強い)\ncount = length(var.envs)        for_each = toset(var.envs)\ninput = var.envs[count.index]   input    = each.value\n```",
+  "sample": "# lesson08 ch04: count 版と for_each 版の比較\nvariable \"envs\" {\n  default = [\"dev\", \"prod\", \"stg\"]\n}\n\n# count 版: リストの位置で管理される(増減に弱い)\nresource \"terraform_data\" \"by_count\" {\n  count = length(var.envs)\n  input = var.envs[count.index]\n}\n\n# for_each 版: 要素の値がキーになる(増減に強い)\nresource \"terraform_data\" \"by_each\" {\n  for_each = toset(var.envs)\n  input    = each.value\n}\n\n# 参照の形も変わります: count はリスト、for_each はマップ\noutput \"count_style\" {\n  value = join(\",\", terraform_data.by_count[*].output)\n}\n\noutput \"each_keys\" {\n  value = join(\",\", keys(terraform_data.by_each))\n}\n",
+  "exercise": {
+    "description": "次の count 版のコードを、キーの安定性が高い for_each 版に書き換えてください。\n\n```hcl\nvariable \"envs\" {\n  default = [\"dev\", \"prod\", \"stg\"]\n}\n\nresource \"terraform_data\" \"env\" {\n  count = length(var.envs)\n  input = format(\"env-%s\", var.envs[count.index])\n}\n```\n\n`terraform_data` リソース `env` を `for_each = toset(var.envs)` で作成し、`input` は count 版と同じ `env-要素名` の形にします。そのうえで次の2つを出力してください。\n\n- output `env_keys`: 作られたリソースのキー一覧を `,` 区切りで join した文字列\n- output `prod`: キー `\"prod\"` のリソースの `output` 属性\n\n**期待出力**\n\n```text\nenv_keys = \"dev,prod,stg\"\nprod = \"env-prod\"\n```",
+    "starter": "variable \"envs\" {\n  default = [\"dev\", \"prod\", \"stg\"]\n}\n\n# count 版を for_each 版に書き換える\nresource \"terraform_data\" \"env\" {\n}\n\n# ここに output を書く\n",
+    "stdin": "",
+    "expected_stdout": "env_keys = \"dev,prod,stg\"\nprod = \"env-prod\"\n",
+    "answer": "variable \"envs\" {\n  default = [\"dev\", \"prod\", \"stg\"]\n}\n\n# count.index による位置参照を each.value に置き換えるだけで同じものが作れます。\n# for_each 版はキーが \"dev\"/\"prod\"/\"stg\" になるため、途中の要素を消しても\n# 他のリソースが作り直しにならない、というのが現場で好まれる理由です。\nresource \"terraform_data\" \"env\" {\n  for_each = toset(var.envs)\n  input    = format(\"env-%s\", each.value)\n}\n\noutput \"env_keys\" {\n  value = join(\",\", keys(terraform_data.env))\n}\n\noutput \"prod\" {\n  value = terraform_data.env[\"prod\"].output\n}\n"
+  }
+}

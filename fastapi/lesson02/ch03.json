@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 3,
+  "title": "JSON を返す",
+  "priority": "🔴",
+  "text": "FastAPI の関数は、Python の辞書やリストを `return` するだけで、自動的に JSON に変換してレスポンスとして返します。`json.dumps` を自分で呼ぶ必要はありません。リストの中に辞書を入れた形(一覧データの定番の形)もそのまま返せます。なお `r.json()` で受け取ると Python の辞書・リストに戻るため、print するとシングルクォート表示になります。🔴 「辞書・リストを返せば JSON になる」を手に馴染ませましょう。\n\n```python\n@app.get(\"/users\")\ndef list_users():\n    return [{\"name\": \"sato\"}, {\"name\": \"suzuki\"}]\n```",
+  "sample": "# lesson02 ch03: 辞書・リストを return すれば JSON になる\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 辞書 → JSON オブジェクト。True は JSON の true に変換される\n@app.get(\"/shop\")\ndef shop():\n    return {\"name\": \"demo堂\", \"open\": True}\n\n# リスト (中に辞書) → JSON 配列。一覧 API の定番の形\n@app.get(\"/users\")\ndef list_users():\n    return [{\"name\": \"sato\"}, {\"name\": \"suzuki\"}]\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/shop\").json())\nprint(client.get(\"/users\").json())\n",
+  "exercise": {
+    "description": "GET `/todos` で、やることリストを「辞書のリスト」で返すエンドポイントを書いてください。返す値は `[{\"id\": 1, \"task\": \"買い物\"}, {\"id\": 2, \"task\": \"掃除\"}]` です。\n\n**期待出力**\n\n```text\n[{'id': 1, 'task': '買い物'}, {'id': 2, 'task': '掃除'}]\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /todos のエンドポイントを書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/todos\").json())\n",
+    "stdin": "",
+    "expected_stdout": "[{'id': 1, 'task': '買い物'}, {'id': 2, 'task': '掃除'}]\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# リストを返すと JSON 配列になります。json.dumps は不要で、FastAPI が変換します。\n# 一覧 API は「辞書のリスト」を返すのが定番の形です。\n@app.get(\"/todos\")\ndef list_todos():\n    return [{\"id\": 1, \"task\": \"買い物\"}, {\"id\": 2, \"task\": \"掃除\"}]\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/todos\").json())\n"
+  }
+}

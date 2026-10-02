@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 2,
+  "title": "モジュールの入力と出力",
+  "priority": "🔴",
+  "text": "モジュールの境界(外部とやりとりできる接点)は、variable(入力)と output(出力)だけです。呼び出し側は module ブロックの引数でモジュール側の variable に値を渡し、結果は `module.呼び出し名.output名` で受け取ります。モジュール内部のリソースや locals は外から直接参照できず、output で公開されたものだけが見えます。🔴 実務の読解では「module ブロックの引数 ↔ モジュール側の variables.tf」「module.xxx.yyy ↔ モジュール側の outputs.tf」を突き合わせるのが基本動作です。\n\n```hcl\nmodule \"vpc\" {\n  source = \"./modules/vpc\"\n  cidr   = \"10.0.0.0/16\" # → モジュール側 variable \"cidr\" へ\n}\n\nresource \"aws_subnet\" \"app\" {\n  vpc_id = module.vpc.vpc_id # ← モジュール側 output \"vpc_id\" から\n}\n```",
+  "sample": "# 入力(variable)→ 加工 → 出力(output)というモジュールの基本形です。\n\nmodule \"tags\" {\n  source = \"./modules/tagger\"\n  env    = \"stg\"\n  owner  = \"sre\"\n}\n\noutput \"tag_line\" {\n  value = module.tags.tag_line # output で公開された値だけが見える\n}\n\n# === file: modules/tagger/main.tf ===\nvariable \"env\" {\n  type = string\n}\n\nvariable \"owner\" {\n  type = string\n}\n\n# locals はモジュール内部だけの値。外に返すには output が必要です\nlocals {\n  tag_line = \"env=${var.env} owner=${var.owner}\"\n}\n\noutput \"tag_line\" {\n  value = local.tag_line\n}\n",
+  "exercise": {
+    "description": "モジュール `./modules/labels` は variable `team` と `system` を受け取り、locals でラベル文字列を組み立てています。ただし output が無いため、外から値を取り出せません。\n\n1. モジュール側に output `label` を追加し、`local.label` を公開する\n2. 呼び出し側で `module \"labels\"` ブロックを書き、`team = \"platform\"`、`system = \"billing\"` を渡す\n3. 呼び出し側の output `label` で `module.labels.label` を表示する\n\n**期待出力**\n\n```text\nlabel = \"team:platform/system:billing\"\n```",
+    "starter": "# ここに module ブロックと output を書く\n\n# === file: modules/labels/main.tf ===\nvariable \"team\" {\n  type = string\n}\n\nvariable \"system\" {\n  type = string\n}\n\nlocals {\n  label = \"team:${var.team}/system:${var.system}\"\n}\n\n# ここにモジュール側の output を書く\n",
+    "stdin": "",
+    "expected_stdout": "label = \"team:platform/system:billing\"\n",
+    "answer": "# 引数 team / system がモジュール側の variable への入力になります。\nmodule \"labels\" {\n  source = \"./modules/labels\"\n  team   = \"platform\"\n  system = \"billing\"\n}\n\n# モジュールの値は module.labels.label のように output 経由でだけ受け取れます\noutput \"label\" {\n  value = module.labels.label\n}\n\n# === file: modules/labels/main.tf ===\nvariable \"team\" {\n  type = string\n}\n\nvariable \"system\" {\n  type = string\n}\n\nlocals {\n  label = \"team:${var.team}/system:${var.system}\"\n}\n\n# locals のままでは外から見えないため、output で公開します\noutput \"label\" {\n  value = local.label\n}\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 9,
+  "chapter": 1,
+  "title": "dynamicブロックの読み方",
+  "priority": "🟡",
+  "text": "**dynamic ブロック**(リソース内のネストブロックを for_each で量産する構文)は、実務のセキュリティグループ定義で頻出します。**ネストブロック**(`ingress` のように resource の中に入れ子で書くブロック)は count や for_each 引数では増やせないため、dynamic を使います。`dynamic \"ingress\"` は「ingress ブロックを繰り返し生成する」という意味で、各要素はブロック名と同じ変数 `ingress.value` で参照します。🟡 「for_each で回っているのは引数ではなくブロックそのもの」と読み替えられれば、実務コードの大半は読めます。\n\n```hcl\nresource \"aws_security_group\" \"app\" {\n  name = \"app\"\n\n  dynamic \"ingress\" {\n    for_each = var.allowed_ports # [80, 443]\n    content {\n      from_port = ingress.value\n      to_port   = ingress.value\n      protocol  = \"tcp\"\n    }\n  }\n}\n```",
+  "sample": "# text の dynamic ブロックが生成する ingress ルールを、\n# lesson06 で学んだ for 式で「見える化」してみます。\n# dynamic は書けなくても、この繰り返しロジックが読めれば十分です。\n\nlocals {\n  ports = [80, 443]\n\n  # 各ポートから \"80-80/tcp\" 形式のルール文字列を作る\n  rules = [for p in local.ports : format(\"%d-%d/tcp\", p, p)]\n}\n\noutput \"rule_count\" {\n  value = length(local.rules)\n}\n\noutput \"rules\" {\n  value = join(\", \", local.rules)\n}\n",
+  "exercise": {
+    "description": "text の dynamic ブロックが `var.allowed_ports = [22, 80, 443]` を受け取ったとき、生成される ingress ルールを for 式で再現してください。\n\n1. `variable \"allowed_ports\"` を `list(number)` 型、default `[22, 80, 443]` で定義する\n2. locals の for 式で、各ポートを `format(\"%d-%d/tcp\", p, p)` の形式の文字列にする\n3. output `rules` で `join(\", \", ...)` した結果を表示する\n\n**期待出力**\n\n```text\nrules = \"22-22/tcp, 80-80/tcp, 443-443/tcp\"\n```",
+    "starter": "variable \"allowed_ports\" {\n  type    = list(number)\n  default = [22, 80, 443]\n}\n\n# ここに locals(for 式)と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "rules = \"22-22/tcp, 80-80/tcp, 443-443/tcp\"\n",
+    "answer": "variable \"allowed_ports\" {\n  type    = list(number)\n  default = [22, 80, 443]\n}\n\n# dynamic \"ingress\" { for_each = var.allowed_ports ... } と同じ繰り返しです。\n# dynamic が port の数だけ content を生成するのと同様に、\n# for 式は要素の数だけルール文字列を生成します。\nlocals {\n  rules = [for p in var.allowed_ports : format(\"%d-%d/tcp\", p, p)]\n}\n\noutput \"rules\" {\n  value = join(\", \", local.rules)\n}\n"
+  }
+}

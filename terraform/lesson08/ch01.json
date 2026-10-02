@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 1,
+  "title": "setでfor_each — each.value",
+  "priority": "🔴",
+  "text": "**for_each**(コレクションの要素ごとにリソースを1つずつ作るメタ引数)は、count と並ぶ「複数リソース作成」の道具です。リストはそのまま渡せないため、`toset`(リストを集合に変換する関数)で set にして渡します。ブロック内では `each.value` で今の要素を参照します。作られたリソースは index ではなく**要素の値をキーとするマップ**になるため、count のような index ずれが起きません。🔴 実務では IAM ユーザーや S3 バケットなど「名前の集まりから同種のリソースを並べる」場面の標準形です。`for_each = toset(...)` を見たら要素ごとの複製と読んでください。\n\n```hcl\nresource \"aws_iam_user\" \"member\" {\n  for_each = toset(var.user_names)   # 読解例: 名前ごとにユーザーを作成\n  name     = each.value\n}\n```",
+  "sample": "# lesson08 ch01: set で for_each\nvariable \"users\" {\n  default = [\"sato\", \"suzuki\"]\n}\n\nresource \"terraform_data\" \"user\" {\n  # リストは toset で set にしてから渡します\n  for_each = toset(var.users)\n  # each.value が今の要素(\"sato\" や \"suzuki\")です\n  input = format(\"user-%s\", each.value)\n}\n\n# for_each のリソースは「要素をキーとするマップ」になります\noutput \"sato\" {\n  value = terraform_data.user[\"sato\"].output\n}\n\noutput \"user_keys\" {\n  value = join(\",\", keys(terraform_data.user))\n}\n",
+  "exercise": {
+    "description": "variable `buckets`(default `[\"assets\", \"logs\"]`)を宣言し、`terraform_data` リソース `bucket` を `for_each = toset(var.buckets)` で作成、`input` には `bucket-要素名`(例: `bucket-logs`)を設定してください。そのうえで次の2つを出力してください。\n\n- output `bucket_keys`: 作られたリソースのキー一覧を `,` 区切りで join した文字列\n- output `logs`: キー `\"logs\"` のリソースの `output` 属性\n\n**期待出力**\n\n```text\nbucket_keys = \"assets,logs\"\nlogs = \"bucket-logs\"\n```",
+    "starter": "variable \"buckets\" {\n  default = [\"assets\", \"logs\"]\n}\n\nresource \"terraform_data\" \"bucket\" {\n  # ここに for_each と input を書く\n}\n\n# ここに output を書く\n",
+    "stdin": "",
+    "expected_stdout": "bucket_keys = \"assets,logs\"\nlogs = \"bucket-logs\"\n",
+    "answer": "variable \"buckets\" {\n  default = [\"assets\", \"logs\"]\n}\n\n# for_each はリストを受け取れないので toset で set に変換します。\n# 作られたリソースは「要素の値」がキーのマップになり、index ずれが起きません。\nresource \"terraform_data\" \"bucket\" {\n  for_each = toset(var.buckets)\n  input    = format(\"bucket-%s\", each.value)\n}\n\noutput \"bucket_keys\" {\n  value = join(\",\", keys(terraform_data.bucket))\n}\n\noutput \"logs\" {\n  value = terraform_data.bucket[\"logs\"].output\n}\n"
+  }
+}

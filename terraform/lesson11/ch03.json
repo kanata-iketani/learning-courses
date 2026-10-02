@@ -1,0 +1,15 @@
+{
+  "lesson": 11,
+  "chapter": 3,
+  "title": "初見のリポジトリを読む手順",
+  "priority": "🔴",
+  "text": "初見の Terraform リポジトリは、読む順番を固定すると迷いません。まずディレクトリ構成を見て分割方式(environments/ の有無、tfvars の有無)を判定し、その後は 1. backend(state の置き場。= このディレクトリが管理する範囲)、2. provider(どのクラウド・リージョン・アカウントか)、3. variables と tfvars(何が環境ごとに変わるのか)、4. main と module(実際に何を作っているのか)の順に読みます。🔴 「いきなり resource を読まず、backend と variables で全体の枠を掴んでから本体へ」が実務読解の鉄則です。\n\n```text\n読む順チェックリスト\n1. backend  : state はどこか(このコードの守備範囲)\n2. provider : どのクラウド・リージョン・アカウントか\n3. variables: 何が環境ごとに変わるのか\n4. main     : 実際に何を作っているのか\n```",
+  "sample": "# チェックリストを for 式で番号付きに整形する例です。\n# lesson06 で学んだ「インデックス付き for 式」を使います。\n\nlocals {\n  steps = [\"backend\", \"provider\", \"variables\", \"main\"]\n\n  # for 式は「for インデックス, 値 in リスト」の形でも書けます(インデックスは 0 始まり)\n  numbered = [for i, s in local.steps : \"${i + 1}. ${s}\"]\n}\n\noutput \"first_step\" {\n  value = local.numbered[0]\n}\n\noutput \"step_count\" {\n  value = length(local.steps)\n}\n",
+  "exercise": {
+    "description": "読解チェックリストを 1 行の文字列に整形してください。\n\n1. `variable \"steps\"` を `list(string)` 型、default `[\"backend\", \"provider\", \"variables\", \"main\"]` で定義する\n2. インデックス付き for 式で各手順を `\"1:backend\"` 形式(番号は 1 始まり)にする\n3. output `checklist` で `join(\", \", ...)` した結果を表示する\n\n**期待出力**\n\n```text\nchecklist = \"1:backend, 2:provider, 3:variables, 4:main\"\n```",
+    "starter": "variable \"steps\" {\n  type    = list(string)\n  default = [\"backend\", \"provider\", \"variables\", \"main\"]\n}\n\n# ここに for 式の locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "checklist = \"1:backend, 2:provider, 3:variables, 4:main\"\n",
+    "answer": "variable \"steps\" {\n  type    = list(string)\n  default = [\"backend\", \"provider\", \"variables\", \"main\"]\n}\n\n# for 式の i はインデックス(0 始まり)なので、表示用に i + 1 して 1 始まりにします。\n# この並び(backend → provider → variables → main)が初見リポジトリを読む順です。\nlocals {\n  numbered = [for i, s in var.steps : \"${i + 1}:${s}\"]\n}\n\noutput \"checklist\" {\n  value = join(\", \", local.numbered)\n}\n"
+  }
+}

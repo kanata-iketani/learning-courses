@@ -1,0 +1,16 @@
+{
+  "lesson": 14,
+  "chapter": 2,
+  "kind": "web",
+  "title": "v-show との違い：隠すだけか、DOM から消えるか",
+  "priority": "🟡",
+  "text": "v-if とよく似た **v-show**(要素を CSS で見えなくするディレクティブ)との違いを学びます。v-if が false のとき要素を **DOM**(ブラウザが持つページの部品の木構造)から丸ごと取り除くのに対し、v-show は要素を DOM に残したまま `display: none` という CSS で隠すだけです。見た目は同じでも、消し方が違います。🟡 使い分けの目安は、頻繁にパタパタ切り替えるなら作り直しコストの低い v-show、めったに切り替えないなら v-if です。\n\n```html\n<p v-if=\"visible\">v-if の段落(DOM から消える)</p>\n<p v-show=\"visible\">v-show の段落(隠れるだけ)</p>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>v-if と v-show の違い</title>\n</head>\n<body>\n  <div id=\"app\">\n    <button v-on:click=\"visible = !visible\">表示を切り替える</button>\n    <p>いまの visible: {{ visible }}</p>\n    <p v-if=\"visible\">私は v-if。false になると DOM から丸ごと消えます。</p>\n    <p v-show=\"visible\">私は v-show。false になっても DOM に残り、CSS で隠れるだけです。</p>\n    <p>(見た目の動きは同じですが、消え方の仕組みが違います)</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { visible: true };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "なぞなぞページを作りましょう。「パンはパンでも食べられないパンは？」という問題に対して、ヒントは頻繁に見たり隠したりするので `v-show`、答えは一度見たら終わりなので `v-if` で表示を切り替えます。\n\n**確認ポイント**\n\n1. 「ヒントを見る/隠す」ボタンを押すたびに、ヒントの文が出たり消えたりする(v-show を使う)\n2. 「答えを見る/隠す」ボタンを押すたびに、答えの文が出たり消えたりする(v-if を使う)\n3. ヒントだけ表示・答えだけ表示・両方表示、のどの組み合わせも作れる(ボタンが独立して動く)\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>なぞなぞ</title>\n</head>\n<body>\n  <div id=\"app\">\n    <h2>Q. パンはパンでも食べられないパンは？</h2>\n    <button>ヒントを見る/隠す</button>\n    <button>答えを見る/隠す</button>\n    <!-- ヒント(v-show)と答え(v-if)の段落をここに書く -->\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { showHint: false, showAnswer: false };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>なぞなぞ</title>\n</head>\n<body>\n  <div id=\"app\">\n    <h2>Q. パンはパンでも食べられないパンは？</h2>\n    <!-- 工夫した点: visible = !visible の形なら、押すたびに true/false が反転する -->\n    <button v-on:click=\"showHint = !showHint\">ヒントを見る/隠す</button>\n    <button v-on:click=\"showAnswer = !showAnswer\">答えを見る/隠す</button>\n    <!-- ヒントは何度も付け外しするので v-show(隠すだけ)にした -->\n    <p v-show=\"showHint\">ヒント: 料理で使う道具です。</p>\n    <!-- 答えはめったに切り替えないので v-if(DOM から消える)にした -->\n    <p v-if=\"showAnswer\">答え: フライパンです！</p>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    createApp({\n      data() {\n        return { showHint: false, showAnswer: false };\n      }\n    }).mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}
