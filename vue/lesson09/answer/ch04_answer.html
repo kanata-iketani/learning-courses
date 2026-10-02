@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>重要マーカー</title>
+<style>
+  /* 工夫: 見た目の定義は CSS 側にまとめておく */
+  .highlight {
+    background-color: yellow;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+  <p id="text">ここが重要なポイントです。</p>
+  <button id="mark-btn">マーカーを切り替える</button>
+
+  <script>
+    const text = document.getElementById("text");
+    document.getElementById("mark-btn").addEventListener("click", () => {
+      // 工夫: add/remove を if で書き分けなくても、toggle 1 つで切り替えられる
+      text.classList.toggle("highlight");
+    });
+  </script>
+</body>
+</html>

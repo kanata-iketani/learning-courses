@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 1,
+  "title": "文字列関数（format・join・split ほか）",
+  "priority": "🔴",
+  "text": "**組み込み関数**(Terraform に最初から用意されている、値を加工するための関数)のうち、まずは文字列系を押さえます。`format` は printf 風の文字列組み立て、`join` はリストを区切り文字でつないだ文字列に、`split` は逆に文字列をリストに分解します。`replace` は置換、`lower` / `upper` は大文字小文字の変換です。実務ではリソース名やバケット名を `format(\"%s-%s\", var.project, var.env)` のように変数から組み立てるコードが最頻出です。🔴 この5つは読めないと実務コードが追えないので、必ず手を動かして覚えましょう。\n\n```hcl\nlocals {\n  name  = format(\"%s-%s\", \"myapp\", lower(\"Prod\"))  # \"myapp-prod\"\n  parts = split(\"-\", local.name)                    # [\"myapp\", \"prod\"]\n}\n```",
+  "sample": "# lesson05 ch01: 文字列関数\nvariable \"project\" {\n  default = \"myapp\"\n}\n\nvariable \"env\" {\n  default = \"Prod\"\n}\n\nlocals {\n  # format は printf 風の文字列組み立て。lower で表記ゆれを正規化するのが定番です\n  name = format(\"%s-%s\", var.project, lower(var.env))\n\n  # split は文字列をリストに分解します(join の逆)\n  parts = split(\"-\", local.name)\n}\n\noutput \"name\" {\n  value = local.name\n}\n\noutput \"first_part\" {\n  value = local.parts[0]\n}\n\n# replace で区切り文字を差し替え、upper で大文字化\noutput \"shout\" {\n  value = upper(replace(local.name, \"-\", \"_\"))\n}\n",
+  "exercise": {
+    "description": "variable `service`(default `\"Web\"`)と `env`(default `\"STG\"`)を宣言し、次の3つを出力してください。\n\n- output `bucket`: `format` と `lower` を使って `web-stg-logs` という形の名前を組み立てる\n- output `env_part`: `bucket` の値を `split(\"-\", ...)` で分解した2番目の要素\n- output `underscored`: `bucket` の値の `-` を `_` に置換したもの\n\n**期待出力**\n\n```text\nbucket = \"web-stg-logs\"\nenv_part = \"stg\"\nunderscored = \"web_stg_logs\"\n```",
+    "starter": "variable \"service\" {\n  default = \"Web\"\n}\n\nvariable \"env\" {\n  default = \"STG\"\n}\n\n# ここに locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "bucket = \"web-stg-logs\"\nenv_part = \"stg\"\nunderscored = \"web_stg_logs\"\n",
+    "answer": "variable \"service\" {\n  default = \"Web\"\n}\n\nvariable \"env\" {\n  default = \"STG\"\n}\n\n# 入力の大文字小文字に依存しないよう、lower で正規化してから format で組み立てます。\n# 名前の組み立てを locals に置くと、複数の output(や実務ではリソース)から再利用できます。\nlocals {\n  bucket = format(\"%s-%s-logs\", lower(var.service), lower(var.env))\n}\n\noutput \"bucket\" {\n  value = local.bucket\n}\n\noutput \"env_part\" {\n  value = split(\"-\", local.bucket)[1]\n}\n\noutput \"underscored\" {\n  value = replace(local.bucket, \"-\", \"_\")\n}\n"
+  }
+}

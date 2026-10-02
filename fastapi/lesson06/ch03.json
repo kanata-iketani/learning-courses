@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 3,
+  "title": "Query で検証する",
+  "priority": "🟡",
+  "text": "クエリパラメータにも制約を付けられます。`from fastapi import Query` の **Query** を引数の既定値の位置に書き、`q: str = Query(min_length=2)` のように指定します。文字列には min_length / max_length、数値には ge / le などが使え、違反すると 422 が返ります。Field はボディ(モデルの中)用、Query はクエリパラメータ用、という使い分けです。🟡 「引数 = Query(制約)」という書き方のパターンを理解しましょう。\n\n```python\n@app.get(\"/search\")\ndef search(q: str = Query(min_length=2)):\n    return {\"q\": q}\n```",
+  "sample": "# lesson06 ch03: Query でクエリパラメータを検証する\nfrom fastapi import FastAPI, Query\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# q は「2 文字以上 10 文字以内」の文字列だけ受け付ける\n@app.get(\"/search\")\ndef search(q: str = Query(min_length=2, max_length=10)):\n    return {\"q\": q}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.get(\"/search?q=apple\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/search?q=a\")\nprint(r2.status_code)  # min_length=2 に違反 → 422\n",
+  "exercise": {
+    "description": "検索 API のキーワードに制約を付けます。\n\n- `GET /find` を作り、クエリパラメータ `keyword`(文字列)を `Query(min_length=3)` で「3 文字以上」に制限する\n- `{\"keyword\": 受け取った値}` の形で返す\n\n動作確認では 7 文字のキーワードと 2 文字のキーワードを送ります。\n\n**期待出力**\n\n```text\n200\n{'keyword': 'fastapi'}\n422\n```",
+    "starter": "from fastapi import FastAPI, Query\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /find を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/find?keyword=fastapi\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/find?keyword=ab\")\nprint(r2.status_code)\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'keyword': 'fastapi'}\n422\n",
+    "answer": "from fastapi import FastAPI, Query\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 既定値の位置に Query(制約) を書くと、クエリパラメータが検証されます。\n# min_length=3 なので 2 文字以下のキーワードは 422 になります。\n@app.get(\"/find\")\ndef find(keyword: str = Query(min_length=3)):\n    return {\"keyword\": keyword}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/find?keyword=fastapi\")\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/find?keyword=ab\")\nprint(r2.status_code)\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 13,
+  "chapter": 2,
+  "title": "IAMポリシーの2流儀",
+  "priority": "🔴",
+  "text": "IAM ポリシーの書き方は2流儀に分かれます。流儀1は `jsonencode()` 直書きです。\n\n```hcl\nresource \"aws_iam_role_policy\" \"read\" {\n  name = \"s3-read\"\n  role = aws_iam_role.task.id\n  policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect   = \"Allow\"\n      Action   = [\"s3:GetObject\"]\n      Resource = \"arn:aws:s3:::app-logs/*\"\n    }]\n  })\n}\n```\n\n流儀2は `data \"aws_iam_policy_document\"`(HCL のブロックでポリシーを組み立て、`.json` 属性で JSON を得るデータソース)で、`statement { effect / actions / resources }` と小文字の属性名になります。最終的にできる JSON は同じです。🔴 見た目が違っても「Effect・Action・Resource の3点セット」を読み取れるようにしましょう。",
+  "sample": "# 流儀1(jsonencode 直書き)のポリシー組み立てを locals で再現します。\n# jsonencode は HCL のオブジェクトを JSON 文字列に変換します(キーはソートされる)。\nlocals {\n  read_policy = {\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect   = \"Allow\"\n      Action   = [\"s3:GetObject\"]\n      Resource = \"arn:aws:s3:::app-logs/*\"\n    }]\n  }\n}\n\noutput \"policy_json\" {\n  value = jsonencode(local.read_policy)\n}\n\noutput \"statement_count\" {\n  value = length(local.read_policy.Statement)\n}\n",
+  "exercise": {
+    "description": "流儀2(`data \"aws_iam_policy_document\"`)で書かれた次のポリシーを、流儀1(jsonencode 直書き)に書き換えたときの JSON を出力してください。\n\n```hcl\ndata \"aws_iam_policy_document\" \"logs_read\" {\n  statement {\n    effect    = \"Allow\"\n    actions   = [\"s3:GetObject\", \"s3:ListBucket\"]\n    resources = [\n      \"arn:aws:s3:::skillax-prod-logs\",\n      \"arn:aws:s3:::skillax-prod-logs/*\",\n    ]\n  }\n}\n```\n\nlocals にポリシーをオブジェクトで組み立ててください(`Version = \"2012-10-17\"`、`Statement` は `Effect` / `Action` / `Resource` キーを持つ1要素のリスト)。そのうえで\n\n- output `action_count`: Action の数\n- output `policy`: ポリシー全体を `jsonencode()` した文字列\n\nを出力してください。\n\n**期待出力**\n\n```text\naction_count = 2\npolicy = \"{\\\"Statement\\\":[{\\\"Action\\\":[\\\"s3:GetObject\\\",\\\"s3:ListBucket\\\"],\\\"Effect\\\":\\\"Allow\\\",\\\"Resource\\\":[\\\"arn:aws:s3:::skillax-prod-logs\\\",\\\"arn:aws:s3:::skillax-prod-logs/*\\\"]}],\\\"Version\\\":\\\"2012-10-17\\\"}\"\n```",
+    "starter": "locals {\n  policy = {\n    Version = \"2012-10-17\"\n    # Statement を書く\n  }\n}\n",
+    "stdin": "",
+    "expected_stdout": "action_count = 2\npolicy = \"{\\\"Statement\\\":[{\\\"Action\\\":[\\\"s3:GetObject\\\",\\\"s3:ListBucket\\\"],\\\"Effect\\\":\\\"Allow\\\",\\\"Resource\\\":[\\\"arn:aws:s3:::skillax-prod-logs\\\",\\\"arn:aws:s3:::skillax-prod-logs/*\\\"]}],\\\"Version\\\":\\\"2012-10-17\\\"}\"\n",
+    "answer": "# policy_document の effect / actions / resources は、jsonencode 流儀では\n# Effect / Action / Resource という大文字キーに対応します。\n# jsonencode はキー順ソートで出力が決定的なので、2流儀の比較にも便利です。\nlocals {\n  policy = {\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect = \"Allow\"\n      Action = [\"s3:GetObject\", \"s3:ListBucket\"]\n      Resource = [\n        \"arn:aws:s3:::skillax-prod-logs\",\n        \"arn:aws:s3:::skillax-prod-logs/*\",\n      ]\n    }]\n  }\n}\n\noutput \"action_count\" {\n  value = length(local.policy.Statement[0].Action)\n}\n\noutput \"policy\" {\n  value = jsonencode(local.policy)\n}\n"
+  }
+}

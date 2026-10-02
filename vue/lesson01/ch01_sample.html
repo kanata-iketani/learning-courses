@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>はじめてのページ</title>
+<style>
+  /* ここは CSS: 見た目を決める */
+  h1 { color: steelblue; }
+  p  { font-size: 18px; }
+</style>
+</head>
+<body>
+  <!-- ここは HTML: ページの中身 -->
+  <h1>こんにちは、Web！</h1>
+  <p>この文章は HTML で書かれています。</p>
+  <p id="message"></p>
+
+  <script>
+    // ここは JavaScript: 動きを付ける
+    document.getElementById("message").textContent = "この行は JavaScript が書きました。";
+  </script>
+</body>
+</html>

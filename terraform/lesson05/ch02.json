@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 2,
+  "title": "コレクション関数（length・concat・contains ほか）",
+  "priority": "🔴",
+  "text": "リストやマップを扱うコレクション関数です。`length` は要素数、`concat` は複数のリストの連結、`contains` は要素が含まれるかの真偽値を返します。マップに対しては `keys` がキーの一覧を、`values` が値の一覧を(どちらも**キーのアルファベット順**で)返します。実務では「共通のサブネットリストに追加分を concat する」「対象環境かどうかを contains で判定する」といった形で登場します。🔴 特に keys / values の並びがアルファベット順に揃う点は、出力やリソースの並びを読むときの前提知識になります。\n\n```hcl\nlocals {\n  azs = concat([\"ap-northeast-1a\"], [\"ap-northeast-1c\"])  # 連結\n  n   = length(local.azs)                                  # 2\n  ok  = contains(local.azs, \"ap-northeast-1a\")             # true\n}\n```",
+  "sample": "# lesson05 ch02: コレクション関数\nvariable \"base_ports\" {\n  default = [\"80\", \"443\"]\n}\n\nvariable \"extra_ports\" {\n  default = [\"8080\"]\n}\n\nvariable \"limits\" {\n  default = {\n    cpu    = \"2\"\n    memory = \"4Gi\"\n  }\n}\n\nlocals {\n  # concat で複数のリストを1本に連結します\n  ports = concat(var.base_ports, var.extra_ports)\n}\n\noutput \"port_count\" {\n  value = length(local.ports)\n}\n\noutput \"ports\" {\n  value = join(\",\", local.ports)\n}\n\noutput \"has_https\" {\n  value = contains(local.ports, \"443\")\n}\n\n# keys / values はキーのアルファベット順で返ります\noutput \"limit_keys\" {\n  value = join(\",\", keys(var.limits))\n}\n",
+  "exercise": {
+    "description": "variable `azs`(default `[\"ap-northeast-1a\", \"ap-northeast-1c\"]`)と `extra_azs`(default `[\"ap-northeast-1d\"]`)を宣言し、2つを連結したリストを locals に置いて、次の3つを出力してください。\n\n- output `all`: 連結したリストを `,` 区切りで join した文字列\n- output `az_count`: 連結後の要素数\n- output `has_1a`: 連結後のリストに `\"ap-northeast-1a\"` が含まれるかどうか\n\n**期待出力**\n\n```text\nall = \"ap-northeast-1a,ap-northeast-1c,ap-northeast-1d\"\naz_count = 3\nhas_1a = true\n```",
+    "starter": "variable \"azs\" {\n  default = [\"ap-northeast-1a\", \"ap-northeast-1c\"]\n}\n\nvariable \"extra_azs\" {\n  default = [\"ap-northeast-1d\"]\n}\n\n# ここに locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "all = \"ap-northeast-1a,ap-northeast-1c,ap-northeast-1d\"\naz_count = 3\nhas_1a = true\n",
+    "answer": "variable \"azs\" {\n  default = [\"ap-northeast-1a\", \"ap-northeast-1c\"]\n}\n\nvariable \"extra_azs\" {\n  default = [\"ap-northeast-1d\"]\n}\n\n# 連結結果を locals に置けば、length / join / contains のすべてで同じ値を参照できます。\n# 実務でも「基本リスト + 環境ごとの追加分」を concat でまとめるパターンをよく見ます。\nlocals {\n  all_azs = concat(var.azs, var.extra_azs)\n}\n\noutput \"all\" {\n  value = join(\",\", local.all_azs)\n}\n\noutput \"az_count\" {\n  value = length(local.all_azs)\n}\n\noutput \"has_1a\" {\n  value = contains(local.all_azs, \"ap-northeast-1a\")\n}\n"
+  }
+}

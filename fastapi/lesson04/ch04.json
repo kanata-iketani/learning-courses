@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 4,
+  "title": "bool と None",
+  "priority": "🟡",
+  "text": "「値があってもなくてもよい」引数は `q: str | None = None` と書きます(`str | None` は「str か None のどちらか」を表す型ヒントです)。省略されると `None` になるため、`if q is None:` で「指定されなかった場合」を分岐できます。また `flag: bool = False` と書くと、URL の `?flag=true` や `?flag=1` が自動で Python の `True` に変換されます。🟡 None と bool の変換ルールを理解し、省略可能な引数を設計できるようになりましょう。\n\n```python\n@app.get(\"/search\")\ndef search(q: str | None = None, sale: bool = False):\n    return {\"q\": q, \"sale\": sale}\n```",
+  "sample": "# lesson04 ch04: str | None と bool のクエリパラメータ\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# q は「あってもなくてもよい」。省略されると None になる\n@app.get(\"/search\")\ndef search(q: str | None = None, sale: bool = False):\n    if q is None:\n        return {\"q\": None, \"sale\": sale, \"hit\": 0}\n    return {\"q\": q, \"sale\": sale, \"hit\": 1}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/search\").json())                  # q は None のまま\nprint(client.get(\"/search?q=pen\").json())\nprint(client.get(\"/search?q=pen&sale=true\").json())  # \"true\" → True に変換\n",
+  "exercise": {
+    "description": "GET `/items` で、`q` (str | None、デフォルト None) と `in_stock` (bool、デフォルト False) を受け取り、`{\"q\": q, \"in_stock\": in_stock}` を返すエンドポイントを書いてください。動作確認部分は、何も付けない場合と `?q=pen&in_stock=true` の場合を出力します。\n\n**期待出力**\n\n```text\n{'q': None, 'in_stock': False}\n{'q': 'pen', 'in_stock': True}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /items のエンドポイントを書く\n# (q: str | None = None, in_stock: bool = False)\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/items\").json())\nprint(client.get(\"/items?q=pen&in_stock=true\").json())\n",
+    "stdin": "",
+    "expected_stdout": "{'q': None, 'in_stock': False}\n{'q': 'pen', 'in_stock': True}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# str | None = None で「省略されたら None」の任意パラメータになります。\n# bool 型は URL の \"true\" / \"1\" などを Python の True に自動変換してくれます。\n@app.get(\"/items\")\ndef read_items(q: str | None = None, in_stock: bool = False):\n    return {\"q\": q, \"in_stock\": in_stock}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/items\").json())\nprint(client.get(\"/items?q=pen&in_stock=true\").json())\n"
+  }
+}

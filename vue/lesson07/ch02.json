@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 2,
+  "title": "push・pop・includes",
+  "priority": "🔴",
+  "text": "配列には**メソッド**(値にひも付いた命令。`配列.push(値)` のようにドットで呼び出す)が用意されています。**push** は末尾に要素を追加(Python の `append`)、**pop** は末尾の要素を取り出して返す、**includes** はその値が含まれていれば true を返します(Python の `in` に相当)。なお、`const` で宣言した配列でも中身の追加や削除はできます。禁止されるのは配列そのものの再代入だけです。🔴 push と pop は「末尾」に対する操作だと覚えましょう。\n\n```js\nconst todos = [\"掃除\"];\ntodos.push(\"買い物\");            // 末尾に追加\nconsole.log(todos.includes(\"掃除\"));  // true\n```",
+  "sample": "const todos = [\"掃除\", \"洗濯\"];\n\n// push: 末尾に追加します(Python の append)\n// const の配列でも中身の変更は OK。再代入だけが禁止です\ntodos.push(\"買い物\");\nconsole.log(todos.length);  // 3\nconsole.log(todos[2]);      // 買い物\n\n// pop: 末尾の要素を取り出して返します\nconst last = todos.pop();\nconsole.log(last);          // 買い物\nconsole.log(todos.length);  // 2\n\n// includes: 含まれていれば true (Python の in に相当)\nconsole.log(todos.includes(\"掃除\"));  // true\nconsole.log(todos.includes(\"料理\"));  // false\n",
+  "exercise": {
+    "description": "配列 `const animals = [\"犬\", \"猫\"];` に対して、次の操作を順に行ってください。\n\n1. `\"鳥\"` を push してから、配列をそのまま console.log で表示する\n2. `\"猫\"` が含まれているか includes で調べて出力する\n3. pop で末尾を取り除いてから、要素数を出力する\n\n**期待出力**\n\n```text\n[ '犬', '猫', '鳥' ]\ntrue\n2\n```",
+    "starter": "const animals = [\"犬\", \"猫\"];\n// 1. \"鳥\" を push して配列を表示\n\n// 2. \"猫\" が含まれているか\n\n// 3. pop してから要素数を表示\n",
+    "stdin": "",
+    "expected_stdout": "[ '犬', '猫', '鳥' ]\ntrue\n2\n",
+    "answer": "const animals = [\"犬\", \"猫\"];\n// const でも push はできます(配列そのものの再代入ではないため)\nanimals.push(\"鳥\");\n// 配列をそのまま渡すと Node.js 特有のスペース入り表示になります\nconsole.log(animals);\nconsole.log(animals.includes(\"猫\"));\n// pop は末尾の \"鳥\" を取り除くので、要素数は 2 に戻ります\nanimals.pop();\nconsole.log(animals.length);\n"
+  }
+}

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TODOアプリ(土台)</title>
+</head>
+<body>
+  <div id="app">
+    <h1>TODOリスト</h1>
+    <input v-model="newText" placeholder="やることを入力">
+    <button v-on:click="addTodo">追加</button>
+    <ul>
+      <li v-for="todo in todos" :key="todo.id">{{ todo.text }}</li>
+    </ul>
+    <p>全部で {{ todos.length }} 件</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          newText: "",
+          nextId: 3,
+          todos: [
+            { id: 1, text: "牛乳を買う" },
+            { id: 2, text: "部屋のそうじ" }
+          ]
+        };
+      },
+      methods: {
+        addTodo() {
+          this.todos.push({ id: this.nextId, text: this.newText });
+          this.nextId++;
+          this.newText = "";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

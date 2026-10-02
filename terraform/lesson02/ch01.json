@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 1,
+  "title": "resourceの基本形とterraform_data",
+  "priority": "🔴",
+  "text": "**resource**(Terraform に作らせたいものを宣言するブロック)は `resource \"型\" \"名前\" { 引数 }` が基本形です。型は「プロバイダ名_リソース種類」の形で、実務コードでは型を見れば何のサービスか分かります(`aws_s3_bucket` なら S3)。名前はコード内だけの識別子で、クラウド上の名前とは別物です。この講座では **terraform_data**(引数 `input` の値をそのまま属性 `output` に持つ、プロバイダ不要の組み込みリソース)で練習します。🔴 resource の基本形は実務コードの大半を占めるので、手が覚えるまで書きましょう。\n\n実務ではこう書かれることが多いです(読解例):\n\n```hcl\nresource \"aws_instance\" \"web\" {  # 型: aws_instance(EC2)、名前: web\n  ami           = \"ami-12345678\"\n  instance_type = \"t3.micro\"\n}\n```",
+  "sample": "# lesson02 ch01: resource の基本形\n# resource \"型\" \"名前\" { 引数 } が基本形です。\n\nresource \"terraform_data\" \"server\" {\n  # terraform_data は input の値をそのまま属性 output に持ちます\n  input = \"practice\"\n}\n\n# 名前(server)はコード内だけの識別子で、参照に使います\n\noutput \"server_value\" {\n  value = terraform_data.server.output\n}\n\noutput \"resource_type\" {\n  value = \"terraform_data\"\n}\n",
+  "exercise": {
+    "description": "`terraform_data` リソース `server` を作り、`input` に `\"web-01\"` を設定してください。さらに output `server_name` でリソース `server` の `output` 属性を表示してください。\n\n**期待出力**\n\n```text\nserver_name = \"web-01\"\n```",
+    "starter": "# resource \"型\" \"名前\" { 引数 } の形で書く\n",
+    "stdin": "",
+    "expected_stdout": "server_name = \"web-01\"\n",
+    "answer": "# resource \"型\" \"名前\" { ... } が基本形。名前 server はコード内だけの識別子です。\n# terraform_data は input の値をそのまま属性 output に持つ練習用リソースです。\nresource \"terraform_data\" \"server\" {\n  input = \"web-01\"\n}\n\noutput \"server_name\" {\n  value = terraform_data.server.output\n}\n"
+  }
+}

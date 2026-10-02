@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 3,
+  "title": "countの落とし穴 — indexのずれ",
+  "priority": "🟡",
+  "text": "count のリソースは「リストの何番目か」で管理されます。そのため、リストの**真ん中の要素を消すと後ろの要素の index が全部ずれ**、Terraform は「別のリソースになった」とみなして削除と作り直し(destroy / create)を計画します。たとえば `[\"a\", \"b\", \"c\"]` から `\"b\"` を消すと、`c` は index 2 から 1 に移動し、中身は同じなのに作り直しの対象になります。データベースなどで起きると事故につながるため、実務では「要素の増減があり得る集まりに count を使わない」のが定石で、これが次レッスンの for_each が好まれる理由です。🟡 plan 結果に大量の destroy が出たら、まず index ずれを疑ってください。\n\n```hcl\n# members = [\"ito\", \"kato\", \"sato\"] から \"kato\" を消すと…\n# terraform_data.member[1] は kato → sato に変わり、sato が作り直しになる\nresource \"terraform_data\" \"member\" {\n  count = length(var.members)\n  input = var.members[count.index]\n}\n```",
+  "sample": "# lesson07 ch03: index のずれを観察する\nvariable \"members\" {\n  default = [\"ito\", \"kato\", \"sato\"]\n}\n\nresource \"terraform_data\" \"member\" {\n  count = length(var.members)\n  # 「index:名前」の対応を記録しておきます\n  input = format(\"%d:%s\", count.index, var.members[count.index])\n}\n\n# ito は [0]、kato は [1]、sato は [2] に対応しています。\n# ここから kato を消すと sato が [1] に繰り上がり、作り直しの対象になります\noutput \"pairs\" {\n  value = join(\" \", terraform_data.member[*].output)\n}\n\noutput \"member_count\" {\n  value = length(terraform_data.member)\n}\n",
+  "exercise": {
+    "description": "index のずれを出力で確認します。variable `before`(default `[\"app-a\", \"app-b\", \"app-c\"]`)と、そこから真ん中を消した variable `after`(default `[\"app-a\", \"app-c\"]`)を宣言してください。それぞれから `terraform_data` リソース `before` / `after` を `count = length(...)` で作り、`input` には `format(\"%d:%s\", count.index, 要素)` で「index:名前」を設定して、次の2つを出力してください。\n\n- output `after_pairs`: after 側の全 `output` 属性を半角スペース区切りで join した文字列(`app-c` の index が繰り上がることを確認)\n- output `before_pairs`: before 側の全 `output` 属性を半角スペース区切りで join した文字列\n\n**期待出力**\n\n```text\nafter_pairs = \"0:app-a 1:app-c\"\nbefore_pairs = \"0:app-a 1:app-b 2:app-c\"\n```",
+    "starter": "variable \"before\" {\n  default = [\"app-a\", \"app-b\", \"app-c\"]\n}\n\nvariable \"after\" {\n  default = [\"app-a\", \"app-c\"]\n}\n\n# ここに resource と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "after_pairs = \"0:app-a 1:app-c\"\nbefore_pairs = \"0:app-a 1:app-b 2:app-c\"\n",
+    "answer": "variable \"before\" {\n  default = [\"app-a\", \"app-b\", \"app-c\"]\n}\n\nvariable \"after\" {\n  default = [\"app-a\", \"app-c\"]\n}\n\n# before では app-c が index 2 ですが、真ん中を消した after では index 1 に繰り上がります。\n# 実際の運用では「同じ app-c なのに位置が変わった」ことで作り直しが計画されます。\nresource \"terraform_data\" \"before\" {\n  count = length(var.before)\n  input = format(\"%d:%s\", count.index, var.before[count.index])\n}\n\nresource \"terraform_data\" \"after\" {\n  count = length(var.after)\n  input = format(\"%d:%s\", count.index, var.after[count.index])\n}\n\noutput \"after_pairs\" {\n  value = join(\" \", terraform_data.after[*].output)\n}\n\noutput \"before_pairs\" {\n  value = join(\" \", terraform_data.before[*].output)\n}\n"
+  }
+}

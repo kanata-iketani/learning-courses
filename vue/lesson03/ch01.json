@@ -1,0 +1,16 @@
+{
+  "lesson": 3,
+  "chapter": 1,
+  "kind": "web",
+  "title": "styleタグとセレクタ・色(color, background-color)",
+  "priority": "🔴",
+  "text": "ここからは見た目を整える言語 **CSS** を学びます。CSS は `<head>` の中の `<style>` タグに「`セレクタ { プロパティ: 値; }`」の形で書きます。**セレクタ**は「どのタグを飾るか」の指定(`p` と書けばすべての p タグが対象)、**プロパティ**は「何を変えるか」の指定です。`color` は文字色、`background-color` は背景色で、値には `red` などの色名や `#ff6600` のような**カラーコード**(色を数値で表す書き方)を使えます。🔴 セレクタで相手を選んで色を変える流れをつかみましょう。\n\n```html\n<style>\n  h1 { color: white; background-color: steelblue; }\n  p  { color: #ff6600; }\n</style>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>色で遊ぼう</title>\n<style>\n  body { background-color: lightyellow; }\n  h1   { color: white; background-color: steelblue; }\n  h2   { color: seagreen; }\n  p    { color: #ff6600; }\n</style>\n</head>\n<body>\n  <h1>色で遊ぼう</h1>\n  <h2>セレクタは「飾る相手」の指定です</h2>\n  <p>この段落は p セレクタの指定でオレンジ色(#ff6600)になっています。</p>\n  <p>同じ p タグなので、この段落にも同じ色が自動で付きます。</p>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "starter の `<style>` の中を編集して、ページ全体の配色を自分好みに変えましょう。HTML 側は変えずに、CSS だけで見た目が変わることを体験します。\n\n**確認ポイント**\n\n1. `body` の `background-color` を変えて、ページ全体の背景色が白以外になっている\n2. `h1` に `color` と `background-color` の両方を指定して、見出しが「背景色付きの色文字」になっている\n3. `p` の `color` に `#` から始まるカラーコード(例: `#ff6600`)を使い、2 つの段落が同じ色で表示されている\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>配色の練習</title>\n<style>\n  body { background-color: white; }\n  h1   { color: black; }\n  p    { color: black; }\n</style>\n</head>\n<body>\n  <h1>配色の練習</h1>\n  <p>style の中だけを書きかえて、このページの色を変えましょう。</p>\n  <p>同じセレクタの指定は、同じタグ全部にまとめて効きます。</p>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>配色の練習</title>\n<style>\n  /* 工夫した点: 背景はうすい色にすると文字が読みやすいままです */\n  body { background-color: lavender; }\n  /* 工夫した点: 文字色と背景色をセットで指定すると見出しが目立ちます */\n  h1   { color: white; background-color: darkslateblue; }\n  /* 工夫した点: カラーコードなら色名にない微妙な色も作れます */\n  p    { color: #cc3366; }\n</style>\n</head>\n<body>\n  <h1>配色の練習</h1>\n  <p>style の中だけを書きかえて、このページの色を変えましょう。</p>\n  <p>同じセレクタの指定は、同じタグ全部にまとめて効きます。</p>\n</body>\n</html>\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 4,
+  "title": "コールバック 〜関数を渡す",
+  "priority": "🟡",
+  "text": "JavaScript では、関数を値として別の関数に渡せます。渡された側で呼び出される関数を**コールバック**と呼びます。代表例が配列の **forEach**(各要素を順にコールバックに渡して実行するメソッド)です。前レッスンの map / filter も、実はコールバックを受け取るメソッドでした。Vue の「ボタンが押されたらこの関数を実行」というイベント処理も、この「関数を渡す」発想でできています。🟡 いまは forEach の形を写して動かし、「関数そのものを渡している」感覚をつかみましょう。\n\n```js\nconst names = [\"さくら\", \"たろう\"];\nnames.forEach(name => {\n  console.log(`${name}さん、こんにちは`);\n});\n```",
+  "sample": "const names = [\"さくら\", \"たろう\"];\n\n// forEach: 各要素を順に、渡した関数(コールバック)に届けます\nnames.forEach(name => {\n  console.log(`${name}さん、こんにちは`);\n});\n\n// コールバックの 2 つ目の引数では添字も受け取れます\nnames.forEach((name, index) => {\n  console.log(`${index}: ${name}`);\n});\n\n// 自作の関数にも関数を渡せます\nfunction repeat(times, action) {\n  for (let i = 0; i < times; i++) {\n    action();  // 渡された関数をここで呼び出します\n  }\n}\nrepeat(2, () => console.log(\"ワン！\"));\n",
+  "exercise": {
+    "description": "配列 `const items = [\"ペン\", \"ノート\", \"消しゴム\"];` を forEach でくり返し、`1: ペン` のように「番号: 品名」の形式で出力してください。番号は 1 から始めます(コールバックの 2 つ目の引数 `index` は 0 から始まるので、1 を足しましょう)。\n\n**期待出力**\n\n```text\n1: ペン\n2: ノート\n3: 消しゴム\n```",
+    "starter": "const items = [\"ペン\", \"ノート\", \"消しゴム\"];\n// forEach と (item, index) を使いましょう\n",
+    "stdin": "",
+    "expected_stdout": "1: ペン\n2: ノート\n3: 消しゴム\n",
+    "answer": "const items = [\"ペン\", \"ノート\", \"消しゴム\"];\n// forEach に渡したアロー関数がコールバックです。要素と添字が順に届きます\n// index は 0 始まりなので、表示用に 1 を足します\nitems.forEach((item, index) => {\n  console.log(`${index + 1}: ${item}`);\n});\n"
+  }
+}

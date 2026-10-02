@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>あいさつフォーム</title>
+</head>
+<body>
+  <div id="app">
+    <p>名前: <input v-model="name" placeholder="例: さくら"></p>
+    <p>あいさつ:
+      <select v-model="greeting">
+        <option>おはよう</option>
+        <option>こんにちは</option>
+        <option>こんばんは</option>
+      </select>
+    </p>
+    <h2>{{ greeting }}、{{ name }} さん！</h2>
+    <button v-on:click="reset">リセット</button>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { name: "", greeting: "こんにちは" };
+      },
+      methods: {
+        reset() {
+          this.name = "";
+          this.greeting = "こんにちは";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

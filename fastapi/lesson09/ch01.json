@@ -1,0 +1,15 @@
+{
+  "lesson": 9,
+  "chapter": 1,
+  "title": "HTTPException で 404 を返す",
+  "priority": "🔴",
+  "text": "**HTTPException** とは、エラーを HTTP レスポンスとして返すための FastAPI の例外クラスです。`raise HTTPException(status_code=404)` を実行すると、その場で関数の処理が止まって 404 レスポンスに変換されます。`return` の行までは進まないので、「エラーなら抜ける」を安全に書けます。TestClient は raise された HTTPException を HTTP レスポンスとして受け取るので、`r.status_code` で確認できます。🔴 「なければ raise で止める」の形を手が覚えるまで書きましょう。\n\n```python\nif item_id not in items:\n    raise HTTPException(status_code=404)  # ここで処理が止まる\nreturn {\"name\": items[item_id]}  # 見つかったときだけ実行される\n```",
+  "sample": "# lesson09 ch01: HTTPException で 404 を返す\nfrom fastapi import FastAPI, HTTPException\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nitems = {1: \"りんご\", 2: \"みかん\"}\n\n@app.get(\"/items/{item_id}\")\ndef read_item(item_id: int):\n    if item_id not in items:\n        # raise した時点で処理が止まり、404 レスポンスに変換される\n        raise HTTPException(status_code=404)\n    return {\"name\": items[item_id]}\n\nclient = TestClient(app)\n\n# 存在する ID → 200\nr = client.get(\"/items/1\")\nprint(r.status_code)\nprint(r.json())\n\n# 存在しない ID → 404 (detail は既定の \"Not Found\")\nr = client.get(\"/items/99\")\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "ユーザー辞書 `users = {1: \"佐藤\", 2: \"鈴木\"}` を持つ API に、`GET /users/{user_id}` を作ってください。\n\n- `user_id` が `users` になければ `HTTPException(status_code=404)` を raise する\n- あれば `{\"name\": ユーザー名}` を返す\n\n**期待出力**\n\n```text\n200\n{'name': '鈴木'}\n404\n{'detail': 'Not Found'}\n```",
+    "starter": "from fastapi import FastAPI, HTTPException\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nusers = {1: \"佐藤\", 2: \"鈴木\"}\n\n# ここに GET /users/{user_id} を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor user_id in [2, 5]:\n    r = client.get(f\"/users/{user_id}\")\n    print(r.status_code)\n    print(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'name': '鈴木'}\n404\n{'detail': 'Not Found'}\n",
+    "answer": "from fastapi import FastAPI, HTTPException\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nusers = {1: \"佐藤\", 2: \"鈴木\"}\n\n@app.get(\"/users/{user_id}\")\ndef read_user(user_id: int):\n    # 先にエラーを raise して抜けると、以降は「見つかった場合」だけ書けばよい\n    if user_id not in users:\n        # raise なので return と違い、ここで処理が完全に止まる\n        raise HTTPException(status_code=404)\n    return {\"name\": users[user_id]}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor user_id in [2, 5]:\n    r = client.get(f\"/users/{user_id}\")\n    print(r.status_code)\n    print(r.json())\n"
+  }
+}

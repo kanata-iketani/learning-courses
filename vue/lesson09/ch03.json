@@ -1,0 +1,16 @@
+{
+  "lesson": 9,
+  "chapter": 3,
+  "kind": "web",
+  "title": "input の値を読む(.value)",
+  "priority": "🔴",
+  "text": "`<input>`(文字や数を入力する欄)にユーザーが入力した内容は、要素の `.value` プロパティで取り出せます。取り出した値は必ず**文字列**なので、数として計算したいときは `Number()` で変換します。🔴 「入力欄から .value で読む → 加工する → textContent で表示する」の流れは、フォームを扱うページの基本形です。\n\n```js\nconst input = document.getElementById(\"name-input\");\nbtn.addEventListener(\"click\", () => {\n  const name = input.value;  // 入力された文字列\n  msg.textContent = \"こんにちは、\" + name + \"さん！\";\n});\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>あいさつマシン</title>\n</head>\n<body>\n  <h1>あいさつマシン</h1>\n  <input id=\"name-input\" placeholder=\"名前を入力\">\n  <button id=\"greet-btn\">あいさつする</button>\n  <p id=\"greeting\"></p>\n\n  <script>\n    const input = document.getElementById(\"name-input\");\n    const greeting = document.getElementById(\"greeting\");\n\n    document.getElementById(\"greet-btn\").addEventListener(\"click\", () => {\n      // .value で、いま入力欄に書かれている文字列を取り出す\n      const name = input.value;\n      if (name === \"\") {\n        greeting.textContent = \"名前を入力してください\";\n      } else {\n        greeting.textContent = \"こんにちは、\" + name + \"さん！\";\n      }\n    });\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "2 つの数を足し算する「ミニ電卓」を作りましょう。2 つの入力欄に数を入れて「計算」ボタンを押すと、合計が表示されるようにしてください。`.value` は文字列なので、`Number()` で数に変換してから足すのがポイントです(変換しないと `\"3\" + \"5\"` は `\"35\"` になってしまいます)。\n\n**確認ポイント**\n\n1. 3 と 5 を入力して「計算」を押すと「答え: 8」と表示される(35 にならない)\n2. 数を入れ直して押すと、結果も新しい合計に変わる\n3. 10 と 20 で「答え: 30」になる\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>ミニ電卓</title>\n</head>\n<body>\n  <h1>足し算ミニ電卓</h1>\n  <input id=\"num1\" type=\"number\" placeholder=\"1つ目の数\">\n  +\n  <input id=\"num2\" type=\"number\" placeholder=\"2つ目の数\">\n  <button id=\"calc-btn\">計算</button>\n  <p id=\"answer\"></p>\n\n  <script>\n    // ここに「.value を Number() で数に変換して足し、答えを表示」を書く\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>ミニ電卓</title>\n</head>\n<body>\n  <h1>足し算ミニ電卓</h1>\n  <input id=\"num1\" type=\"number\" placeholder=\"1つ目の数\">\n  +\n  <input id=\"num2\" type=\"number\" placeholder=\"2つ目の数\">\n  <button id=\"calc-btn\">計算</button>\n  <p id=\"answer\"></p>\n\n  <script>\n    document.getElementById(\"calc-btn\").addEventListener(\"click\", () => {\n      // 工夫: .value は文字列なので、Number() で数に変換してから足す。\n      // 変換しないと \"3\" + \"5\" = \"35\" という文字列の連結になってしまう\n      const a = Number(document.getElementById(\"num1\").value);\n      const b = Number(document.getElementById(\"num2\").value);\n      document.getElementById(\"answer\").textContent = \"答え: \" + (a + b);\n    });\n  </script>\n</body>\n</html>\n"
+  }
+}

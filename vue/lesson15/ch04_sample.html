@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>props でデータを渡す</title>
+</head>
+<body>
+  <div id="app">
+    <p>固定の値をそのまま渡す:</p>
+    <user-card name="さくら" age="12"></user-card>
+    <p>data の配列から v-for で渡す:</p>
+    <user-card v-for="member in members" :key="member.name"
+               :name="member.name" :age="member.age"></user-card>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    const app = createApp({
+      data() {
+        return {
+          members: [
+            { name: "たろう", age: 13 },
+            { name: "はなこ", age: 11 }
+          ]
+        };
+      }
+    });
+    app.component("user-card", {
+      props: ["name", "age"],
+      template: `<p style="border: 1px solid #aaa; padding: 4px;">{{ name }}({{ age }}歳)</p>`
+    });
+    app.mount("#app");
+  </script>
+</body>
+</html>

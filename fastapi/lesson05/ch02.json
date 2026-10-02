@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 2,
+  "title": "POST でボディを受け取る",
+  "priority": "🔴",
+  "text": "**リクエストボディ**とは、リクエストに載せて送るデータ本体のことです。データを新しく作る・登録するときは **POST**(データ送信用の HTTP メソッド)を使い、ボディに JSON を入れて送ります。TestClient では `client.post(URL, json=辞書)` と書くと、辞書が JSON のボディとして送られます。なお、POST 用の URL を GET で呼ぶと 405(メソッド不一致)が返ります。🔴 `client.post(json=...)` の形は何度も書いて覚えましょう。\n\n```python\nr = client.post(\"/echo\", json={\"text\": \"こんにちは\"})\n```",
+  "sample": "# lesson05 ch02: POST でボディを受け取る\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Message(BaseModel):\n    text: str\n\n# @app.post で「POST で呼ばれる関数」になる\n@app.post(\"/echo\")\ndef echo(msg: Message):\n    return {\"received\": msg.text}\n\n# --- 動作確認 ---\nclient = TestClient(app)\n# json= に渡した辞書がリクエストボディになる\nr = client.post(\"/echo\", json={\"text\": \"こんにちは\"})\nprint(r.status_code)\nprint(r.json())\n\n# POST 用の URL を GET で呼ぶと 405 (Method Not Allowed)\nr2 = client.get(\"/echo\")\nprint(r2.status_code)\n",
+  "exercise": {
+    "description": "コメント投稿 API を作ります。\n\n- `author`(文字列)と `body`(文字列)を持つモデル `Comment` を定義する\n- `POST /comments` で `Comment` を受け取り、`{\"author\": 投稿者名, \"message\": 本文}` の形の辞書を返す(キー名が `body` から `message` に変わる点に注意)\n\n**期待出力**\n\n```text\n200\n{'author': 'demo', 'message': 'いいね'}\n405\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# ここに Comment モデルと POST /comments を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/comments\", json={\"author\": \"demo\", \"body\": \"いいね\"})\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/comments\")\nprint(r2.status_code)\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'author': 'demo', 'message': 'いいね'}\n405\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Comment(BaseModel):\n    author: str\n    body: str\n\n# データを新しく送るので @app.post を使います。\n# ボディの JSON は Comment に変換されて届くので、属性で取り出せます。\n# 返す辞書のキー名は自由に決められます (body を message に変えて返す)。\n@app.post(\"/comments\")\ndef create_comment(comment: Comment):\n    return {\"author\": comment.author, \"message\": comment.body}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/comments\", json={\"author\": \"demo\", \"body\": \"いいね\"})\nprint(r.status_code)\nprint(r.json())\nr2 = client.get(\"/comments\")\nprint(r2.status_code)\n"
+  }
+}

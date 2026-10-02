@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>:class で切り替え</title>
+<script src="/vendor/vue.global.prod.js"></script>
+<style>
+  .done   { text-decoration: line-through; color: gray; }
+  .urgent { color: red; font-weight: bold; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <h1>今日のタスク</h1>
+    <!-- isDone が true のときだけ class="done" が付く -->
+    <p :class="{ done: isDone }">レポートを提出する</p>
+    <!-- 複数の class もまとめて宣言できる -->
+    <p :class="{ done: isDone2, urgent: isUrgent }">会議の資料を作る</p>
+
+    <!-- @click は「クリックで true/false を反転」。詳細は次のレッスンで -->
+    <button @click="isDone = !isDone">1 つ目を完了/未完了にする</button>
+    <button @click="isUrgent = !isUrgent">2 つ目の緊急マークを切り替える</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          isDone: false,
+          isDone2: false,
+          isUrgent: true
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

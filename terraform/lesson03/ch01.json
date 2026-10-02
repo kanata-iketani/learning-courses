@@ -1,0 +1,15 @@
+{
+  "lesson": 3,
+  "chapter": 1,
+  "title": "variableとvar.",
+  "priority": "🔴",
+  "text": "**variable**(外部から値を受け取るための入力口となるブロック)は `variable \"名前\" { }` と書き、`var.名前` で参照します。本体には `type`(受け取る型)と `default`(入力がないときの既定値)を書くのが基本です。default があれば入力なしでも apply が通ります。実務では variable 定義を `variables.tf` に集める流儀が一般的で、コード中の `var.xxx` を見たら `variables.tf` を開いて型と default を確認する、が読解の第一歩です。🔴 variable の定義と `var.` 参照は、手が覚えるまで書きましょう。\n\n```hcl\nvariable \"project\" {\n  type    = string\n  default = \"myapp\"\n}\n\noutput \"name\" {\n  value = var.project  # var.名前 で参照\n}\n```",
+  "sample": "# lesson03 ch01: variable と var.\n# variable は外から値を受け取る入力口。default があれば入力なしで動きます。\n\nvariable \"project\" {\n  type    = string\n  default = \"myapp\"\n}\n\nvariable \"region\" {\n  type    = string\n  default = \"ap-northeast-1\"\n}\n\noutput \"project_name\" {\n  # 参照は var.名前\n  value = var.project\n}\n\noutput \"region_name\" {\n  value = var.region\n}\n",
+  "exercise": {
+    "description": "variable `project` を定義してください。`type` は `string`、`default` は `\"skillax\"` とします。さらに output `project_name` で `var.project` を表示してください。\n\n**期待出力**\n\n```text\nproject_name = \"skillax\"\n```",
+    "starter": "variable \"project\" {\n  # type と default を書く\n}\n",
+    "stdin": "",
+    "expected_stdout": "project_name = \"skillax\"\n",
+    "answer": "# variable は外部入力の宣言。default を付けると入力なしでも apply が通るので、\n# この講座の演習では必ず default を付けます。参照は var.名前 です。\nvariable \"project\" {\n  type    = string\n  default = \"skillax\"\n}\n\noutput \"project_name\" {\n  value = var.project\n}\n"
+  }
+}

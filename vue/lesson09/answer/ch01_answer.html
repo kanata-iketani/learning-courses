@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>プロフィールカード</title>
+</head>
+<body>
+  <h1>プロフィール</h1>
+  <!-- 工夫: HTML 側は空にして、中身はすべて JS から書き込む -->
+  <p>名前: <span id="name"></span></p>
+  <p>趣味: <span id="hobby"></span></p>
+
+  <script>
+    // 要素を取り出してから textContent で書きかえる、が基本の型
+    const nameEl = document.getElementById("name");
+    nameEl.textContent = "いけたに";
+
+    // 変数に入れずにその場で書きかえてもよい
+    document.getElementById("hobby").textContent = "プログラミング";
+  </script>
+</body>
+</html>

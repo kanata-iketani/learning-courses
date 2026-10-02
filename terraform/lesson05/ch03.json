@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 3,
+  "title": "lookupとmerge — タグの合成",
+  "priority": "🔴",
+  "text": "`merge` は複数のマップを合成する関数で、**同じキーは後に書いたマップが勝ちます**。`lookup(マップ, キー, 既定値)` はキーがあればその値を、なければ既定値を返します。実務ではこの2つが**タグの合成**として最頻出です。全リソース共通の `local.common_tags` に、リソース個別の `Name` タグなどを `merge` で重ねる書き方は、ほぼどの現場のコードにも登場します。🔴 「後勝ち」のルールを知らないと、環境タグを上書きしているコードを読み違えるので必ず押さえてください。\n\n```hcl\ntags = merge(local.common_tags, {\n  Name = \"myapp-api\"   # 共通タグに個別の Name を追加\n})\n```",
+  "sample": "# lesson05 ch03: merge と lookup\nvariable \"common_tags\" {\n  default = {\n    Env     = \"prod\"\n    Project = \"myapp\"\n  }\n}\n\nlocals {\n  # merge は後勝ち。Env は \"stg\" に上書きされます\n  bucket_tags = merge(var.common_tags, {\n    Env  = \"stg\"\n    Name = \"myapp-logs\"\n  })\n}\n\noutput \"env\" {\n  value = local.bucket_tags[\"Env\"]\n}\n\n# lookup はキーが無いときに第3引数の既定値を返します\noutput \"owner\" {\n  value = lookup(local.bucket_tags, \"Owner\", \"unknown\")\n}\n\noutput \"tag_keys\" {\n  value = join(\",\", keys(local.bucket_tags))\n}\n",
+  "exercise": {
+    "description": "variable `common_tags`(default `{ Env = \"prod\", Project = \"skillax\" }`)と `extra_tags`(default `{ Env = \"stg\", Name = \"skillax-api\" }`)を宣言し、`merge(共通, 個別)` の結果を locals に置いて、次の3つを出力してください。\n\n- output `env`: 合成後の `Env` タグの値(後勝ちの確認)\n- output `owner`: 合成後のマップから `lookup` で `Owner` キーを引く。無ければ `\"unknown\"`\n- output `tag_keys`: 合成後のキー一覧を `,` 区切りで join した文字列\n\n**期待出力**\n\n```text\nenv = \"stg\"\nowner = \"unknown\"\ntag_keys = \"Env,Name,Project\"\n```",
+    "starter": "variable \"common_tags\" {\n  default = {\n    Env     = \"prod\"\n    Project = \"skillax\"\n  }\n}\n\nvariable \"extra_tags\" {\n  default = {\n    Env  = \"stg\"\n    Name = \"skillax-api\"\n  }\n}\n\n# ここに locals と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "env = \"stg\"\nowner = \"unknown\"\ntag_keys = \"Env,Name,Project\"\n",
+    "answer": "variable \"common_tags\" {\n  default = {\n    Env     = \"prod\"\n    Project = \"skillax\"\n  }\n}\n\nvariable \"extra_tags\" {\n  default = {\n    Env  = \"stg\"\n    Name = \"skillax-api\"\n  }\n}\n\n# merge は「後勝ち」なので、共通タグを先・個別タグを後に書くと個別側が優先されます。\n# 実務のタグ付けはほぼこの形(merge(local.common_tags, {...}))で書かれています。\nlocals {\n  tags = merge(var.common_tags, var.extra_tags)\n}\n\noutput \"env\" {\n  value = local.tags[\"Env\"]\n}\n\noutput \"owner\" {\n  value = lookup(local.tags, \"Owner\", \"unknown\")\n}\n\noutput \"tag_keys\" {\n  value = join(\",\", keys(local.tags))\n}\n"
+  }
+}

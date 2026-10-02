@@ -1,0 +1,16 @@
+{
+  "lesson": 9,
+  "chapter": 1,
+  "kind": "web",
+  "title": "DOM とは・getElementById と textContent",
+  "priority": "🔴",
+  "text": "**DOM**(Document Object Model。ブラウザが HTML を読み込んで作る「ページの部品の一覧表」)を使うと、JavaScript からページの中身を読み書きできます。`document.getElementById(\"ID名\")` で **要素**(タグ 1 つ分の部品)を取り出し、`textContent` でその中の文字を読み書きします。🔴 「取り出して、書きかえる」の 2 ステップは今後ずっと使う基本なので、手が覚えるまで練習しましょう。\n\n```js\n// id=\"msg\" の要素を取り出して、文字を書きかえる\nconst el = document.getElementById(\"msg\");\nel.textContent = \"こんにちは！\";\n```\n\nHTML 側の要素には目印として `id` 属性を付けておきます。",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>DOM 入門</title>\n</head>\n<body>\n  <h1 id=\"greeting\">(ここは JS が書きかえます)</h1>\n  <p>今日は <span id=\"today\">?</span> です。</p>\n  <p id=\"message\"></p>\n\n  <script>\n    // 1. 要素を取り出す → 2. textContent で書きかえる\n    const greeting = document.getElementById(\"greeting\");\n    greeting.textContent = \"こんにちは、DOM！\";\n\n    // 今日の日付を作って書き込む\n    const now = new Date();\n    const todayText = (now.getMonth() + 1) + \"月\" + now.getDate() + \"日\";\n    document.getElementById(\"today\").textContent = todayText;\n\n    // 変数に入れず、その場で使ってもかまいません\n    document.getElementById(\"message\").textContent =\n      \"この文章は JavaScript が書き込みました。\";\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "JavaScript だけを使って「プロフィールカード」の中身を埋めましょう。HTML 側の要素は空のままにして、`getElementById` と `textContent` で名前と趣味を書き込んでください。\n\n**確認ポイント**\n\n1. プレビューに自分の名前が表示される(`id=\"name\"` の要素に JS で書き込む)\n2. プレビューに自分の趣味が表示される(`id=\"hobby\"` の要素に JS で書き込む)\n3. HTML 側の `<span>` タグの中は空のままである(文字はすべて `<script>` 内で書き込んでいる)\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>プロフィールカード</title>\n</head>\n<body>\n  <h1>プロフィール</h1>\n  <p>名前: <span id=\"name\"></span></p>\n  <p>趣味: <span id=\"hobby\"></span></p>\n\n  <script>\n    // ここに getElementById と textContent で書き込む処理を書く\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>プロフィールカード</title>\n</head>\n<body>\n  <h1>プロフィール</h1>\n  <!-- 工夫: HTML 側は空にして、中身はすべて JS から書き込む -->\n  <p>名前: <span id=\"name\"></span></p>\n  <p>趣味: <span id=\"hobby\"></span></p>\n\n  <script>\n    // 要素を取り出してから textContent で書きかえる、が基本の型\n    const nameEl = document.getElementById(\"name\");\n    nameEl.textContent = \"いけたに\";\n\n    // 変数に入れずにその場で書きかえてもよい\n    document.getElementById(\"hobby\").textContent = \"プログラミング\";\n  </script>\n</body>\n</html>\n"
+  }
+}

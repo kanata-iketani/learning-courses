@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v-if と v-else</title>
+</head>
+<body>
+  <div id="app">
+    <label><input type="checkbox" v-model="agree"> 利用規約に同意する</label>
+    <p v-if="agree">ありがとうございます！次へ進めます。</p>
+    <p v-else>まだ同意されていません。チェックを入れてください。</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { agree: false };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 2,
+  "title": "文字列補間と演算子",
+  "priority": "🔴",
+  "text": "**文字列補間**(文字列の中に `${式}` で値を埋め込む書き方)を使うと `\"${var.app}-${var.env}\"` のように名前を組み立てられます。実務の Terraform ではリソース名やタグをこの形で組み立てるのが最頻出パターンで、`\"${var.project}-${var.env}-web\"` のような式は瞬時に読めるようになる必要があります。また HCL には算術演算子(`+ - * / %`)や比較演算子(`== != < >` など)もあり、locals の右辺で計算に使えます。🔴 `${}` の補間は実務コードの至るところに出るので、手が覚えるまで書きましょう。\n\n```hcl\nlocals {\n  name  = \"${var.app}-${var.env}\"  # 例: \"web-prod\"\n  total = 4 * 3                    # 12\n}\n```",
+  "sample": "# lesson04 ch02: 文字列補間と演算子\n# \"${}\" で文字列の中に式を埋め込めます。\n\nvariable \"app\" {\n  type    = string\n  default = \"web\"\n}\n\nvariable \"env\" {\n  type    = string\n  default = \"dev\"\n}\n\nlocals {\n  # 実務で最頻出の「名前の組み立て」パターン\n  name = \"${var.app}-${var.env}\"\n\n  # 算術演算子も使えます\n  total_gb = 20 * 2\n}\n\noutput \"resource_name\" {\n  value = local.name\n}\n\noutput \"total_gb\" {\n  value = local.total_gb\n}\n",
+  "exercise": {
+    "description": "variable と補間で名前を組み立てます。\n\n1. variable `app` を定義: `type` は `string`、`default` は `\"billing\"`\n2. variable `env` を定義: `type` は `string`、`default` は `\"prod\"`\n3. locals で `name = \"${var.app}-${var.env}\"` と `total_capacity = 4 * 3` を定義\n4. output `resource_name` で `local.name` を、output `total_capacity` で `local.total_capacity` を表示\n\n**期待出力**\n\n```text\nresource_name = \"billing-prod\"\ntotal_capacity = 12\n```",
+    "starter": "# \"${var.xxx}-${var.yyy}\" の形で名前を組み立てる\n",
+    "stdin": "",
+    "expected_stdout": "resource_name = \"billing-prod\"\ntotal_capacity = 12\n",
+    "answer": "# \"${式}\" が文字列補間。実務の「プロジェクト名-環境名」の組み立てそのものです。\n# 数値の計算は locals の右辺に演算子でそのまま書けます。\nvariable \"app\" {\n  type    = string\n  default = \"billing\"\n}\n\nvariable \"env\" {\n  type    = string\n  default = \"prod\"\n}\n\nlocals {\n  name           = \"${var.app}-${var.env}\"\n  total_capacity = 4 * 3\n}\n\noutput \"resource_name\" {\n  value = local.name\n}\n\noutput \"total_capacity\" {\n  value = local.total_capacity\n}\n"
+  }
+}

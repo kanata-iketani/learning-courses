@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>買い物メモ</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>買い物メモ</h1>
+    <p>{{ item }}: {{ price }} 円 × {{ count }} 個</p>
+    <!-- 工夫: 計算結果を data に持たず、{{ }} の式で毎回計算する。
+         data の price や count を変えるだけで、小計も税込も自動で合う -->
+    <p>小計: {{ price * count }} 円</p>
+    <p>税込: {{ Math.floor(price * count * 1.1) }} 円</p>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          item: "おにぎり",
+          price: 150,
+          count: 2
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "lesson": 8,
+  "chapter": 1,
+  "title": "function 宣言と呼び出し",
+  "priority": "🔴",
+  "text": "**関数**は、ひとまとまりの処理に名前を付けて何度でも使えるようにする仕組みです。Python の `def greet():` は、JavaScript では `function greet() { }` と書きます。定義しただけでは何も起きず、`greet();` のように**呼び出し**(関数名に `( )` を付けて実行させること)をして初めて中の処理が動きます。同じ処理を 2 回書きたくなったら関数にまとめるのが基本です。🔴 「定義しただけでは動かない。呼び出して動く」を覚えましょう。\n\n```js\n// Python: def greet():\nfunction greet() {\n  console.log(\"こんにちは\");\n}\ngreet();  // ここで初めて実行される\n```",
+  "sample": "// Python:\n// def greet():\n//     print(\"こんにちは\")\nfunction greet() {\n  console.log(\"こんにちは\");\n}\n\n// 定義しただけでは動きません。呼び出して初めて実行されます\ngreet();\ngreet();  // 何度でも呼べます\n\n// 複数行の処理もまとめられます\nfunction showMenu() {\n  console.log(\"--- メニュー ---\");\n  console.log(\"1. コーヒー\");\n  console.log(\"2. 紅茶\");\n}\nshowMenu();\n",
+  "exercise": {
+    "description": "`おはようございます` と `今日もがんばりましょう` を 2 行出力する関数 `morningCall` を function 宣言で作り、2 回呼び出してください(合計 4 行の出力になります)。\n\n**期待出力**\n\n```text\nおはようございます\n今日もがんばりましょう\nおはようございます\n今日もがんばりましょう\n```",
+    "starter": "// 関数 morningCall を定義しましょう\n\n// 2 回呼び出しましょう\n",
+    "stdin": "",
+    "expected_stdout": "おはようございます\n今日もがんばりましょう\nおはようございます\n今日もがんばりましょう\n",
+    "answer": "// 2 行の処理をひとまとめにして名前を付けます(Python の def に相当)\nfunction morningCall() {\n  console.log(\"おはようございます\");\n  console.log(\"今日もがんばりましょう\");\n}\n\n// 定義しただけでは動かないので、使いたい回数だけ呼び出します\nmorningCall();\nmorningCall();\n"
+  }
+}

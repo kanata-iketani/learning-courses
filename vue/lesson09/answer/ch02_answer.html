@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>押した回数カウンター</title>
+</head>
+<body>
+  <h1>押した回数カウンター</h1>
+  <button id="count-btn">押す</button>
+  <p id="count">0 回</p>
+
+  <script>
+    // 工夫: 回数は変数 count で覚えておき、画面への反映は毎回自分で行う。
+    // 「値の管理」と「画面の書きかえ」を両方自分でやるのがポイント(Vue だとここが楽になります)
+    let count = 0;
+    const btn = document.getElementById("count-btn");
+    const countEl = document.getElementById("count");
+
+    btn.addEventListener("click", () => {
+      count = count + 1;
+      countEl.textContent = count + " 回";
+    });
+  </script>
+</body>
+</html>

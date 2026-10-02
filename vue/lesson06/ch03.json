@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 3,
+  "title": "for...of 〜配列をくり返す",
+  "priority": "🔴",
+  "text": "**配列**(複数の値を順番に並べて入れる箱。次のレッスンで詳しく学びます)は `[ ]` で作ります。配列の中身を先頭から順に取り出してくり返すのが **for...of** です。Python の `for fruit in fruits:` と同じ感覚で書けます。カウンタの番号が不要なら、for 文より for...of のほうが読みやすくおすすめです。取り出した変数はループのたびに新しく作られるので `const` で宣言できます。Vue で一覧表示に使う `v-for` もこの発想です。🔴 「配列 of ではなく、変数 of 配列」という語順に注意しましょう。\n\n```js\nconst fruits = [\"りんご\", \"みかん\"];\nfor (const fruit of fruits) {\n  console.log(fruit);  // Python: for fruit in fruits:\n}\n```",
+  "sample": "// 配列: 複数の値をまとめて入れる箱(次のレッスンで詳しく学びます)\nconst fruits = [\"りんご\", \"みかん\", \"ぶどう\"];\n\n// Python:     for fruit in fruits:\n// JavaScript: for (const fruit of fruits)\nfor (const fruit of fruits) {\n  console.log(fruit);\n}\n\n// 数値の配列も同じように合計できます\nconst prices = [100, 250, 80];\nlet total = 0;\nfor (const price of prices) {\n  total = total + price;\n}\nconsole.log(total);  // 430\n",
+  "exercise": {
+    "description": "配列 `const members = [\"さくら\", \"たろう\", \"はなこ\"];` を for...of でくり返し、それぞれについて `こんにちは、〇〇さん` と出力してください。テンプレートリテラルで名前を埋め込みましょう。\n\n**期待出力**\n\n```text\nこんにちは、さくらさん\nこんにちは、たろうさん\nこんにちは、はなこさん\n```",
+    "starter": "const members = [\"さくら\", \"たろう\", \"はなこ\"];\n// for...of でくり返しましょう\n",
+    "stdin": "",
+    "expected_stdout": "こんにちは、さくらさん\nこんにちは、たろうさん\nこんにちは、はなこさん\n",
+    "answer": "const members = [\"さくら\", \"たろう\", \"はなこ\"];\n// 「変数 of 配列」の語順で、先頭から 1 人ずつ member に入ります\n// member はループのたびに新しく作られるので const で宣言できます\nfor (const member of members) {\n  console.log(`こんにちは、${member}さん`);\n}\n"
+  }
+}

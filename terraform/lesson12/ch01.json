@@ -1,0 +1,15 @@
+{
+  "lesson": 12,
+  "chapter": 1,
+  "title": "stateとは何か",
+  "priority": "🟡",
+  "text": "**state**(Terraform がコードと実リソースの対応表を保存するファイル。既定では `terraform.tfstate`)は Terraform 運用の心臓部です。apply のたびに更新され、Terraform は state と実環境を突き合わせて差分を計算します。state ファイルを手で消すと Terraform は作成済みリソースを忘れ、次の apply で二重作成が起きます。直接編集も破損のもとです。読むときはファイルを開かず `terraform state list`(アドレス一覧)や `terraform state show`(個別の詳細)を使います。🟡 「state は消さない・直接編集しない・読むならコマンドで」を必ず押さえましょう。\n\n```text\n$ terraform state list\naws_ecs_service.api\naws_iam_role.task\naws_s3_bucket.logs\n```",
+  "sample": "# state はコードと実リソースの対応表。apply のたびに更新されます。\n# この2つのリソースは state に「型.名前」のアドレスで記録されます。\nresource \"terraform_data\" \"app\" {\n  input = \"app-server\"\n}\n\nresource \"terraform_data\" \"db\" {\n  input = \"db-server\"\n}\n\n# terraform state list で見えるアドレスのイメージ\noutput \"state_addresses\" {\n  value = join(\", \", [\"terraform_data.app\", \"terraform_data.db\"])\n}\n\n# state が管理しているリソース数(state を手で消すとこの対応が失われます)\noutput \"managed_count\" {\n  value = 2\n}\n",
+  "exercise": {
+    "description": "ある構成で `terraform state list` を実行したら次が表示されました。\n\n```text\naws_ecs_service.api\naws_iam_role.task\naws_s3_bucket.logs\n```\n\nこの3つのアドレスを locals のリスト `addresses` に持たせ、次の2つを出力してください。\n\n- output `addresses`: アドレスを `sort()` で並べ替えてから `\", \"` で連結した文字列\n- output `resource_count`: アドレスの個数\n\n**期待出力**\n\n```text\naddresses = \"aws_ecs_service.api, aws_iam_role.task, aws_s3_bucket.logs\"\nresource_count = 3\n```",
+    "starter": "# state list の結果を locals で再現します\nlocals {\n  addresses = [\n    # ここにアドレスを書く\n  ]\n}\n",
+    "stdin": "",
+    "expected_stdout": "addresses = \"aws_ecs_service.api, aws_iam_role.task, aws_s3_bucket.logs\"\nresource_count = 3\n",
+    "answer": "# state list に並ぶのは「型.名前」のアドレスです。実物の state は\n# 手で消したり直接編集したりせず、state list / state show で読むのが安全です。\nlocals {\n  addresses = [\n    \"aws_ecs_service.api\",\n    \"aws_iam_role.task\",\n    \"aws_s3_bucket.logs\",\n  ]\n}\n\n# sort で並びを固定してから join で1本の文字列にします\noutput \"addresses\" {\n  value = join(\", \", sort(local.addresses))\n}\n\noutput \"resource_count\" {\n  value = length(local.addresses)\n}\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 1,
+  "title": "if と else",
+  "priority": "🔴",
+  "text": "**if 文**(条件によって実行する処理を切り替える構文)を学びます。Python との違いは書き方です。条件を `( )` で囲み、実行する処理のかたまりを**ブロック**(`{ }` で囲んだ範囲)で表します。Python のようにコロンとインデントで範囲を決めるのではなく、`{ }` が範囲を決めます(インデントは読みやすさのために付けます)。条件が成り立たないときの処理は `else` に書きます。🔴 `( )` と `{ }` の位置を意識して書きましょう。\n\n```js\nif (score >= 60) {\n  console.log(\"合格\");\n} else {\n  console.log(\"不合格\");\n}\n```",
+  "sample": "const score = 75;\n\n// Python:\n// if score >= 60:\n//     print(\"合格\")\n// JavaScript は条件を ( ) で、処理のかたまりを { } で囲みます\nif (score >= 60) {\n  console.log(\"合格\");\n} else {\n  console.log(\"不合格\");\n}\n\nconst stock = 0;\nif (stock > 0) {\n  console.log(\"在庫あり\");\n} else {\n  console.log(\"在庫なし\");\n}\n",
+  "exercise": {
+    "description": "次の 2 つの if 文を書いてください。\n\n1. `const temperature = 30;` を作り、28 以上なら `エアコンをつける`、そうでなければ `窓を開ける` と出力する\n2. `const money = 500;` を作り、1000 以上なら `タクシーで帰る`、そうでなければ `歩いて帰る` と出力する\n\n**期待出力**\n\n```text\nエアコンをつける\n歩いて帰る\n```",
+    "starter": "const temperature = 30;\n// 1. 28 以上かどうかで分岐\n\nconst money = 500;\n// 2. 1000 以上かどうかで分岐\n",
+    "stdin": "",
+    "expected_stdout": "エアコンをつける\n歩いて帰る\n",
+    "answer": "const temperature = 30;\n// 条件は ( ) の中に、実行する処理は { } の中に書きます\nif (temperature >= 28) {\n  console.log(\"エアコンをつける\");\n} else {\n  console.log(\"窓を開ける\");\n}\n\nconst money = 500;\n// money は 500 なので条件が成り立たず、else 側が実行されます\nif (money >= 1000) {\n  console.log(\"タクシーで帰る\");\n} else {\n  console.log(\"歩いて帰る\");\n}\n"
+  }
+}

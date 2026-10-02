@@ -1,0 +1,16 @@
+{
+  "lesson": 1,
+  "chapter": 1,
+  "kind": "web",
+  "title": "Webページは3つの言語でできている",
+  "priority": "🟡",
+  "text": "ブラウザに表示されるページは、役割の違う 3 つの言語でできています。**HTML**(ページの中身と構造を書く言語)、**CSS**(色や配置など見た目を整える言語)、**JavaScript**(ボタンを押したら動く、などの動きを付ける言語)です。料理にたとえると、HTML が食材、CSS が盛り付け、JavaScript が調理の仕掛けです。これから学ぶ **Vue** は、JavaScript でページを効率よく作るための道具(フレームワーク)です。🟡 まずは 3 つの役割の違いを理解しましょう。\n\n下のサンプルは 3 つが 1 ファイルに入った最小のページです。`<style>` の中が CSS、`<script>` の中が JavaScript です。\n\n```html\n<p>これは HTML(中身)</p>\n<style>p { color: red; }  /* CSS(見た目) */</style>\n<script>console.log(\"JS(動き)\");</script>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>はじめてのページ</title>\n<style>\n  /* ここは CSS: 見た目を決める */\n  h1 { color: steelblue; }\n  p  { font-size: 18px; }\n</style>\n</head>\n<body>\n  <!-- ここは HTML: ページの中身 -->\n  <h1>こんにちは、Web！</h1>\n  <p>この文章は HTML で書かれています。</p>\n  <p id=\"message\"></p>\n\n  <script>\n    // ここは JavaScript: 動きを付ける\n    document.getElementById(\"message\").textContent = \"この行は JavaScript が書きました。\";\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "サンプルを参考に、自分のページを作ってみましょう。エディタのコードを編集して「▶ プレビュー」で確認しながら、次の 3 点をすべて満たしてください。\n\n**確認ポイント**\n\n1. `<h1>` の見出しの文字を自分の好きな言葉に変える(HTML の変更)\n2. `<style>` の中で `h1` の色を `steelblue` から別の色(例: `tomato`)に変える(CSS の変更)\n3. JavaScript が書き込む文章を自分の好きな言葉に変える(JavaScript の変更)\n\n3 つともプレビューに反映されたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>わたしのページ</title>\n<style>\n  h1 { color: steelblue; }\n</style>\n</head>\n<body>\n  <h1>ここを書きかえる</h1>\n  <p id=\"message\"></p>\n\n  <script>\n    document.getElementById(\"message\").textContent = \"ここも書きかえる\";\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>わたしのページ</title>\n<style>\n  /* CSS: 色の変更はここ。color に別の色名を書くだけで反映されます */\n  h1 { color: tomato; }\n</style>\n</head>\n<body>\n  <!-- HTML: 見出しの中身は自由な文字列でかまいません -->\n  <h1>はじめての自作ページ</h1>\n  <p id=\"message\"></p>\n\n  <script>\n    // JavaScript: textContent に入れた文字列がページに表示されます\n    document.getElementById(\"message\").textContent = \"JavaScript から書き込みました！\";\n  </script>\n</body>\n</html>\n"
+  }
+}

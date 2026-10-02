@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>合格判定カード</title>
+<script src="/vendor/vue.global.prod.js"></script>
+<style>
+  .pass { color: green; font-weight: bold; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <h1>合格判定</h1>
+    <!-- 工夫: 「isPassed が true なら pass が付く」と宣言するだけ。
+         classList.add/remove のような操作コードは 1 行も書かない -->
+    <p :class="{ pass: isPassed }">判定待ち: {{ isPassed ? "合格！" : "結果を確認してください" }}</p>
+    <button @click="isPassed = !isPassed">判定を切り替える</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { isPassed: false };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

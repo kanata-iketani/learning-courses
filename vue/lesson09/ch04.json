@@ -1,0 +1,16 @@
+{
+  "lesson": 9,
+  "chapter": 4,
+  "kind": "web",
+  "title": "classList で見た目を切り替える",
+  "priority": "🟡",
+  "text": "JS で色や装飾を変えたいとき、スタイルを 1 つずつ書きかえるより、CSS で用意した class を付け外しするほうがきれいです。要素の `classList`(その要素に付いている class の一覧を操作する道具)を使い、`add(\"名前\")` で付け、`remove(\"名前\")` で外し、`toggle(\"名前\")` で「付いていれば外す・なければ付ける」を切り替えます。🟡 「見た目は CSS に書き、JS は class を切り替えるだけ」という役割分担を意識しましょう。\n\n```js\nconst box = document.getElementById(\"box\");\nbox.classList.toggle(\"dark\");  // 押すたびに .dark が付いたり外れたり\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>ダークモード切替</title>\n<style>\n  body { transition: background-color 0.3s, color 0.3s; }\n  /* .dark が付いたときだけ適用されるスタイル */\n  body.dark {\n    background-color: #222;\n    color: #eee;\n  }\n</style>\n</head>\n<body>\n  <h1>ダークモード切替</h1>\n  <p>ボタンを押すたびに、ページ全体の配色が切り替わります。</p>\n  <button id=\"mode-btn\">切り替える</button>\n\n  <script>\n    document.getElementById(\"mode-btn\").addEventListener(\"click\", () => {\n      // toggle: .dark が付いていれば外し、なければ付ける\n      document.body.classList.toggle(\"dark\");\n    });\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "「重要マーカー」を作りましょう。ボタンを押すたびに、文章に `highlight` class が付いたり外れたりして、黄色いマーカーが引かれたり消えたりするようにしてください。CSS の `.highlight` は starter に用意してあります。JS 側は `classList.toggle` を使います。\n\n**確認ポイント**\n\n1. 最初はマーカーが引かれていない\n2. ボタンを押すと文章に黄色いマーカーが引かれる\n3. もう一度押すとマーカーが消える(何度でも切り替わる)\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>重要マーカー</title>\n<style>\n  .highlight {\n    background-color: yellow;\n    font-weight: bold;\n  }\n</style>\n</head>\n<body>\n  <p id=\"text\">ここが重要なポイントです。</p>\n  <button id=\"mark-btn\">マーカーを切り替える</button>\n\n  <script>\n    // ここに「ボタンを押すたびに #text の highlight class を toggle」を書く\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>重要マーカー</title>\n<style>\n  /* 工夫: 見た目の定義は CSS 側にまとめておく */\n  .highlight {\n    background-color: yellow;\n    font-weight: bold;\n  }\n</style>\n</head>\n<body>\n  <p id=\"text\">ここが重要なポイントです。</p>\n  <button id=\"mark-btn\">マーカーを切り替える</button>\n\n  <script>\n    const text = document.getElementById(\"text\");\n    document.getElementById(\"mark-btn\").addEventListener(\"click\", () => {\n      // 工夫: add/remove を if で書き分けなくても、toggle 1 つで切り替えられる\n      text.classList.toggle(\"highlight\");\n    });\n  </script>\n</body>\n</html>\n"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "lesson": 3,
+  "chapter": 4,
+  "kind": "web",
+  "title": "classで使い分ける(.クラス名)",
+  "priority": "🔴",
+  "text": "同じ p タグでも「重要なお知らせだけ赤くしたい」ことがあります。そこで使うのが **class 属性**(タグに付ける自分で決めた名前)です。HTML 側で `<p class=\"important\">` のように名前を付け、CSS 側で `.important { ... }` のように**先頭にドット**を付けたセレクタで指定すると、その名前を持つ要素だけに飾りが効きます。同じ class は何個の要素に付けてもよく、まとめて同じ見た目にできます。🔴 「タグ名セレクタは全部に効く、class セレクタは名前を付けた要素だけに効く」の違いをつかみましょう。\n\n```html\n<style>\n  .important { color: red; font-weight: bold; }\n</style>\n<p class=\"important\">ここだけ赤い太字</p>\n<p>ふつうの段落</p>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>class の使い分け</title>\n<style>\n  p          { color: dimgray; }\n  .important { color: red; font-weight: bold; }\n  .memo      { background-color: lightyellow; }\n</style>\n</head>\n<body>\n  <h1>今日の連絡</h1>\n  <p>ここはふつうの段落なので、p セレクタの灰色です。</p>\n  <p class=\"important\">ここは class=\"important\" なので赤い太字です。</p>\n  <p class=\"memo\">ここは class=\"memo\" なので黄色いメモ風です。</p>\n  <p class=\"important\">同じ class を付ければ、この段落も同じ赤い太字になります。</p>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "starter の予定リストを、class を使って色分けしましょう。「大事な予定」と「済んだ予定」で見た目を変えます。\n\n**確認ポイント**\n\n1. CSS に `.taisetsu`(大事)のような class セレクタを作り、class を付けた `<li>` だけが赤い太字になっている\n2. 別の class(例: `.sumi`)を作り、済んだ予定の `<li>` だけが灰色になっている\n3. 同じ class を 2 つ以上の `<li>` に付けて、まとめて同じ見た目になることを確かめた\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>今週の予定</title>\n<style>\n  /* ここに .クラス名 のセレクタを追加する */\n</style>\n</head>\n<body>\n  <h1>今週の予定</h1>\n  <ul>\n    <li>月曜: ゴミ出し(済んだ)</li>\n    <li>火曜: テスト勉強(大事!)</li>\n    <li>水曜: 図書館に本を返す(済んだ)</li>\n    <li>木曜: 発表の資料作り(大事!)</li>\n    <li>金曜: 友だちと映画</li>\n  </ul>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>今週の予定</title>\n<style>\n  /* 工夫した点: 目立たせる class と控えめにする class の 2 種類を用意しました */\n  .taisetsu { color: red; font-weight: bold; }\n  .sumi     { color: gray; }\n</style>\n</head>\n<body>\n  <h1>今週の予定</h1>\n  <ul>\n    <!-- 工夫した点: 同じ class を複数の li に付けると、まとめて同じ見た目になります -->\n    <li class=\"sumi\">月曜: ゴミ出し(済んだ)</li>\n    <li class=\"taisetsu\">火曜: テスト勉強(大事!)</li>\n    <li class=\"sumi\">水曜: 図書館に本を返す(済んだ)</li>\n    <li class=\"taisetsu\">木曜: 発表の資料作り(大事!)</li>\n    <li>金曜: 友だちと映画</li>\n  </ul>\n</body>\n</html>\n"
+  }
+}

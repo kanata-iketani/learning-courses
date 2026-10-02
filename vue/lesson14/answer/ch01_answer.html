@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>点数判定</title>
+</head>
+<body>
+  <div id="app">
+    <p>点数: <input type="number" v-model="score"> 点</p>
+    <!-- 工夫した点: 条件はきびしい順(80 以上 → 60 以上 → それ以外)に並べる。
+         上から順に判定されるので、v-else-if に「80 未満」と書く必要がない -->
+    <p v-if="score >= 80">合格！</p>
+    <p v-else-if="score >= 60">あと少し！</p>
+    <p v-else>がんばろう</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { score: 0 };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "lesson": 11,
+  "chapter": 3,
+  "title": "async def エンドポイント",
+  "priority": "🟡",
+  "text": "エンドポイントは **async def**(非同期関数)でも定義できます。非同期関数の中では **await**(処理の完了を待つ間、他の処理に順番を譲る文)が使え、DB や外部 API の応答待ちの間に別のリクエストを処理できるのが利点です。await できるのは非同期対応の関数(async def で定義されたものなど)だけです。呼び出す側から見た動きは同期の `def` と同じで、TestClient もそのまま呼べます。🟡 「async def の中で await で待つ」という形を理解しましょう。\n\n```python\n@app.get(\"/async\")\nasync def read_async():\n    msg = await load_message()  # 待っている間、他のリクエストを処理できる\n    return {\"message\": msg}\n```",
+  "sample": "# lesson11 ch03: async def エンドポイント\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 非同期の部品関数。本来はここで DB や外部 API を await で待つ\nasync def load_message():\n    return \"非同期で取得しました\"\n\n@app.get(\"/async\")\nasync def read_async():\n    # await は async def の中でだけ使える\n    msg = await load_message()\n    return {\"message\": msg}\n\n@app.get(\"/sync\")\ndef read_sync():\n    # 同期版。呼び出す側から見えるレスポンスの形は同じ\n    return {\"message\": \"同期で取得しました\"}\n\nclient = TestClient(app)\nfor path in [\"/async\", \"/sync\"]:\n    r = client.get(path)\n    print(r.status_code)\n    print(r.json())\n",
+  "exercise": {
+    "description": "非同期エンドポイント `GET /price` を作ってください。\n\n- 非同期関数 `fetch_price` を `async def` で定義し、`480` を返す\n- `GET /price` を `async def` で定義し、`await fetch_price()` の結果を `{\"price\": 結果}` として返す\n\n**期待出力**\n\n```text\n200\n{'price': 480}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに async def fetch_price と GET /price を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/price\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'price': 480}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# async def で定義した関数は await で呼べる(本来は DB 問い合わせなど)\nasync def fetch_price():\n    return 480\n\n@app.get(\"/price\")\nasync def read_price():\n    # await は async def の中でだけ使える\n    # 待っている間、FastAPI は他のリクエストを処理できる\n    price = await fetch_price()\n    return {\"price\": price}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/price\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

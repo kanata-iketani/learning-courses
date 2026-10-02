@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>なぞなぞ</title>
+</head>
+<body>
+  <div id="app">
+    <h2>Q. パンはパンでも食べられないパンは？</h2>
+    <!-- 工夫した点: visible = !visible の形なら、押すたびに true/false が反転する -->
+    <button v-on:click="showHint = !showHint">ヒントを見る/隠す</button>
+    <button v-on:click="showAnswer = !showAnswer">答えを見る/隠す</button>
+    <!-- ヒントは何度も付け外しするので v-show(隠すだけ)にした -->
+    <p v-show="showHint">ヒント: 料理で使う道具です。</p>
+    <!-- 答えはめったに切り替えないので v-if(DOM から消える)にした -->
+    <p v-if="showAnswer">答え: フライパンです！</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { showHint: false, showAnswer: false };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 2,
+  "title": "共通クエリパラメータを Depends でまとめる",
+  "priority": "🟡",
+  "text": "依存関数には、エンドポイントと同じ書き方でクエリパラメータを宣言できます。`skip`(読み飛ばす件数)や `limit`(最大件数)のように、どの一覧 API にも付けたいパラメータは 1 つの依存関数にまとめるのが定番です。各エンドポイントは `Depends(pagination)` と書くだけでよく、パラメータの既定値や型の変更も 1 か所で済みます。🟡 「クエリパラメータの宣言ごと共通化できる」ことを理解しましょう。\n\n```python\ndef pagination(skip: int = 0, limit: int = 2):\n    return {\"skip\": skip, \"limit\": limit}\n\n@app.get(\"/fruits\")\ndef list_fruits(page: dict = Depends(pagination)):\n    return fruits[page[\"skip\"] : page[\"skip\"] + page[\"limit\"]]\n```",
+  "sample": "# lesson10 ch02: 共通クエリパラメータを Depends でまとめる\nfrom fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# skip と limit はクエリパラメータとして受け取られる\ndef pagination(skip: int = 0, limit: int = 2):\n    return {\"skip\": skip, \"limit\": limit}\n\nfruits = [\"りんご\", \"みかん\", \"ぶどう\", \"もも\", \"なし\"]\nteas = [\"緑茶\", \"紅茶\", \"麦茶\"]\n\n@app.get(\"/fruits\")\ndef list_fruits(page: dict = Depends(pagination)):\n    return fruits[page[\"skip\"] : page[\"skip\"] + page[\"limit\"]]\n\n@app.get(\"/teas\")\ndef list_teas(page: dict = Depends(pagination)):\n    # 一覧系のエンドポイントすべてで同じ依存関数を共有できる\n    return teas[page[\"skip\"] : page[\"skip\"] + page[\"limit\"]]\n\nclient = TestClient(app)\nfor path in [\"/fruits\", \"/fruits?skip=1&limit=3\", \"/teas?limit=1\"]:\n    r = client.get(path)\n    print(r.json())\n",
+  "exercise": {
+    "description": "色の一覧 API `GET /colors` を、共通クエリパラメータの依存関数で作ってください。\n\n- 依存関数 `pagination(skip: int = 0, limit: int = 3)` を定義し、`{\"skip\": skip, \"limit\": limit}` を返す\n- `GET /colors` は `page: dict = Depends(pagination)` で受け取り、`colors[skip : skip + limit]` を返す\n\n**期待出力**\n\n```text\n['赤', '青', '黄']\n['黄', '緑']\n```",
+    "starter": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\ncolors = [\"赤\", \"青\", \"黄\", \"緑\", \"白\"]\n\n# ここに依存関数 pagination と GET /colors を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor path in [\"/colors\", \"/colors?skip=2&limit=2\"]:\n    r = client.get(path)\n    print(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "['赤', '青', '黄']\n['黄', '緑']\n",
+    "answer": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\ncolors = [\"赤\", \"青\", \"黄\", \"緑\", \"白\"]\n\n# 依存関数の引数は、エンドポイントに書いたときと同じく\n# クエリパラメータ (?skip=2&limit=2) として受け取られる\ndef pagination(skip: int = 0, limit: int = 3):\n    return {\"skip\": skip, \"limit\": limit}\n\n@app.get(\"/colors\")\ndef list_colors(page: dict = Depends(pagination)):\n    # 一覧の切り出しロジックは各エンドポイント側に書く\n    return colors[page[\"skip\"] : page[\"skip\"] + page[\"limit\"]]\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor path in [\"/colors\", \"/colors?skip=2&limit=2\"]:\n    r = client.get(path)\n    print(r.json())\n"
+  }
+}

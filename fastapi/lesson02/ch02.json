@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 2,
+  "title": "デコレータとパスの関係",
+  "priority": "🔴",
+  "text": "`@app.get(...)` のように関数の直前に `@` 付きで書く記法を **デコレータ**(関数に機能を追加する Python の仕組み)と呼びます。FastAPI ではデコレータが「このパスに来たリクエストをこの関数に渡す」という対応表を作ります。デコレータを増やせば、1つのアプリに複数のパスをいくつでも定義できます。🔴 パスごとに「デコレータ + 関数」を1組ずつ書く形を、手が覚えるまで繰り返しましょう。\n\n```python\n@app.get(\"/\")\ndef home():\n    return {\"page\": \"home\"}\n\n@app.get(\"/about\")\ndef about():\n    return {\"page\": \"about\"}\n```",
+  "sample": "# lesson02 ch02: デコレータを増やしてパスを増やす\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# デコレータ1つにつきパス1つ。関数名は処理の内容が分かる名前にする\n@app.get(\"/\")\ndef home():\n    return {\"page\": \"home\"}\n\n@app.get(\"/menu\")\ndef menu():\n    return {\"page\": \"menu\"}\n\n@app.get(\"/access\")\ndef access():\n    return {\"page\": \"access\"}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/\").json())\nprint(client.get(\"/menu\").json())\nprint(client.get(\"/access\").json())\n",
+  "exercise": {
+    "description": "2つのエンドポイントを持つアプリを書いてください。\n\n- GET `/` : `{\"page\": \"home\"}` を返す\n- GET `/about` : `{\"page\": \"about\"}` を返す\n\n**期待出力**\n\n```text\n{'page': 'home'}\n{'page': 'about'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET / と GET /about の2つのエンドポイントを書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/\").json())\nprint(client.get(\"/about\").json())\n",
+    "stdin": "",
+    "expected_stdout": "{'page': 'home'}\n{'page': 'about'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# デコレータが「パス → 関数」の対応表を作るので、パスの数だけ組を書きます。\n@app.get(\"/\")\ndef home():\n    return {\"page\": \"home\"}\n\n# 関数名はパスと無関係ですが、重複しない別の名前にします。\n@app.get(\"/about\")\ndef about():\n    return {\"page\": \"about\"}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/\").json())\nprint(client.get(\"/about\").json())\n"
+  }
+}

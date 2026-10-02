@@ -1,0 +1,15 @@
+{
+  "lesson": 13,
+  "chapter": 1,
+  "title": "命名とタグの流儀",
+  "priority": "🔴",
+  "text": "実務コードの命名は `${var.project}-${var.env}` のような **name_prefix**(リソース名の共通接頭辞)に集約され、タグは `merge()` で「共通タグ + 個別タグ」を合成するのが定番です。\n\n```hcl\nlocals {\n  name_prefix = \"${var.project}-${var.env}\"\n  common_tags = {\n    Project   = var.project\n    Env       = var.env\n    ManagedBy = \"terraform\"\n  }\n}\n\nresource \"aws_s3_bucket\" \"logs\" {\n  bucket = \"${local.name_prefix}-logs\"\n  tags   = merge(local.common_tags, { Name = \"${local.name_prefix}-logs\" })\n}\n```\n\n`merge` は同じキーがあると後の引数が勝ちます。🔴 「locals に共通部品を置き、resource 側で merge して個別化する」流れは実務コードの至る所に出るので、必ず追えるようにしましょう。",
+  "sample": "# 命名とタグの定番: name_prefix と common_tags を locals に集約し、\n# resource 側では merge で個別タグ(Name など)を足します。\nvariable \"project\" {\n  default = \"app\"\n}\n\nvariable \"env\" {\n  default = \"dev\"\n}\n\nlocals {\n  name_prefix = \"${var.project}-${var.env}\"\n  common_tags = {\n    Project   = var.project\n    Env       = var.env\n    ManagedBy = \"terraform\"\n  }\n}\n\noutput \"bucket_name\" {\n  value = \"${local.name_prefix}-logs\"\n}\n\n# jsonencode はキーをアルファベット順に並べるので出力が安定します\noutput \"bucket_tags\" {\n  value = jsonencode(merge(local.common_tags, { Name = \"${local.name_prefix}-logs\" }))\n}\n",
+  "exercise": {
+    "description": "次の実務風コードを読み、`aws_ecs_service.api` に付く name とタグを再現してください。\n\n```hcl\nlocals {\n  name_prefix = \"${var.project}-${var.env}\" # project = \"skillax\", env = \"prod\"\n  common_tags = {\n    Project   = var.project\n    Env       = var.env\n    ManagedBy = \"terraform\"\n  }\n}\n\nresource \"aws_ecs_service\" \"api\" {\n  name = \"${local.name_prefix}-api\"\n  tags = merge(local.common_tags, { Name = \"${local.name_prefix}-api\" })\n}\n```\n\nvariable `project`(default `\"skillax\"`)と `env`(default `\"prod\"`)を定義し、\n\n- output `name`: サービス名\n- output `tags`: merge の結果を `jsonencode()` した文字列\n\nを出力してください。\n\n**期待出力**\n\n```text\nname = \"skillax-prod-api\"\ntags = \"{\\\"Env\\\":\\\"prod\\\",\\\"ManagedBy\\\":\\\"terraform\\\",\\\"Name\\\":\\\"skillax-prod-api\\\",\\\"Project\\\":\\\"skillax\\\"}\"\n```",
+    "starter": "variable \"project\" {\n  default = \"skillax\"\n}\n\nvariable \"env\" {\n  default = \"prod\"\n}\n\nlocals {\n  # name_prefix と common_tags を書く\n}\n",
+    "stdin": "",
+    "expected_stdout": "name = \"skillax-prod-api\"\ntags = \"{\\\"Env\\\":\\\"prod\\\",\\\"ManagedBy\\\":\\\"terraform\\\",\\\"Name\\\":\\\"skillax-prod-api\\\",\\\"Project\\\":\\\"skillax\\\"}\"\n",
+    "answer": "# merge は後の引数が勝つので、共通タグに同名キーがあっても個別指定で上書きされます。\n# jsonencode はキーをアルファベット順に並べるため、タグの合成結果を\n# 安定した文字列として確認できます(採点にも使えます)。\nvariable \"project\" {\n  default = \"skillax\"\n}\n\nvariable \"env\" {\n  default = \"prod\"\n}\n\nlocals {\n  name_prefix = \"${var.project}-${var.env}\"\n  common_tags = {\n    Project   = var.project\n    Env       = var.env\n    ManagedBy = \"terraform\"\n  }\n  service_name = \"${local.name_prefix}-api\"\n}\n\noutput \"name\" {\n  value = local.service_name\n}\n\noutput \"tags\" {\n  value = jsonencode(merge(local.common_tags, { Name = local.service_name }))\n}\n"
+  }
+}

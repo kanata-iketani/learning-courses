@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 3,
+  "title": "int 型クエリと skip/limit パターン",
+  "priority": "🔴",
+  "text": "クエリパラメータにも `skip: int = 0` のように型ヒントが使えます。URL 上では文字列の \"2\" でも、関数には int の 2 として渡ります。この型変換の代表的な使い道が **skip / limit パターン** です。skip は読み飛ばす件数、limit は取得する最大件数で、一覧データを少しずつ取り出すときの定番の書き方です。🔴 リストのスライス `items[skip : skip + limit]` と組み合わせる形を、手が覚えるまで書きましょう。\n\n```python\n@app.get(\"/items\")\ndef read_items(skip: int = 0, limit: int = 2):\n    return items[skip : skip + limit]\n```",
+  "sample": "# lesson04 ch03: int 型クエリと skip / limit パターン\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nitems = [\"ノート\", \"ペン\", \"消しゴム\", \"定規\", \"はさみ\"]\n\n# skip 件読み飛ばして limit 件だけ返す (一覧を少しずつ取り出す定番の形)\n@app.get(\"/items\")\ndef read_items(skip: int = 0, limit: int = 2):\n    return items[skip : skip + limit]\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/items\").json())                 # 先頭から2件\nprint(client.get(\"/items?skip=2&limit=2\").json())  # 2件飛ばして2件\nprint(client.get(\"/items?skip=4\").json())          # 残りが1件でもエラーにならない\n",
+  "exercise": {
+    "description": "くだものの一覧 `fruits` から、skip / limit で一部を取り出す GET `/fruits` を書いてください。`skip` (int、デフォルト 0) と `limit` (int、デフォルト 3) を受け取り、`fruits[skip : skip + limit]` を返します。\n\n**期待出力**\n\n```text\n['りんご', 'みかん', 'ぶどう']\n['ぶどう', 'もも']\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nfruits = [\"りんご\", \"みかん\", \"ぶどう\", \"もも\", \"バナナ\"]\n\n# ここに GET /fruits のエンドポイントを書く (skip: int = 0, limit: int = 3)\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/fruits\").json())\nprint(client.get(\"/fruits?skip=2&limit=2\").json())\n",
+    "stdin": "",
+    "expected_stdout": "['りんご', 'みかん', 'ぶどう']\n['ぶどう', 'もも']\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nfruits = [\"りんご\", \"みかん\", \"ぶどう\", \"もも\", \"バナナ\"]\n\n# 型ヒント int のおかげで、?skip=2 の \"2\" が数値 2 になりスライスに直接使えます。\n# skip / limit のデフォルト値により、何も付けなければ先頭 3 件が返ります。\n@app.get(\"/fruits\")\ndef read_fruits(skip: int = 0, limit: int = 3):\n    return fruits[skip : skip + limit]\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/fruits\").json())\nprint(client.get(\"/fruits?skip=2&limit=2\").json())\n"
+  }
+}

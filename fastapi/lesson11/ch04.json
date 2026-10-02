@@ -1,0 +1,15 @@
+{
+  "lesson": 11,
+  "chapter": 4,
+  "title": "def と async def の使い分け",
+  "priority": "⚪",
+  "text": "使い分けの目安は 2 つだけです。(1) `await` したい非同期対応ライブラリ(httpx など)を使うなら `async def`。(2) 同期ライブラリ(多くの DB ドライバなど)を使う、または迷ったら `def`。`def` のエンドポイントは FastAPI が別スレッドで実行してくれるため、遅い同期処理があっても全体は止まりません。逆に `async def` の中で同期の重い処理を書くと全体が止まるので注意が必要です。⚪ 今はこの目安の存在だけ知っていれば十分です。\n\n```python\n@app.get(\"/a\")\ndef sync_endpoint():        # 同期ライブラリを使う・迷ったらこちら\n    ...\n\n@app.get(\"/b\")\nasync def async_endpoint():  # await を使うならこちら\n    ...\n```",
+  "sample": "# lesson11 ch04: def と async def の使い分け\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n@app.get(\"/double/{n}\")\ndef double(n: int):\n    # 同期ライブラリを使う処理・迷ったときは def\n    # (FastAPI が別スレッドで動かすので全体は止まらない)\n    return {\"result\": n * 2}\n\nasync def calc_triple(n: int):\n    return n * 3\n\n@app.get(\"/triple/{n}\")\nasync def triple(n: int):\n    # await を使いたいときだけ async def にする\n    result = await calc_triple(n)\n    return {\"result\": result}\n\n# どちらの書き方でも、呼び出す側から見た動きは同じ\nclient = TestClient(app)\nfor path in [\"/double/4\", \"/triple/4\"]:\n    r = client.get(path)\n    print(r.status_code)\n    print(r.json())\n",
+  "exercise": {
+    "description": "def と async def のエンドポイントを 1 つずつ作ってください。\n\n- `GET /double/{n}` を `def` で定義し、`{\"result\": n * 2}` を返す(`n` は int)\n- `GET /triple/{n}` を `async def` で定義し、`{\"result\": n * 3}` を返す\n\n**期待出力**\n\n```text\n200\n{'result': 10}\n200\n{'result': 15}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに def の GET /double/{n} と async def の GET /triple/{n} を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/double/5\")\nprint(r.status_code)\nprint(r.json())\nr = client.get(\"/triple/5\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'result': 10}\n200\n{'result': 15}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n@app.get(\"/double/{n}\")\ndef double(n: int):\n    # await を使わないふつうの処理は def でよい\n    # (FastAPI が別スレッドで実行するので遅くても全体は止まらない)\n    return {\"result\": n * 2}\n\n@app.get(\"/triple/{n}\")\nasync def triple(n: int):\n    # async def でも await なしで書ける。どちらもレスポンスの形は同じ\n    return {\"result\": n * 3}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/double/5\")\nprint(r.status_code)\nprint(r.json())\nr = client.get(\"/triple/5\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

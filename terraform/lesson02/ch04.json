@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 4,
+  "title": "dataソースの読み方",
+  "priority": "🟡",
+  "text": "実務コードには `data` で始まるブロックもよく出てきます。**data ソース**(既存のものを作らずに「読むだけ」のブロック)は `data \"型\" \"名前\" { 検索条件 }` と書き、参照は先頭に `data.` を付けて `data.型.名前.属性` とします。「resource = 作る」「data = 読む」が対応関係です。実務では既存 VPC の検索、最新 AMI の取得、自アカウント ID の取得(`data \"aws_caller_identity\" \"current\"`)が頻出です。演習は `terraform_data` で「よそで作られた値を参照して使う」動きを練習します。🟡 data を見たら「作らずに読んでいる」と分かれば十分です。\n\n実務ではこう書かれることが多いです(読解例):\n\n```hcl\ndata \"aws_vpc\" \"existing\" {          # 既存 VPC を検索して読む\n  tags = { Name = \"main-vpc\" }\n}\n\nresource \"aws_subnet\" \"app\" {\n  vpc_id = data.aws_vpc.existing.id  # 参照は data. で始まる\n}\n```",
+  "sample": "# lesson02 ch04: data ソースの読み方(演習は terraform_data で代用)\n# 実務の data \"aws_...\" は「既存のものを読むだけ」のブロックです。\n\n# ここでは registry を「既存の共有値」に見立てます\nresource \"terraform_data\" \"registry\" {\n  input = \"shared-config-v2\"\n}\n\nresource \"terraform_data\" \"consumer\" {\n  # 読み取った値を使う側。data 参照と同じ「読んで使う」構図です\n  input = terraform_data.registry.output\n}\n\noutput \"consumed\" {\n  value = terraform_data.consumer.output\n}\n\noutput \"verb\" {\n  value = \"read-only\"\n}\n",
+  "exercise": {
+    "description": "AMI ID を data ソースで調べて使う構図を、`terraform_data` で再現します。\n\n1. `terraform_data` リソース `registry` を作り、`input` に `\"ami-12345678\"` を設定(既存の値を読んだ想定)\n2. output `ami_id` でリソース `registry` の `output` 属性を参照で表示\n3. output `readonly` で bool 値 `true` を表示(data ソースは読むだけ、の意味)\n\n**期待出力**\n\n```text\nami_id = \"ami-12345678\"\nreadonly = true\n```",
+    "starter": "# 「既存の値を読んで使う」構図を参照で再現する\n",
+    "stdin": "",
+    "expected_stdout": "ami_id = \"ami-12345678\"\nreadonly = true\n",
+    "answer": "# 実務の data ソースは「作らずに読む」ブロック。ここでは registry を\n# 既存の値に見立てて、参照で読み取る構図だけを再現しています。\n# bool 値はクォートなしで true / false と書きます。\nresource \"terraform_data\" \"registry\" {\n  input = \"ami-12345678\"\n}\n\noutput \"ami_id\" {\n  value = terraform_data.registry.output\n}\n\noutput \"readonly\" {\n  value = true\n}\n"
+  }
+}

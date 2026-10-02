@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 4,
+  "title": "map と filter",
+  "priority": "🟡",
+  "text": "配列を加工する 2 大メソッドを紹介します。**map** は全要素を変換した新しい配列を作り、**filter** は条件に合う要素だけを集めた新しい配列を作ります。どちらも、もとの配列は変わりません。`( )` の中の `n => n * 2` は**アロー関数**(関数の短い書き方。「n を受け取って n * 2 を返す」という意味。次のレッスンで詳しく学びます)です。map と filter は Vue で一覧データを加工するときに毎日のように使うので、形だけでも先に見ておきましょう。🟡 いまは「map = 全部変換、filter = 選別」というイメージをつかめれば十分です。\n\n```js\nconst numbers = [1, 2, 3];\nconsole.log(numbers.map(n => n * 2));           // [ 2, 4, 6 ]\nconsole.log(numbers.filter(n => n >= 2));       // [ 2, 3 ]\n```",
+  "sample": "const numbers = [1, 2, 3, 4, 5];\n\n// map: 全要素を変換した「新しい配列」を作ります\n// n => n * 2 は「n を受け取って n * 2 を返す」短い関数です(次レッスンで学びます)\nconst doubled = numbers.map(n => n * 2);\nconsole.log(doubled);  // [ 2, 4, 6, 8, 10 ]\n\n// filter: 条件に合う要素だけを集めた「新しい配列」を作ります\nconst evens = numbers.filter(n => n % 2 === 0);\nconsole.log(evens);  // [ 2, 4 ]\n\n// もとの配列は変わりません\nconsole.log(numbers);  // [ 1, 2, 3, 4, 5 ]\n",
+  "exercise": {
+    "description": "配列 `const prices = [120, 80, 300, 150];` について、次の 2 つの新しい配列を作り、それぞれそのまま console.log で出力してください。\n\n1. filter で「100 円以上の要素だけ」を集めた配列\n2. map で「全要素を 2 倍」にした配列\n\n**期待出力**\n\n```text\n[ 120, 300, 150 ]\n[ 240, 160, 600, 300 ]\n```",
+    "starter": "const prices = [120, 80, 300, 150];\n// 1. filter で 100 以上だけを集めて表示\n\n// 2. map で全要素を 2 倍にして表示\n",
+    "stdin": "",
+    "expected_stdout": "[ 120, 300, 150 ]\n[ 240, 160, 600, 300 ]\n",
+    "answer": "const prices = [120, 80, 300, 150];\n// filter は条件(p >= 100)が true になった要素だけを集めます\nconsole.log(prices.filter(p => p >= 100));\n// map は全要素を変換します。どちらも、もとの prices は変わりません\nconsole.log(prices.map(p => p * 2));\n"
+  }
+}

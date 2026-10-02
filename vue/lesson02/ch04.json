@@ -1,0 +1,16 @@
+{
+  "lesson": 2,
+  "chapter": 4,
+  "kind": "web",
+  "title": "入力部品(input, button, textarea, select)",
+  "priority": "🔴",
+  "text": "ユーザーに何かを入力してもらう部品(フォーム部品)を学びます。`<input>` は**1 行の入力欄**(終了タグなし。`placeholder` 属性で薄い案内文を出せます)、`<textarea>` は**複数行の入力欄**、`<button>` は**押せるボタン**、`<select>` は**プルダウン**(クリックで選択肢が開くメニュー)で、選択肢 1 つ 1 つを `<option>` タグで書きます。今はまだ押しても何も起きませんが、後で JavaScript や Vue とつなぐと本物のアプリになります。🔴 4 種類の部品を実際に並べて、触って動きを確かめましょう。\n\n```html\n<input placeholder=\"名前\">\n<select>\n  <option>りんご</option>\n  <option>みかん</option>\n</select>\n<button>送信</button>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>入力部品の見本</title>\n</head>\n<body>\n  <h1>アンケート(見本)</h1>\n\n  <p>お名前: <input placeholder=\"山田はなこ\"></p>\n\n  <p>好きな季節:\n    <select>\n      <option>春</option>\n      <option>夏</option>\n      <option>秋</option>\n      <option>冬</option>\n    </select>\n  </p>\n\n  <p>ひとことメッセージ:</p>\n  <p><textarea rows=\"4\" cols=\"40\" placeholder=\"複数行の文章が書けます\"></textarea></p>\n\n  <p><button>送信する</button>(今はまだ押しても何も起きません)</p>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "starter を編集して、「プロフィール登録フォーム」を作りましょう。実際に文字を打ったり選択肢を選んだりして、部品の動きを確かめてください。\n\n**確認ポイント**\n\n1. `<input>` の 1 行入力欄があり、クリックして文字を入力できる\n2. `<select>` のプルダウンに `<option>` の選択肢が 3 つ以上あり、切り替えて選べる\n3. `<textarea>` の複数行入力欄があり、改行しながら文章を書ける\n4. `<button>` のボタンが表示され、マウスでクリックできる(何も起きなくて OK)\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>プロフィール登録</title>\n</head>\n<body>\n  <h1>プロフィール登録</h1>\n  <p>ニックネーム: <!-- ここに input --></p>\n  <p>すきな飲み物: <!-- ここに select と option --></p>\n  <p>自己紹介文:</p>\n  <p><!-- ここに textarea --></p>\n  <p><!-- ここに button --></p>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>プロフィール登録</title>\n</head>\n<body>\n  <h1>プロフィール登録</h1>\n  <!-- 工夫した点: placeholder を付けると、入力欄に薄い字で記入例を出せます -->\n  <p>ニックネーム: <input placeholder=\"はなちゃん\"></p>\n  <p>すきな飲み物:\n    <select>\n      <option>コーヒー</option>\n      <option>紅茶</option>\n      <option>ジュース</option>\n    </select>\n  </p>\n  <p>自己紹介文:</p>\n  <!-- 工夫した点: rows と cols で textarea のおおよその大きさを決められます -->\n  <p><textarea rows=\"4\" cols=\"40\" placeholder=\"自由に書いてください\"></textarea></p>\n  <p><button>登録する</button></p>\n</body>\n</html>\n"
+  }
+}

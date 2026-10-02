@@ -1,0 +1,15 @@
+{
+  "lesson": 1,
+  "chapter": 2,
+  "title": "HCLブロックの解剖",
+  "priority": "🔴",
+  "text": "HCL のコードは**ブロック**(`resource \"...\" \"...\" { ... }` のようなひとまとまり)を並べて書きます。ブロックは「種別 + ラベル + 本体 `{ }`」で構成され、本体には `名前 = 式` の形で**引数**(argument。ブロックに渡す設定値)を書きます。**式**(expression。値を作る書き方)には文字列や数値のリテラルのほか、後で学ぶ参照や関数も置けます。コメントは `#` が主流で、`//` と `/* */` も使えます。実務コードを読むときは「resource はラベル2つ、variable や output はラベル1つ」という対応を押さえると構造が一気に見えるようになります。🔴 ブロックの形は今後すべての土台なので、手が覚えるまで書きましょう。\n\n```hcl\nresource \"terraform_data\" \"web\" {  # 種別 resource + ラベル2つ\n  input = \"hello\"                  # 引数: 名前 = 式\n}\n\noutput \"name\" {  # 種別 output + ラベル1つ\n  value = \"web\"\n}\n```",
+  "sample": "# lesson01 ch02: ブロックの解剖\n# ブロックは「種別 + ラベル + { 引数 }」でできています。\n\nresource \"terraform_data\" \"web\" {\n  # 引数は「名前 = 式」。右辺の式にはリテラルや参照を書けます\n  input = \"block-anatomy\"\n}\n\n// コメントは # のほかに // も使えます(実務では # が主流)\n\noutput \"web_input\" {\n  # 式の例: リソース参照(詳しくは lesson02)\n  value = terraform_data.web.output\n}\n\noutput \"block_type\" {\n  # 式の例: 文字列リテラル\n  value = \"resource\"\n}\n",
+  "exercise": {
+    "description": "`terraform_data` リソース `note` を作り、`input` に `\"HCLは宣言的\"` を設定してください。さらに output ブロックを2つ書きます。\n\n- output `note`: リソース `note` の `output` 属性を表示\n- output `kind`: 文字列 `\"resource\"` を表示\n\n`#` のコメントで「ここがラベル」など自分用のメモも1行入れてみましょう(採点には影響しません)。\n\n**期待出力**\n\n```text\nkind = \"resource\"\nnote = \"HCLは宣言的\"\n```",
+    "starter": "# resource ブロック(ラベル2つ)と output ブロック(ラベル1つ)を書く\n",
+    "stdin": "",
+    "expected_stdout": "kind = \"resource\"\nnote = \"HCLは宣言的\"\n",
+    "answer": "# resource ブロックは「種別 resource + ラベル2つ(型と名前)+ 本体」で書きます。\n# 本体の「名前 = 式」が引数で、output ブロックはラベル1つです。\nresource \"terraform_data\" \"note\" {\n  input = \"HCLは宣言的\" # 引数: 名前 = 式\n}\n\noutput \"note\" {\n  value = terraform_data.note.output\n}\n\noutput \"kind\" {\n  value = \"resource\"\n}\n"
+  }
+}

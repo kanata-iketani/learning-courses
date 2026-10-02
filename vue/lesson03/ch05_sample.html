@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>flexbox で横並び</title>
+<style>
+  .box { border: 2px solid seagreen; background-color: honeydew; padding: 16px; }
+  .row1 { display: flex; gap: 8px; }
+  .row2 { display: flex; gap: 8px; justify-content: center; }
+  .row3 { display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+  <h1>flexbox で横並び</h1>
+  <p>親に display: flex(左寄せ・gap 8px):</p>
+  <div class="row1"><div class="box">A</div><div class="box">B</div><div class="box">C</div></div>
+  <p>justify-content: center(中央寄せ):</p>
+  <div class="row2"><div class="box">A</div><div class="box">B</div><div class="box">C</div></div>
+  <p>justify-content: space-between(両端に広げる):</p>
+  <div class="row3"><div class="box">A</div><div class="box">B</div><div class="box">C</div></div>
+</body>
+</html>

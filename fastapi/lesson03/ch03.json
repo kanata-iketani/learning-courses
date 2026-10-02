@@ -1,0 +1,15 @@
+{
+  "lesson": 3,
+  "chapter": 3,
+  "title": "複数のパスパラメータと順序",
+  "priority": "🟡",
+  "text": "パスパラメータは `/users/{user_id}/items/{item_id}` のように1つの URL に複数置けます。注意が必要なのは、`/users/me`(自分の情報を返すなどの固定パス)と `/users/{user_id}`(可変パス)が並ぶ場合です。FastAPI は定義した順にパスを照合するため、可変パスを先に書くと `/users/me` へのリクエストまで `user_id = \"me\"` として拾われてしまいます。🟡 「固定パスは可変パスより先に定義する」という順序のルールを理解しましょう。\n\n```python\n@app.get(\"/users/me\")      # 固定パスを先に\ndef read_me():\n    return {\"user\": \"me\"}\n\n@app.get(\"/users/{user_id}\")\ndef read_user(user_id: int):\n    return {\"user_id\": user_id}\n```",
+  "sample": "# lesson03 ch03: 固定パスは可変パスより先に定義する\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 固定パス /users/me を先に書く (後だと {user_id} に \"me\" が拾われて 422 になる)\n@app.get(\"/users/me\")\ndef read_me():\n    return {\"user\": \"me\"}\n\n@app.get(\"/users/{user_id}\")\ndef read_user(user_id: int):\n    return {\"user_id\": user_id}\n\n# パスパラメータは複数置ける\n@app.get(\"/users/{user_id}/items/{item_id}\")\ndef read_user_item(user_id: int, item_id: int):\n    return {\"user_id\": user_id, \"item_id\": item_id}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/users/me\").json())\nprint(client.get(\"/users/7\").json())\nprint(client.get(\"/users/7/items/3\").json())\n",
+  "exercise": {
+    "description": "次の2つのエンドポイントを「正しい順序で」定義してください。\n\n- GET `/users/me` : `{\"user\": \"current\"}` を返す(固定パス)\n- GET `/users/{user_id}` : `user_id` を int で受け取り `{\"user_id\": user_id}` を返す(可変パス)\n\n順序を間違えると `/users/me` が 422 になります。\n\n**期待出力**\n\n```text\n{'user': 'current'}\n{'user_id': 10}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに /users/me と /users/{user_id} を正しい順序で書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/users/me\").json())\nprint(client.get(\"/users/10\").json())\n",
+    "stdin": "",
+    "expected_stdout": "{'user': 'current'}\n{'user_id': 10}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# パスは定義順に照合されるため、固定パス /users/me を先に書きます。\n# 逆順だと \"me\" が user_id: int に渡って変換に失敗し、422 になります。\n@app.get(\"/users/me\")\ndef read_me():\n    return {\"user\": \"current\"}\n\n@app.get(\"/users/{user_id}\")\ndef read_user(user_id: int):\n    return {\"user_id\": user_id}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/users/me\").json())\nprint(client.get(\"/users/10\").json())\n"
+  }
+}

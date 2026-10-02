@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 3,
+  "title": "モジュールを自作する",
+  "priority": "🔴",
+  "text": "モジュールの自作は、ディレクトリを切って variable / locals / output を置くだけです。実務でよくあるのが **naming モジュール**(命名規約を 1 か所に集約するモジュール)で、「app名-環境名」のような規則を全リソースへ一貫して適用できます。命名規約が変わってもモジュール 1 か所を直せば済むのが利点です。🔴 「規約や決まりごとをモジュールに閉じ込める」という発想は、実務コード読解でも設計でも要になります。\n\n```hcl\nmodule \"naming\" {\n  source = \"./modules/naming\"\n  env    = \"prod\"\n  app    = \"skillax\"\n}\n\n# 使う側は module.naming.resource_name などを参照するだけ\n# bucket = module.naming.bucket_name # => \"skillax-prod-logs\"\n```",
+  "sample": "# env と app から名前を組み立てる naming モジュールの最小例です。\n\nmodule \"naming\" {\n  source = \"./modules/naming\"\n  env    = \"stg\"\n  app    = \"api\"\n}\n\noutput \"prefix\" {\n  value = module.naming.prefix\n}\n\n# === file: modules/naming/main.tf ===\nvariable \"env\" {\n  type = string\n}\n\nvariable \"app\" {\n  type = string\n}\n\n# 命名規約「app名-環境名」をこのモジュールに集約する\noutput \"prefix\" {\n  value = \"${var.app}-${var.env}\"\n}\n",
+  "exercise": {
+    "description": "命名モジュール `./modules/naming` を自作してください。\n\n1. モジュール側: variable `env` と `app` を受け取り、output `resource_name` で `\"app名-環境名\"`、output `bucket_name` で `\"app名-環境名-logs\"` を返す\n2. 呼び出し側: `env = \"prod\"`、`app = \"skillax\"` を渡す\n3. 呼び出し側の output `resource_name` と `bucket_name` でモジュールの出力を表示する\n\n**期待出力**\n\n```text\nbucket_name = \"skillax-prod-logs\"\nresource_name = \"skillax-prod\"\n```",
+    "starter": "module \"naming\" {\n  source = \"./modules/naming\"\n  # ここに引数を書く\n}\n\n# ここに呼び出し側の output を 2 つ書く\n\n# === file: modules/naming/main.tf ===\n# ここにモジュール本体(variable と output)を書く\n",
+    "stdin": "",
+    "expected_stdout": "bucket_name = \"skillax-prod-logs\"\nresource_name = \"skillax-prod\"\n",
+    "answer": "module \"naming\" {\n  source = \"./modules/naming\"\n  env    = \"prod\"\n  app    = \"skillax\"\n}\n\n# terraform output はアルファベット順に表示されます(bucket_name が先)\noutput \"resource_name\" {\n  value = module.naming.resource_name\n}\n\noutput \"bucket_name\" {\n  value = module.naming.bucket_name\n}\n\n# === file: modules/naming/main.tf ===\nvariable \"env\" {\n  type = string\n}\n\nvariable \"app\" {\n  type = string\n}\n\n# 命名規約をこの 1 ファイルに集約。規約変更時はここだけ直せばよい\noutput \"resource_name\" {\n  value = \"${var.app}-${var.env}\"\n}\n\noutput \"bucket_name\" {\n  value = \"${var.app}-${var.env}-logs\"\n}\n"
+  }
+}

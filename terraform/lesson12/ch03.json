@@ -1,0 +1,15 @@
+{
+  "lesson": 12,
+  "chapter": 3,
+  "title": "required_providersとバージョン制約",
+  "priority": "🟡",
+  "text": "**required_providers**(使うプロバイダの入手元とバージョン制約の宣言)は `terraform` ブロックの中に書きます。\n\n```hcl\nterraform {\n  required_version = \">= 1.5.0\"\n  required_providers {\n    aws = {\n      source  = \"hashicorp/aws\"\n      version = \"~> 5.67\"\n    }\n  }\n}\n```\n\n`>=` は下限だけの指定です。`~>`(悲観的制約)は「最後に書いた桁だけ上げてよい」という意味で、`~> 5.67` は 5.67 以上 6.0 未満、`~> 5.67.0` なら 5.67.x のパッチ更新のみ許可です。メジャーバージョンアップ事故を防ぐため、実務ではほぼ `~>` が使われます。🟡 `~>` がどの範囲までの更新を許すかを読めるようにしましょう。",
+  "sample": "# バージョン制約の意味を locals の対応表で整理します。\nlocals {\n  constraints = {\n    \"~> 5.67\"   = \"5.67 以上 6.0 未満(マイナー更新まで許可)\"\n    \"~> 5.67.0\" = \"5.67.0 以上 5.68.0 未満(パッチ更新のみ許可)\"\n    \">= 1.5.0\"  = \"1.5.0 以上なら何でもよい(上限なし)\"\n  }\n}\n\noutput \"pessimistic_minor\" {\n  value = local.constraints[\"~> 5.67\"]\n}\n\noutput \"lower_bound_only\" {\n  value = local.constraints[\">= 1.5.0\"]\n}\n",
+  "exercise": {
+    "description": "required_providers に `version = \"5.67.3\"` と完全固定されている構成がありました。このバージョン文字列を分解して読み取ります。\n\nvariable `provider_version`(default `\"5.67.3\"`)を定義し、`split(\".\", ...)` で分解して次を**数値**で出力してください。\n\n- output `major`: メジャーバージョン\n- output `minor`: マイナーバージョン\n- output `patch`: パッチバージョン\n\n(ヒント: split の結果は文字列のリストなので `tonumber()` で数値にします)\n\n**期待出力**\n\n```text\nmajor = 5\nminor = 67\npatch = 3\n```",
+    "starter": "variable \"provider_version\" {\n  default = \"5.67.3\"\n}\n\nlocals {\n  parts = split(\".\", var.provider_version)\n}\n",
+    "stdin": "",
+    "expected_stdout": "major = 5\nminor = 67\npatch = 3\n",
+    "answer": "# split(\".\", \"5.67.3\") は [\"5\", \"67\", \"3\"] という文字列リストになります。\n# ~> 5.67 という制約なら major(5) は固定で minor 以下の更新だけ許される、\n# という読み方がこの分解と対応しています。\nvariable \"provider_version\" {\n  default = \"5.67.3\"\n}\n\nlocals {\n  parts = split(\".\", var.provider_version)\n}\n\noutput \"major\" {\n  value = tonumber(local.parts[0])\n}\n\noutput \"minor\" {\n  value = tonumber(local.parts[1])\n}\n\noutput \"patch\" {\n  value = tonumber(local.parts[2])\n}\n"
+  }
+}

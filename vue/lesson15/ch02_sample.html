@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>watch で変化を見張る</title>
+</head>
+<body>
+  <div id="app">
+    <p>名前: <input v-model="name"></p>
+    <p>変更履歴(1 文字変わるたびに記録されます):</p>
+    <ul>
+      <li v-for="(log, index) in logs" :key="index">{{ log }}</li>
+    </ul>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { name: "", logs: [] };
+      },
+      watch: {
+        // data の name と同じ名前の関数を書くと、name の変化を見張れる
+        name(newValue, oldValue) {
+          this.logs.push("「" + oldValue + "」→「" + newValue + "」");
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

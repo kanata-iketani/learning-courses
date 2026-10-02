@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>買い物リスト</title>
+</head>
+<body>
+  <div id="app">
+    <p>買い物リスト</p>
+    <ul>
+      <!-- :key には重複しない id を渡す。index より確実な目印になる -->
+      <li v-for="item in items" :key="item.id">
+        <label><input type="checkbox" v-model="item.done"> {{ item.text }}</label>
+      </li>
+    </ul>
+    <p>まだ買っていないもの:</p>
+    <ul>
+      <!-- 工夫した点: v-for は template、v-if は li と、役割ごとにタグを分けた。
+           同じタグに書くと Vue 3 では v-if が先に評価されてエラーになる -->
+      <template v-for="item in items" :key="item.id">
+        <li v-if="!item.done">{{ item.text }}</li>
+      </template>
+    </ul>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          items: [
+            { id: 1, text: "牛乳", done: false },
+            { id: 2, text: "卵", done: false },
+            { id: 3, text: "食パン", done: false }
+          ]
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>好きな数を見張る</title>
+</head>
+<body>
+  <div id="app">
+    <p>好きな数: <input type="number" v-model="favorite"></p>
+    <p>変更回数: {{ changeCount }} 回</p>
+    <ul>
+      <li v-for="(log, index) in logs" :key="index">{{ log }}</li>
+    </ul>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { favorite: 7, changeCount: 0, logs: [] };
+      },
+      watch: {
+        // 工夫した点: 引数の順番は (新しい値, 古い値)。取り違えに注意
+        favorite(newValue, oldValue) {
+          this.changeCount++;
+          this.logs.push(oldValue + " から " + newValue + " に変わりました");
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

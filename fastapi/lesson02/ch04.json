@@ -1,0 +1,15 @@
+{
+  "lesson": 2,
+  "chapter": 4,
+  "title": "レスポンスの中身を調べる",
+  "priority": "🟡",
+  "text": "レスポンスには本文以外の情報も含まれます。**ステータスコード** は処理結果を表す3桁の数字で、`200` は成功、`404` は「パスが見つからない」を意味します。**ヘッダー** はレスポンスに付く補足情報で、`content-type` ヘッダーを見ると本文の形式が分かります(FastAPI は `application/json` を返します)。定義していないパスへのリクエストには、FastAPI が自動で 404 を返します。🟡 `r.status_code`・`r.json()`・`r.headers[...]` の3つでレスポンスを調べられることを理解しましょう。\n\n```python\nr = client.get(\"/\")\nprint(r.status_code)              # 200\nprint(r.headers[\"content-type\"])  # application/json\n```",
+  "sample": "# lesson02 ch04: レスポンスの中身を調べる\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n@app.get(\"/\")\ndef read_root():\n    return {\"message\": \"Hello\"}\n\n# --- 動作確認 ---\nclient = TestClient(app)\n\n# 定義済みのパス: 200 (成功)\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.headers[\"content-type\"])  # 本文の形式は JSON\nprint(r.json())\n\n# 定義していないパス: 404 (見つからない) が自動で返る\nr = client.get(\"/nothing\")\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "GET `/ping` で `{\"ping\": \"pong\"}` を返すエンドポイントを書いてください。動作確認部分は `/ping` のステータスコード・content-type ヘッダー・JSON を出力したあと、定義していない `/nothing` を呼んで 404 の様子も出力します。\n\n**期待出力**\n\n```text\n200\napplication/json\n{'ping': 'pong'}\n404\n{'detail': 'Not Found'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /ping のエンドポイントを書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/ping\")\nprint(r.status_code)\nprint(r.headers[\"content-type\"])\nprint(r.json())\nr = client.get(\"/nothing\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\napplication/json\n{'ping': 'pong'}\n404\n{'detail': 'Not Found'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 定義したパスは 200 で返り、content-type は自動で application/json になります。\n# 定義していないパスは、自分で書かなくても FastAPI が 404 を返してくれます。\n@app.get(\"/ping\")\ndef ping():\n    return {\"ping\": \"pong\"}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/ping\")\nprint(r.status_code)\nprint(r.headers[\"content-type\"])\nprint(r.json())\nr = client.get(\"/nothing\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>チェックボックスとセレクト</title>
+</head>
+<body>
+  <div id="app">
+    <label><input type="checkbox" v-model="agree"> 利用規約に同意する</label>
+    <p>agree の値: {{ agree }}</p>
+    <hr>
+    <p>文字の色を選んでください:</p>
+    <select v-model="color">
+      <option value="tomato">赤系(tomato)</option>
+      <option value="royalblue">青系(royalblue)</option>
+      <option value="seagreen">緑系(seagreen)</option>
+    </select>
+    <p v-bind:style="{ color: color }">この文字が選んだ色に変わります。</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { agree: false, color: "tomato" };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

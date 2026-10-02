@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>いいねボタン</title>
+</head>
+<body>
+  <div id="app">
+    <p>お気に入りの投稿に「いいね」しよう:</p>
+    <like-button></like-button>
+    <like-button></like-button>
+    <like-button></like-button>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    const app = createApp({});
+    app.component("like-button", {
+      // 工夫した点: data は必ず関数で返す。だから 3 つのボタンが独立して数えられる
+      data() {
+        return { likes: 0 };
+      },
+      template: `<p><button v-on:click="likes++">♥ いいね</button> {{ likes }} 件</p>`
+    });
+    // 登録は mount より前に書く
+    app.mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 4,
+  "title": "薄いモジュールvs厚いモジュール",
+  "priority": "🟡",
+  "text": "実務のモジュール設計には流儀の対立があります。**薄いモジュール**(リソース 1 個を包み、引数をほぼ素通しするモジュール)は柔軟で挙動が追いやすい一方、呼び出し側の記述が長くなります。**厚いモジュール**(複数リソースと社内規約を焼き込み、少ない入力で多くを作るモジュール)は規約を強制でき記述も短い一方、規約から外れる個別調整が難しくなります。🟡 読解時は「variable の数」と「中の resource の数」の比を見ると流儀を推測できます。variable が多く resource が 1 個なら薄い、その逆なら厚いモジュールです。\n\n```hcl\n# 厚いモジュールの典型: 入力 2 個で VPC + サブネット + NAT までまとめて作る\nmodule \"network\" {\n  source = \"./modules/network\"\n  env    = \"prod\"\n  cidr   = \"10.0.0.0/16\"\n}\n```",
+  "sample": "# 「variable の数と resource の数の比」で流儀を推測するロジックです。\n\nlocals {\n  # あるモジュールを読解してカウントした結果とします\n  input_count    = 14 # variable の数\n  resource_count = 1  # resource の数\n\n  # resource が入力より多ければ「厚い」、少なければ「薄い」と推測\n  style = local.resource_count > local.input_count ? \"thick\" : \"thin\"\n}\n\noutput \"style\" {\n  value = local.style\n}\n",
+  "exercise": {
+    "description": "2 つのモジュールの読解メモから、それぞれの流儀を判定してください。\n\n1. locals にマップ `modules` を定義する: キー `s3_bucket` は `{ inputs = 14, resources = 1 }`、キー `vpc` は `{ inputs = 4, resources = 12 }`\n2. for 式で各モジュールを `\"名前:判定\"` 形式にする。判定は `resources` が `inputs` より大きければ `\"thick\"`、そうでなければ `\"thin\"`\n3. output `styles` で `join(\", \", ...)` した結果を表示する(マップの for 式はキーのアルファベット順に回ります)\n\n**期待出力**\n\n```text\nstyles = \"s3_bucket:thin, vpc:thick\"\n```",
+    "starter": "locals {\n  modules = {\n    # ここに 2 つのモジュールの読解メモを書く\n  }\n}\n\n# ここに for 式と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "styles = \"s3_bucket:thin, vpc:thick\"\n",
+    "answer": "locals {\n  modules = {\n    s3_bucket = { inputs = 14, resources = 1 }  # 入力が多くリソース 1 個 → 薄い\n    vpc       = { inputs = 4, resources = 12 }  # 入力が少なくリソース多数 → 厚い\n  }\n\n  # マップへの for 式は k(キー), v(値) の 2 変数で回り、キーのアルファベット順になります\n  styles = [for k, v in local.modules : \"${k}:${v.resources > v.inputs ? \"thick\" : \"thin\"}\"]\n}\n\noutput \"styles\" {\n  value = join(\", \", local.styles)\n}\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 7,
+  "chapter": 1,
+  "title": "配列の基本 〜 [ ]・添字・length",
+  "priority": "🔴",
+  "text": "**配列**は複数の値を順番に並べて入れる箱で、`[ ]` で作ります。Python のリストと同じ発想です。各要素は**添字**(要素の位置を表す番号。0 から始まる)で取り出します。要素数は `length` で調べます(Python の `len(fruits)` は JavaScript では `fruits.length` です)。配列をそのまま console.log すると、Node.js では `[ 'りんご', 'みかん' ]` のようにスペース入りで表示されます。🔴 「先頭は 0 番、最後は length - 1 番」を覚えましょう。\n\n```js\nconst fruits = [\"りんご\", \"みかん\", \"ぶどう\"];\nconsole.log(fruits[0]);      // りんご\nconsole.log(fruits.length);  // 3\n```",
+  "sample": "// 配列は [ ] で作ります(Python のリストと同じ発想)\nconst fruits = [\"りんご\", \"みかん\", \"ぶどう\"];\n\n// 添字は 0 から始まります\nconsole.log(fruits[0]);  // りんご\nconsole.log(fruits[2]);  // ぶどう\n\n// 要素数は length (Python の len(fruits) に相当)\nconsole.log(fruits.length);  // 3\n\n// 最後の要素は length - 1 番目です\nconsole.log(fruits[fruits.length - 1]);  // ぶどう\n\n// 配列をそのまま表示すると、Node.js ではこのように見えます\nconsole.log(fruits);  // [ 'りんご', 'みかん', 'ぶどう' ]\n",
+  "exercise": {
+    "description": "配列 `const colors = [\"赤\", \"青\", \"黄\", \"緑\"];` について、次の 3 つを順に出力してください。\n\n1. 最初の要素\n2. 最後の要素(要素数が変わっても動くように `length` を使って取り出す)\n3. 要素数\n\n**期待出力**\n\n```text\n赤\n緑\n4\n```",
+    "starter": "const colors = [\"赤\", \"青\", \"黄\", \"緑\"];\n// 1. 最初の要素\n\n// 2. 最後の要素 (length を使う)\n\n// 3. 要素数\n",
+    "stdin": "",
+    "expected_stdout": "赤\n緑\n4\n",
+    "answer": "const colors = [\"赤\", \"青\", \"黄\", \"緑\"];\n// 添字は 0 から始まるので、最初の要素は colors[0] です\nconsole.log(colors[0]);\n// 最後の添字は「要素数 - 1」。length を使えば要素が増えても動きます\nconsole.log(colors[colors.length - 1]);\nconsole.log(colors.length);\n"
+  }
+}

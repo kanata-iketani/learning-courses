@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v-model の基本</title>
+</head>
+<body>
+  <div id="app">
+    <p>名前を入力してください:</p>
+    <input v-model="name" placeholder="例: 山田太郎">
+    <p>こんにちは、{{ name }} さん！</p>
+    <p>いま {{ name.length }} 文字です。</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { name: "" };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

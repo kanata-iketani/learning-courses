@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 4,
+  "title": "テンプレートリテラル 〜 `${}` で埋め込む",
+  "priority": "🔴",
+  "text": "3 種類目のクォートがバッククォート `` ` `` です。これで囲んだ文字列を**テンプレートリテラル**(文字列の中に `${式}` で変数や計算結果を埋め込める書き方)と呼びます。Python の f-string `f\"こんにちは、{name}さん\"` に相当します。`+` でつなぐより読みやすく、Vue のテンプレートでも同じ「埋め込み」の発想が出てくるため、とても重要な書き方です。🔴 `${}` の中に変数も計算式も書けることを覚えましょう。\n\n```js\nconst name = \"花子\";\nconsole.log(`こんにちは、${name}さん`);  // Python: f\"こんにちは、{name}さん\"\n```",
+  "sample": "const name = \"花子\";\nconst age = 20;\n\n// バッククォート ` で囲むと ${} で変数を埋め込めます\nconsole.log(`こんにちは、${name}さん`);\n\n// ${} の中では計算もできます\nconsole.log(`${age}歳、来年は${age + 1}歳です`);\n\n// + で連結しても同じ結果ですが、読みにくくなりがちです\nconsole.log(\"こんにちは、\" + name + \"さん\");\n\n// Python:     f\"こんにちは、{name}さん\"\n// JavaScript: `こんにちは、${name}さん`\n",
+  "exercise": {
+    "description": "`const` で変数 `item`(`\"ノート\"`)、`price`(150)、`count`(3)を作り、テンプレートリテラルを使って次の 2 行を出力してください。金額は `${}` の中で計算しましょう。\n\n**期待出力**\n\n```text\nノートを3冊買うと450円です\n1冊あたり150円です\n```",
+    "starter": "const item = \"ノート\";\nconst price = 150;\nconst count = 3;\n// テンプレートリテラルで 2 行出力しましょう\n",
+    "stdin": "",
+    "expected_stdout": "ノートを3冊買うと450円です\n1冊あたり150円です\n",
+    "answer": "const item = \"ノート\";\nconst price = 150;\nconst count = 3;\n// バッククォートで囲み、${} の中に変数や計算式をそのまま書けます\n// + で連結するより、文章の形が崩れず読みやすくなります\nconsole.log(`${item}を${count}冊買うと${price * count}円です`);\nconsole.log(`1冊あたり${price}円です`);\n"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "lesson": 13,
+  "chapter": 3,
+  "title": "セキュリティグループのingress列挙",
+  "priority": "🟡",
+  "text": "**セキュリティグループ**(SG。AWS の通信許可ルールの集合)の `ingress`(内向きの許可ルール)には、ベタ書きから `dynamic` + リスト駆動へ移行した痕跡がよく見られます。\n\n```hcl\n# 昔: ポートごとにコピペ\ningress {\n  from_port   = 80\n  to_port     = 80\n  protocol    = \"tcp\"\n  cidr_blocks = [\"10.0.0.0/8\"]\n}\n\n# 今: ポートのリストから生成\ndynamic \"ingress\" {\n  for_each = var.ingress_ports\n  content {\n    from_port   = ingress.value\n    to_port     = ingress.value\n    protocol    = \"tcp\"\n    cidr_blocks = [var.internal_cidr]\n  }\n}\n```\n\n🟡 dynamic 版を見たら「for_each の元リストに何が入るか」を variable まで遡り、生成されるルールを数えられるようにしましょう。",
+  "sample": "# ベタ書きされていた ingress を「ポートのリスト」に還元して読む練習です。\nvariable \"ingress_ports\" {\n  default = [80, 443]\n}\n\nvariable \"internal_cidr\" {\n  default = \"10.0.0.0/8\"\n}\n\nlocals {\n  # dynamic \"ingress\" が生成するルールを for 式で言語化します\n  rules = [for p in var.ingress_ports : \"tcp/${p} from ${var.internal_cidr}\"]\n}\n\noutput \"rule_count\" {\n  value = length(local.rules)\n}\n\noutput \"rules\" {\n  value = join(\", \", local.rules)\n}\n",
+  "exercise": {
+    "description": "次の SG 定義を読み、生成される ingress ルールを for 式で言語化してください。\n\n```hcl\nvariable \"ingress_ports\" {\n  default = [80, 443, 8080]\n}\n\nresource \"aws_security_group\" \"app\" {\n  name = \"app-sg\"\n\n  dynamic \"ingress\" {\n    for_each = var.ingress_ports\n    content {\n      from_port   = ingress.value\n      to_port     = ingress.value\n      protocol    = \"tcp\"\n      cidr_blocks = [\"10.0.0.0/8\"]\n    }\n  }\n}\n```\n\nvariable `ingress_ports`(default `[80, 443, 8080]`)を定義し、\n\n- output `rule_count`: 生成されるルールの数\n- output `rules`: 各ポートを `allow tcp/<port> from 10.0.0.0/8` の形にして `\", \"` で連結\n\nを出力してください。\n\n**期待出力**\n\n```text\nrule_count = 3\nrules = \"allow tcp/80 from 10.0.0.0/8, allow tcp/443 from 10.0.0.0/8, allow tcp/8080 from 10.0.0.0/8\"\n```",
+    "starter": "variable \"ingress_ports\" {\n  default = [80, 443, 8080]\n}\n\nlocals {\n  # for 式でルールの文字列リストを作る\n}\n",
+    "stdin": "",
+    "expected_stdout": "rule_count = 3\nrules = \"allow tcp/80 from 10.0.0.0/8, allow tcp/443 from 10.0.0.0/8, allow tcp/8080 from 10.0.0.0/8\"\n",
+    "answer": "# dynamic \"ingress\" は for_each の要素ごとに ingress ブロックを1つ生成します。\n# つまりルール数は元リストの長さと同じで、内容は for 式でそのまま言語化できます。\nvariable \"ingress_ports\" {\n  default = [80, 443, 8080]\n}\n\nlocals {\n  rules = [for p in var.ingress_ports : \"allow tcp/${p} from 10.0.0.0/8\"]\n}\n\noutput \"rule_count\" {\n  value = length(local.rules)\n}\n\noutput \"rules\" {\n  value = join(\", \", local.rules)\n}\n"
+  }
+}

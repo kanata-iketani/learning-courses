@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 3,
+  "title": "クラス依存（CommonQueryParams パターン）",
+  "priority": "🟡",
+  "text": "依存には関数だけでなくクラスも使えます。`__init__` の引数がクエリパラメータになり、エンドポイントには生成されたインスタンスが渡ります。`params: CommonQueryParams = Depends()` のように Depends の中身を省略すると、型注釈のクラスがそのまま依存として使われます。辞書と違って `params.q` のように属性でアクセスでき、エディタの補完も効くため、公式チュートリアルでも紹介される定番の形です。🟡 関数依存との違い(戻り値が辞書 → インスタンス)を理解しましょう。\n\n```python\nclass CommonQueryParams:\n    def __init__(self, q: str | None = None, limit: int = 3):\n        self.q = q\n        self.limit = limit\n\n@app.get(\"/books\")\ndef list_books(params: CommonQueryParams = Depends()):\n    ...\n```",
+  "sample": "# lesson10 ch03: クラス依存 (CommonQueryParams パターン)\nfrom fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nclass CommonQueryParams:\n    # __init__ の引数がそのままクエリパラメータになる\n    def __init__(self, q: str | None = None, skip: int = 0, limit: int = 3):\n        self.q = q\n        self.skip = skip\n        self.limit = limit\n\nbooks = [\"Python入門\", \"Python実践\", \"FastAPI入門\", \"Go入門\"]\n\n@app.get(\"/books\")\ndef list_books(params: CommonQueryParams = Depends()):\n    # Depends() と省略すると、型注釈のクラスが依存として使われる\n    result = books\n    if params.q is not None:\n        result = [b for b in result if params.q in b]\n    return result[params.skip : params.skip + params.limit]\n\nclient = TestClient(app)\nfor path in [\"/books\", \"/books?q=Python\", \"/books?q=Python&limit=1\"]:\n    r = client.get(path)\n    print(r.json())\n",
+  "exercise": {
+    "description": "曲名の一覧 API `GET /songs` をクラス依存で作ってください。\n\n- クラス `CommonQueryParams` を定義する。`__init__(self, q: str | None = None, limit: int = 3)` で、`self.q` と `self.limit` に保存する\n- `GET /songs` は `params: CommonQueryParams = Depends()` で受け取る\n- `params.q` が `None` でなければ `q` を含む曲だけに絞り込み、先頭から `params.limit` 件を返す\n\n**期待出力**\n\n```text\n['春の歌', '夏の歌', '夏祭り']\n['夏の歌']\n```",
+    "starter": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nsongs = [\"春の歌\", \"夏の歌\", \"夏祭り\", \"秋の空\"]\n\n# ここに CommonQueryParams クラスと GET /songs を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor path in [\"/songs\", \"/songs?q=夏&limit=1\"]:\n    r = client.get(path)\n    print(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "['春の歌', '夏の歌', '夏祭り']\n['夏の歌']\n",
+    "answer": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\nsongs = [\"春の歌\", \"夏の歌\", \"夏祭り\", \"秋の空\"]\n\nclass CommonQueryParams:\n    # __init__ の引数がクエリパラメータとして解釈される\n    def __init__(self, q: str | None = None, limit: int = 3):\n        self.q = q\n        self.limit = limit\n\n@app.get(\"/songs\")\ndef list_songs(params: CommonQueryParams = Depends()):\n    # Depends() の省略形: 型注釈 CommonQueryParams が依存になる\n    # 渡ってくるのは辞書ではなくインスタンスなので属性でアクセスする\n    result = songs\n    if params.q is not None:\n        result = [s for s in result if params.q in s]\n    return result[: params.limit]\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nfor path in [\"/songs\", \"/songs?q=夏&limit=1\"]:\n    r = client.get(path)\n    print(r.json())\n"
+  }
+}

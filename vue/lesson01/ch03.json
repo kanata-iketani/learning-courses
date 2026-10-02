@@ -1,0 +1,16 @@
+{
+  "lesson": 1,
+  "chapter": 3,
+  "kind": "web",
+  "title": "ブラウザの開発者ツールと console.log",
+  "priority": "🟡",
+  "text": "ブラウザには**開発者ツール**(ページの中身や動きを調べる画面)が付いています。Windows では **F12** キー、Mac では Command + Option + I で開き、**Console(コンソール)** というタブを選びます。JavaScript の `console.log()` は、かっこの中の値をこのコンソールに表示する命令で、プログラムの動きを確かめる基本の道具です。🟡 プレビューを表示したら F12 でコンソールを開き、メッセージを自分の目で確認しましょう。\n\n```html\n<script>\n  console.log(\"こんにちは、コンソール！\");\n  console.log(1 + 2);\n</script>\n```\n\n文字列(文字の並び)は `\"` で囲みます。`1 + 2` のような計算は、結果の `3` が表示されます。",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>コンソールをのぞいてみよう</title>\n<style>\n  body { background-color: #f0f8ff; }\n  h1 { color: steelblue; }\n</style>\n</head>\n<body>\n  <h1>コンソールをのぞいてみよう</h1>\n  <p><strong>F12 キー(Mac は Command + Option + I)</strong>で開発者ツールを開き、Console タブを見てください。</p>\n  <p>このページの script は、画面ではなくコンソールに 3 行のメッセージを出しています。</p>\n\n  <script>\n    console.log(\"ようこそ、コンソールへ！\");\n    console.log(\"計算もできます:\", 10 + 20);\n    console.log(\"ここが JavaScript の作業場です\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "starter の `<script>` の中を編集して、コンソールへの出力を練習しましょう。「▶ プレビュー」を押してから F12(Mac は Command + Option + I)で開発者ツールを開き、Console タブで結果を確かめてください。\n\n**確認ポイント**\n\n1. コンソールに自分で考えたメッセージ(好きな言葉)が表示されている\n2. `console.log(7 * 6)` のように計算式を書いた行があり、計算の結果(数値)が表示されている\n3. `console.log` の行を増やして、合計 3 行以上の出力が表示されている\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>console.log の練習</title>\n</head>\n<body>\n  <h1>console.log の練習</h1>\n  <p>出力はこの画面ではなく、開発者ツールの Console タブに表示されます。</p>\n\n  <script>\n    console.log(\"ここを書きかえましょう\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>console.log の練習</title>\n</head>\n<body>\n  <h1>console.log の練習</h1>\n  <p>出力はこの画面ではなく、開発者ツールの Console タブに表示されます。</p>\n\n  <script>\n    // 工夫した点: 文字列は \" で囲みます\n    console.log(\"プログラミングの第一歩です！\");\n    // 工夫した点: 計算式は囲まずに書くと、結果の数値が表示されます\n    console.log(7 * 6);\n    // 工夫した点: , で区切ると説明の文字列と値を並べて表示できます\n    console.log(\"10 たす 20 は\", 10 + 20);\n  </script>\n</body>\n</html>\n"
+  }
+}

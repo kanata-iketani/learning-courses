@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TODOアプリ(完了チェック)</title>
+<style>
+  .done { text-decoration: line-through; color: #999; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <h1>TODOリスト(残り {{ remaining }} 件)</h1>
+    <input v-model="newText" placeholder="やることを入力">
+    <button v-on:click="addTodo">追加</button>
+    <ul>
+      <li v-for="todo in todos" :key="todo.id">
+        <input type="checkbox" v-model="todo.done">
+        <!-- 工夫した点: :class のオブジェクト書式なら、true/false でクラスが自動で付け外しされる -->
+        <span :class="{ done: todo.done }">{{ todo.text }}</span>
+      </li>
+    </ul>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          newText: "",
+          nextId: 3,
+          todos: [
+            { id: 1, text: "牛乳を買う", done: false },
+            { id: 2, text: "部屋のそうじ", done: false }
+          ]
+        };
+      },
+      computed: {
+        // filter で「未完了だけの配列」を作り、その長さを数える
+        remaining() {
+          return this.todos.filter(todo => !todo.done).length;
+        }
+      },
+      methods: {
+        addTodo() {
+          // 新しい TODO は必ず done: false で始める
+          this.todos.push({ id: this.nextId, text: this.newText, done: false });
+          this.nextId++;
+          this.newText = "";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>おみくじ</title>
+</head>
+<body>
+  <h1>今日の運勢</h1>
+  <button id="draw-btn">おみくじを引く</button>
+  <p id="result">ボタンを押してください</p>
+
+  <script>
+    const results = ["大吉", "中吉", "小吉", "末吉", "凶"];
+    const btn = document.getElementById("draw-btn");
+
+    // クリックされるたびに、この関数が実行される
+    btn.addEventListener("click", () => {
+      // 0 以上 results.length 未満のランダムな整数を作る
+      const i = Math.floor(Math.random() * results.length);
+      document.getElementById("result").textContent = "結果: " + results[i];
+    });
+  </script>
+</body>
+</html>

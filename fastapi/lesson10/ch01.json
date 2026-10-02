@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 1,
+  "title": "Depends とは",
+  "priority": "🟡",
+  "text": "**Depends**(依存性注入)とは、共通処理を関数として切り出し、エンドポイントの引数に「注入」してもらうしくみです。引数に `info: dict = Depends(get_app_info)` と書くと、FastAPI がリクエストのたびに `get_app_info()` を呼び、その戻り値を `info` に入れて渡してくれます。自分で関数を呼ぶコードを書かなくてよいので、複数のエンドポイントで同じ処理をきれいに使い回せます。🟡 「FastAPI が代わりに呼んで、結果を引数に入れてくれる」という流れを理解しましょう。\n\n```python\ndef get_app_info():\n    return {\"app_name\": \"メモ帳API\"}\n\n@app.get(\"/about\")\ndef about(info: dict = Depends(get_app_info)):\n    return info\n```",
+  "sample": "# lesson10 ch01: Depends とは\nfrom fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 依存関数: 共通で使いたい処理をふつうの関数として書く\ndef get_app_info():\n    return {\"app_name\": \"メモ帳API\", \"version\": \"1.0\"}\n\n@app.get(\"/about\")\ndef about(info: dict = Depends(get_app_info)):\n    # FastAPI が get_app_info() を呼び、戻り値を info に入れてくれる\n    return info\n\n@app.get(\"/status\")\ndef status(info: dict = Depends(get_app_info)):\n    # 別のエンドポイントでも同じ依存関数を使い回せる\n    return {\"app_name\": info[\"app_name\"], \"ok\": True}\n\nclient = TestClient(app)\nr = client.get(\"/about\")\nprint(r.status_code)\nprint(r.json())\nr = client.get(\"/status\")\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "店の情報を返す依存関数を使って `GET /shop` を作ってください。\n\n- 依存関数 `get_shop_info` を定義し、`{\"shop\": \"demo堂\", \"open\": True}` を返す\n- `GET /shop` は引数 `info: dict = Depends(get_shop_info)` で受け取り、`info` をそのまま返す\n\n**期待出力**\n\n```text\n200\n{'shop': 'demo堂', 'open': True}\n```",
+    "starter": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに依存関数 get_shop_info と GET /shop を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/shop\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'shop': 'demo堂', 'open': True}\n",
+    "answer": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 依存関数はふつうの関数。共通で返したい値をここに集める\ndef get_shop_info():\n    return {\"shop\": \"demo堂\", \"open\": True}\n\n@app.get(\"/shop\")\ndef read_shop(info: dict = Depends(get_shop_info)):\n    # Depends と書くだけで FastAPI が get_shop_info() を呼び、\n    # 戻り値を info に入れてくれる(自分で呼ぶコードは不要)\n    return info\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/shop\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

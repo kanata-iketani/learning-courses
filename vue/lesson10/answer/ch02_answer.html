@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>自己紹介アプリ</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>自己紹介</h1>
+    <p>名前: {{ name }}</p>
+    <p>趣味: {{ hobby }}</p>
+  </div>
+
+  <script>
+    // 工夫: HTML には「どこに何を表示するか」だけを書き、値そのものは data に集める。
+    // 表示内容を変えたいときは data だけ直せばよい
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          name: "いけたに",
+          hobby: "プログラミング"
+        };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>カウンター</title>
+<script src="/vendor/vue.global.prod.js"></script>
+<style>
+  .num   { font-size: 48px; }
+  .minus { color: red; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <h1>カウンター</h1>
+    <!-- マイナスのときだけ .minus が付いて赤くなる(:class の復習) -->
+    <p class="num" :class="{ minus: count < 0 }">{{ count }}</p>
+    <button @click="decrement">−1</button>
+    <button @click="increment">+1</button>
+    <button @click="reset">リセット</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { count: 0 };
+      },
+      methods: {
+        increment() { this.count++; },
+        decrement() { this.count--; },
+        reset()     { this.count = 0; }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

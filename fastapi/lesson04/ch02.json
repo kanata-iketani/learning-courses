@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 2,
+  "title": "デフォルト値",
+  "priority": "🔴",
+  "text": "引数にデフォルト値を書くと、そのクエリパラメータは省略可能になります。URL に付けなかったときはデフォルト値が使われ、付けたときはその値で上書きされます。デフォルト値のない引数は必須のままで、省略するとステータスコード 422 が返ります。🔴 「デフォルト値あり = 省略可能」のパターンは実際の API 開発でも頻出なので、繰り返し書いて覚えましょう。\n\n```python\n@app.get(\"/items\")\ndef read_items(lang: str = \"ja\"):\n    return {\"lang\": lang}\n```",
+  "sample": "# lesson04 ch02: デフォルト値で省略可能にする\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# lang にデフォルト値があるので ?lang=... は省略できる\n@app.get(\"/hello\")\ndef hello(lang: str = \"ja\"):\n    if lang == \"en\":\n        return {\"message\": \"Hello\"}\n    return {\"message\": \"こんにちは\"}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/hello\").json())          # 省略 → デフォルトの \"ja\"\nprint(client.get(\"/hello?lang=en\").json())  # 指定 → 上書きされる\n",
+  "exercise": {
+    "description": "GET `/coffee` で、クエリパラメータ `size` (str、デフォルト値 `\"M\"`) を受け取り、`{\"size\": size}` を返すエンドポイントを書いてください。動作確認部分は、省略した場合と `?size=L` を付けた場合の両方を出力します。\n\n**期待出力**\n\n```text\n{'size': 'M'}\n{'size': 'L'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /coffee のエンドポイントを書く (size: str のデフォルト値は \"M\")\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/coffee\").json())\nprint(client.get(\"/coffee?size=L\").json())\n",
+    "stdin": "",
+    "expected_stdout": "{'size': 'M'}\n{'size': 'L'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# size: str = \"M\" とデフォルト値を書くと、?size=... を省略できるようになります。\n# 省略時は \"M\"、?size=L を付ければ \"L\" で上書きされます。\n@app.get(\"/coffee\")\ndef coffee(size: str = \"M\"):\n    return {\"size\": size}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/coffee\").json())\nprint(client.get(\"/coffee?size=L\").json())\n"
+  }
+}

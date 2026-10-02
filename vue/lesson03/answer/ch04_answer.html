@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>今週の予定</title>
+<style>
+  /* 工夫した点: 目立たせる class と控えめにする class の 2 種類を用意しました */
+  .taisetsu { color: red; font-weight: bold; }
+  .sumi     { color: gray; }
+</style>
+</head>
+<body>
+  <h1>今週の予定</h1>
+  <ul>
+    <!-- 工夫した点: 同じ class を複数の li に付けると、まとめて同じ見た目になります -->
+    <li class="sumi">月曜: ゴミ出し(済んだ)</li>
+    <li class="taisetsu">火曜: テスト勉強(大事!)</li>
+    <li class="sumi">水曜: 図書館に本を返す(済んだ)</li>
+    <li class="taisetsu">木曜: 発表の資料作り(大事!)</li>
+    <li>金曜: 友だちと映画</li>
+  </ul>
+</body>
+</html>

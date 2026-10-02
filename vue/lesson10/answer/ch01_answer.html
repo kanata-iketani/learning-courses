@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>カウンター比較</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <h2>素の JavaScript 版</h2>
+  <button id="js-btn">+1</button>
+  <!-- 工夫: 素の JS 版は初期表示も HTML 側で 100 に合わせる必要がある -->
+  <span id="js-count">100</span>
+
+  <h2>Vue 版</h2>
+  <div id="app">
+    <!-- 押すたびに count を 10 増やす。画面の更新は Vue にお任せ -->
+    <button @click="count += 10">+10</button>
+    <span>{{ count }}</span>
+  </div>
+
+  <script>
+    // 素の JS 版: 変数と HTML の 2 か所を直さないと初期値が揃わない
+    let count = 100;
+    document.getElementById("js-btn").addEventListener("click", () => {
+      count = count + 1;
+      document.getElementById("js-count").textContent = count;
+    });
+
+    // Vue 版: data の 1 か所を変えるだけで、表示も自動で 100 から始まる
+    const { createApp } = Vue;
+    createApp({
+      data() { return { count: 100 }; }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>computed で自動計算</title>
+</head>
+<body>
+  <div id="app">
+    <p>単価: <input type="number" v-model="price"> 円</p>
+    <p>個数: <input type="number" v-model="count"> 個</p>
+    <hr>
+    <p>合計(税抜): {{ total }} 円</p>
+    <p>合計(税込 10%): {{ totalWithTax }} 円</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { price: 120, count: 2 };
+      },
+      computed: {
+        total() {
+          return this.price * this.count;
+        },
+        // computed の中から別の computed も使える
+        totalWithTax() {
+          return Math.round(this.total * 1.1);
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

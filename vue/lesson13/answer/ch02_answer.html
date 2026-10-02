@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>アンケートフォーム</title>
+</head>
+<body>
+  <div id="app">
+    <!-- 工夫した点: label で囲むと文字クリックでもチェックが切り替わる -->
+    <label><input type="checkbox" v-model="mailmaga"> メルマガを受け取る</label>
+    <p>受け取る設定: {{ mailmaga }}</p>
+    <hr>
+    <p>好きな季節:
+      <select v-model="season">
+        <option value="春">春</option>
+        <option value="夏">夏</option>
+        <option value="秋">秋</option>
+        <option value="冬">冬</option>
+      </select>
+    </p>
+    <!-- season の初期値が「春」なので、開いた瞬間から文章が成立する -->
+    <p>あなたは {{ season }} が好きなのですね。</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { mailmaga: false, season: "春" };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

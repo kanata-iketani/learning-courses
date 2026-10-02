@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 1,
+  "title": "引数=クエリパラメータ",
+  "priority": "🔴",
+  "text": "URL の `?` 以降に `?q=hello` の形で付ける値を **クエリパラメータ** と呼びます(複数あるときは `&` でつなぎます)。FastAPI では、関数の引数のうちパスに含まれない名前は、自動的にクエリパラメータとして扱われます。特別な宣言は不要で、引数を書くだけです。🔴 「パスにない引数 = クエリパラメータ」という対応を、手を動かして覚えましょう。\n\n```python\n@app.get(\"/search\")\ndef search(q: str):\n    return {\"q\": q}\n```\n\n呼び出す側は `client.get(\"/search?q=fastapi\")` のように URL に付けて渡します。",
+  "sample": "# lesson04 ch01: パスにない引数はクエリパラメータになる\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# q はパス /search に含まれない → クエリパラメータとして受け取る\n@app.get(\"/search\")\ndef search(q: str):\n    return {\"q\": q}\n\n# 複数のクエリパラメータは & でつなぐ\n@app.get(\"/find\")\ndef find(word: str, lang: str):\n    return {\"word\": word, \"lang\": lang}\n\n# --- 動作確認 ---\nclient = TestClient(app)\nprint(client.get(\"/search?q=fastapi\").json())\nprint(client.get(\"/find?word=hello&lang=en\").json())\n",
+  "exercise": {
+    "description": "GET `/greet` で、クエリパラメータ `name` (str) を受け取り、`{\"greeting\": \"こんにちは、(name)さん\"}` を返すエンドポイントを書いてください。f 文字列 `f\"こんにちは、{name}さん\"` が使えます。\n\n**期待出力**\n\n```text\n{'greeting': 'こんにちは、demoさん'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに GET /greet のエンドポイントを書く (引数 name: str を受け取る)\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/greet?name=demo\").json())\n",
+    "stdin": "",
+    "expected_stdout": "{'greeting': 'こんにちは、demoさん'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# name はパス /greet に含まれないので、クエリパラメータとして扱われます。\n# ?name=demo の値が引数 name に入り、f 文字列で挨拶文を組み立てます。\n@app.get(\"/greet\")\ndef greet(name: str):\n    return {\"greeting\": f\"こんにちは、{name}さん\"}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nprint(client.get(\"/greet?name=demo\").json())\n"
+  }
+}

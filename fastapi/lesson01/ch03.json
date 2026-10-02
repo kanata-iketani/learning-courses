@@ -1,0 +1,15 @@
+{
+  "lesson": 1,
+  "chapter": 3,
+  "title": "この講座の学び方",
+  "priority": "🔴",
+  "text": "この講座の演習では **TestClient**(サーバを起動せずに、アプリへ直接リクエストを送れるテスト用クライアント)を使います。uvicorn で起動した実サーバに送るのと同じリクエストを `client.get(\"/\")` の1行で再現できるため、「▶ 実行」だけで API の動きを確認できます。演習はすべて次の定型で書きます。\n\n```python\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()             # 1. アプリを定義する\n# (パスと関数をここに書く)\n\nclient = TestClient(app)    # 2. テスト用クライアントを作る\nprint(client.get(\"/\").json())  # 3. 呼び出して結果を print する\n```\n\n🔴 この「アプリ定義 → TestClient → print」の流れは全レッスンで使うので、手が覚えるまで書いて身につけましょう。",
+  "sample": "# lesson01 ch03: 演習の定型 (アプリ定義 → TestClient → print)\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# 1. アプリを定義する\napp = FastAPI()\n\n@app.get(\"/\")\ndef read_root():\n    return {\"lesson\": 1, \"chapter\": 3}\n\n# 2. テスト用クライアントを作る (サーバの起動は不要)\nclient = TestClient(app)\n\n# 3. リクエストを送り、結果を print する\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "「アプリ定義 → TestClient → print」の定型を、今回はすべて自分の手で書きます。\n\n1. GET `/` で `{\"status\": \"ok\"}` を返すアプリを定義する\n2. TestClient を作る\n3. GET `/` を呼び出し、`r.status_code` と `r.json()` を順に出力する\n\n**期待出力**\n\n```text\n200\n{'status': 'ok'}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# 1. アプリを定義し、GET / で {\"status\": \"ok\"} を返す関数を書く\n\n\n# 2. TestClient を作る\n\n\n# 3. GET / を呼び出し、status_code と json() を順に print する\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'status': 'ok'}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\n# この3部構成 (アプリ定義 → TestClient → print) が全演習の定型です。\napp = FastAPI()\n\n@app.get(\"/\")\ndef read_root():\n    return {\"status\": \"ok\"}\n\n# TestClient にアプリを渡すと、サーバを起動せずにリクエストを送れます。\nclient = TestClient(app)\n\n# r.json() はレスポンスの JSON を Python の辞書に戻して返します。\nr = client.get(\"/\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

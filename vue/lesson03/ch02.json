@@ -1,0 +1,16 @@
+{
+  "lesson": 3,
+  "chapter": 2,
+  "kind": "web",
+  "title": "文字の大きさと太さ(font-size, font-weight, text-align)",
+  "priority": "🔴",
+  "text": "文字の見た目を細かく調整するプロパティを学びます。`font-size` は**文字の大きさ**で、`24px` のように **px**(ピクセル。画面の点の数を表す単位)で指定します。`font-weight` は**文字の太さ**で、`bold`(太字)や `normal`(標準)を指定します。`text-align` は**文字をそろえる位置**で、`center`(中央)、`left`(左)、`right`(右)から選びます。🔴 大きさ・太さ・位置の 3 つを組み合わせて、ポスターのようにメリハリのある文字を作ってみましょう。\n\n```html\n<style>\n  h1 { font-size: 40px; text-align: center; }\n  p  { font-size: 14px; font-weight: bold; }\n</style>\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>文化祭ポスター</title>\n<style>\n  body { background-color: mistyrose; }\n  h1 { font-size: 44px; text-align: center; color: crimson; }\n  h2 { font-size: 20px; text-align: center; font-weight: normal; }\n  p  { font-size: 16px; text-align: center; }\n  .date { font-size: 24px; font-weight: bold; }\n</style>\n</head>\n<body>\n  <h1>文化祭 2026</h1>\n  <h2>〜 見出しなのに font-weight: normal で細字です 〜</h2>\n  <p class=\"date\">10月10日(土) 開催!</p>\n  <p>text-align: center で全部の文字が中央にそろっています。</p>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "starter を編集して、「本日のセール」のポスターを作りましょう。文字の大きさ・太さ・位置で情報のメリハリを付けます。\n\n**確認ポイント**\n\n1. `h1` の `font-size` を `40px` 以上にして、タイトルが大きく表示されている\n2. `h1` と `p` に `text-align: center;` を指定して、文字が中央にそろっている\n3. 値段の段落だけ `font-weight: bold;` で太字になり、注意書きの段落は `font-size` を `12px` くらいに小さくしてある\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>本日のセール</title>\n<style>\n  h1 { font-size: 20px; }\n  .price { }\n  .note { }\n</style>\n</head>\n<body>\n  <h1>本日のセール</h1>\n  <p class=\"price\">りんご 1袋 100円</p>\n  <p class=\"note\">※ お一人さま 3袋までとさせていただきます。</p>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>本日のセール</title>\n<style>\n  /* 工夫した点: タイトルは大きく中央ぞろえにして一番目立たせます */\n  h1 { font-size: 48px; text-align: center; color: crimson; }\n  /* 工夫した点: 値段は太字 + 大きめで 2 番目に目立たせます */\n  .price { font-size: 28px; font-weight: bold; text-align: center; }\n  /* 工夫した点: 注意書きは小さくして、じゃまにならないようにします */\n  .note { font-size: 12px; text-align: center; color: gray; }\n</style>\n</head>\n<body>\n  <h1>本日のセール</h1>\n  <p class=\"price\">りんご 1袋 100円</p>\n  <p class=\"note\">※ お一人さま 3袋までとさせていただきます。</p>\n</body>\n</html>\n"
+  }
+}

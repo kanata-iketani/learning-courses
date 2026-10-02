@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ミニ電卓</title>
+</head>
+<body>
+  <h1>足し算ミニ電卓</h1>
+  <input id="num1" type="number" placeholder="1つ目の数">
+  +
+  <input id="num2" type="number" placeholder="2つ目の数">
+  <button id="calc-btn">計算</button>
+  <p id="answer"></p>
+
+  <script>
+    document.getElementById("calc-btn").addEventListener("click", () => {
+      // 工夫: .value は文字列なので、Number() で数に変換してから足す。
+      // 変換しないと "3" + "5" = "35" という文字列の連結になってしまう
+      const a = Number(document.getElementById("num1").value);
+      const b = Number(document.getElementById("num2").value);
+      document.getElementById("answer").textContent = "答え: " + (a + b);
+    });
+  </script>
+</body>
+</html>

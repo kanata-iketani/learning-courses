@@ -1,0 +1,23 @@
+# 実行環境 (セットアップ方法は各講座の README を参照)
+fastapi/.venv/
+
+# 学習の個人データ (進捗・書きかけコード・質問記録・自動生成の復習問題)
+*/app/progress.json
+*/app/questions.json
+*/app/notes.md
+*/app/work/
+*/app/server.log
+*/lesson90/
+
+# 個人の設計メモ・練習用ディレクトリ (講座外)
+go/SPEC.md
+go/pa*/
+go/practical-go/
+go/three-layer/
+go/tour/
+
+# 宅建講座は別リポジトリ (takken/)
+takken/
+
+# OS / エディタ
+.DS_Store

@@ -1,0 +1,15 @@
+{
+  "lesson": 10,
+  "chapter": 4,
+  "title": "依存の中の依存（ネスト）と使いどころ",
+  "priority": "⚪",
+  "text": "依存関数は、自分の引数にさらに `Depends` を書けます(依存のネスト)。FastAPI が奥から順に解決してくれるので、エンドポイント側は一番外側の 1 つを書くだけで済みます。実務では「設定の読み込み → DB 接続 → ログイン中ユーザの取得」のように、共通処理を段階的に積み上げる形で使われます。⚪ 今は「依存はネストでき、FastAPI が順に解決してくれる」と知っていれば十分です。\n\n```python\ndef get_settings():\n    return {\"shop\": \"demo堂\"}\n\ndef get_greeting(settings: dict = Depends(get_settings)):\n    return f\"ようこそ {settings['shop']} へ\"\n\n@app.get(\"/welcome\")\ndef welcome(greeting: str = Depends(get_greeting)):\n    return {\"message\": greeting}\n```",
+  "sample": "# lesson10 ch04: 依存の中の依存 (ネスト)\nfrom fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 1 段目: 設定を返す依存\ndef get_settings():\n    return {\"shop\": \"demo堂\"}\n\n# 2 段目: 依存関数の中でさらに Depends を使える\ndef get_greeting(settings: dict = Depends(get_settings)):\n    return f\"ようこそ {settings['shop']} へ\"\n\n@app.get(\"/welcome\")\ndef welcome(greeting: str = Depends(get_greeting)):\n    # エンドポイントは一番外側の依存だけ書けばよい\n    # (get_settings → get_greeting の順に FastAPI が解決する)\n    return {\"message\": greeting}\n\nclient = TestClient(app)\nr = client.get(\"/welcome\")\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "依存のネストを使って `GET /greet` を作ってください。\n\n- 依存関数 `get_name` を定義し、文字列 `\"demo\"` を返す\n- 依存関数 `get_message(name: str = Depends(get_name))` を定義し、f-string で `こんにちは、{name}さん` を返す\n- `GET /greet` は `message: str = Depends(get_message)` で受け取り、`{\"message\": message}` を返す\n\n**期待出力**\n\n```text\n200\n{'message': 'こんにちは、demoさん'}\n```",
+    "starter": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに get_name / get_message / GET /greet を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/greet\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'message': 'こんにちは、demoさん'}\n",
+    "answer": "from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\ndef get_name():\n    return \"demo\"\n\n# 依存関数の引数にも Depends を書ける(ネスト)\ndef get_message(name: str = Depends(get_name)):\n    return f\"こんにちは、{name}さん\"\n\n@app.get(\"/greet\")\ndef greet(message: str = Depends(get_message)):\n    # get_name → get_message の順に FastAPI が自動で解決するので、\n    # エンドポイントは一番外側の get_message だけ指定すればよい\n    return {\"message\": message}\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/greet\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

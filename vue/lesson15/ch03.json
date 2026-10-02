@@ -1,0 +1,16 @@
+{
+  "lesson": 15,
+  "chapter": 3,
+  "kind": "web",
+  "title": "コンポーネント：画面を部品として定義する",
+  "priority": "🟡",
+  "text": "**コンポーネント**(画面の一部をひとまとめにして名前を付け、自作タグとして使えるようにする仕組み)を学びます。`app.component(\"名前\", { ... })` で登録すると、HTML 側に `<count-button></count-button>` のように何個でも置けます。部品の見た目は **template**(その部品の HTML を文字列として書く場所)に書きます。コンポーネントの data は関数で返す決まりなので、置いた部品 1 つ 1 つが独立した data を持ちます。🟡 HTML に直接書く場合、タグ名はハイフン入り(例: count-button)にします。\n\n```js\nconst app = createApp({});\napp.component(\"count-button\", {\n  data() { return { count: 0 }; },\n  template: `<button v-on:click=\"count++\">{{ count }} 回</button>`\n});\napp.mount(\"#app\");\n```",
+  "sample": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>はじめてのコンポーネント</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>同じ部品を 3 つ置いています。それぞれ独立して数えます。</p>\n    <count-button></count-button>\n    <count-button></count-button>\n    <count-button></count-button>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    const app = createApp({});\n    app.component(\"count-button\", {\n      // data が関数なので、部品ごとに別々の count を持つ\n      data() {\n        return { count: 0 };\n      },\n      template: `<p><button v-on:click=\"count++\">押してね</button> 押した回数: {{ count }} 回</p>`\n    });\n    app.mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+  "exercise": {
+    "description": "「いいねボタン」コンポーネントを作りましょう。押すたびに ♥ の数が増えるボタンを `like-button` という名前で登録し、3 つ並べます。\n\n**確認ポイント**\n\n1. `app.component(\"like-button\", { ... })` で登録した自作タグが 3 つ表示されている\n2. どれか 1 つを押しても、ほかのボタンの数は増えない(部品ごとに独立して数える)\n3. タグ名にハイフンが入っている(`<like-button>` のような名前)\n\nすべて満たせたら「✔ できた」を押してください。",
+    "starter": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>いいねボタン</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>お気に入りの投稿に「いいね」しよう:</p>\n    <!-- like-button を 3 つ置く -->\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    const app = createApp({});\n    // ここで like-button コンポーネントを登録する\n    app.mount(\"#app\");\n  </script>\n</body>\n</html>\n",
+    "stdin": "",
+    "expected_stdout": "",
+    "answer": "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<title>いいねボタン</title>\n</head>\n<body>\n  <div id=\"app\">\n    <p>お気に入りの投稿に「いいね」しよう:</p>\n    <like-button></like-button>\n    <like-button></like-button>\n    <like-button></like-button>\n  </div>\n\n  <script src=\"/vendor/vue.global.prod.js\"></script>\n  <script>\n    const { createApp } = Vue;\n    const app = createApp({});\n    app.component(\"like-button\", {\n      // 工夫した点: data は必ず関数で返す。だから 3 つのボタンが独立して数えられる\n      data() {\n        return { likes: 0 };\n      },\n      template: `<p><button v-on:click=\"likes++\">♥ いいね</button> {{ likes }} 件</p>`\n    });\n    // 登録は mount より前に書く\n    app.mount(\"#app\");\n  </script>\n</body>\n</html>\n"
+  }
+}

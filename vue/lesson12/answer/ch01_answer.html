@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>あいさつ切り替え</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h1>{{ message }}</h1>
+    <!-- 工夫: HTML には「どのメソッドを呼ぶか」だけを書き、処理の中身は methods に置く -->
+    <button @click="sayMorning">朝のあいさつにする</button>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { message: "こんにちは" };
+      },
+      methods: {
+        sayMorning() {
+          // this を付けると data の message にアクセスできる
+          this.message = "おはようございます！";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

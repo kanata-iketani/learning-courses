@@ -1,0 +1,15 @@
+{
+  "lesson": 4,
+  "chapter": 4,
+  "title": "varとlocalsの使い分け・命名の流儀",
+  "priority": "🟡",
+  "text": "var と locals の使い分けには実務で流儀の違いがあります。ひとつは **locals 集約派**(`name_prefix = \"${var.project}-${var.env}\"` のような組み立てを locals に集め、リソース側は `local.name_prefix` だけを参照する)。もうひとつは **var 直参照派**(リソース側で `\"${var.project}-${var.env}-web\"` と都度組み立てる)。Finatext / Skillax などのコードベースでも混在するので、`local.name_prefix` を見たら locals の定義元へ、`var.` が連続していたら variables.tf へ、と参照元をたどる読み方を身につけます。🟡 どちらの流儀も読めることが目標です。\n\n実務ではこう書かれることが多いです(読解例):\n\n```hcl\nlocals {\n  name_prefix = \"${var.project}-${var.env}\"\n}\n\nresource \"aws_s3_bucket\" \"logs\" {\n  bucket = \"${local.name_prefix}-logs\"  # 組み立ては locals に集約\n}\n```",
+  "sample": "# lesson04 ch04: locals 集約スタイル\n# 組み立てを locals に寄せると、使う側は local.xxx だけになります。\n\nvariable \"project\" {\n  type    = string\n  default = \"myapp\"\n}\n\nvariable \"env\" {\n  type    = string\n  default = \"dev\"\n}\n\nlocals {\n  # 共通の接頭辞をここで一度だけ組み立てます\n  name_prefix = \"${var.project}-${var.env}\"\n\n  # locals は locals を参照できます(local. で参照)\n  log_bucket = \"${local.name_prefix}-logs\"\n}\n\noutput \"name_prefix\" {\n  value = local.name_prefix\n}\n\noutput \"log_bucket\" {\n  value = local.log_bucket\n}\n",
+  "exercise": {
+    "description": "locals 集約スタイルで名前を組み立てます。\n\n1. variable `project` を定義: `type` は `string`、`default` は `\"skillax\"`\n2. variable `env` を定義: `type` は `string`、`default` は `\"stg\"`\n3. locals で `name_prefix = \"${var.project}-${var.env}\"` と、それを使った `bucket_name = \"${local.name_prefix}-logs\"` を定義\n4. output `bucket_name` で `local.bucket_name` を、output `name_prefix` で `local.name_prefix` を表示\n\n**期待出力**\n\n```text\nbucket_name = \"skillax-stg-logs\"\nname_prefix = \"skillax-stg\"\n```",
+    "starter": "# 組み立てを locals に集約し、locals から locals を参照する\n",
+    "stdin": "",
+    "expected_stdout": "bucket_name = \"skillax-stg-logs\"\nname_prefix = \"skillax-stg\"\n",
+    "answer": "# 組み立てを locals に集約する流儀。name_prefix を一度作れば、\n# 以後は local.name_prefix を参照するだけで命名がぶれません。\n# locals の中から別の locals を参照するときも local. を使います。\nvariable \"project\" {\n  type    = string\n  default = \"skillax\"\n}\n\nvariable \"env\" {\n  type    = string\n  default = \"stg\"\n}\n\nlocals {\n  name_prefix = \"${var.project}-${var.env}\"\n  bucket_name = \"${local.name_prefix}-logs\"\n}\n\noutput \"bucket_name\" {\n  value = local.bucket_name\n}\n\noutput \"name_prefix\" {\n  value = local.name_prefix\n}\n"
+  }
+}

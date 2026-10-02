@@ -1,0 +1,15 @@
+{
+  "lesson": 6,
+  "chapter": 1,
+  "title": "型による自動検証と 422",
+  "priority": "🟡",
+  "text": "**バリデーション**とは、送られてきたデータが正しい形かを検証することです。FastAPI はモデルの型ヒントを見て自動で検証し、型に合わないデータや足りないフィールドがあると **422**(Unprocessable Entity: 処理できないデータ、という意味のステータスコード)を返します。エラーレスポンスの `detail` の `loc` を見ると、どのフィールドが原因か分かります。🟡 検証コードを 1 行も書かなくても型だけで検証される、という仕組みを理解しましょう。\n\n```python\nr = client.post(\"/items\", json={\"name\": \"apple\", \"price\": \"たくさん\"})\nprint(r.status_code)  # 422\n```",
+  "sample": "# lesson06 ch01: 型に合わないデータは 422 になる\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\nclass Item(BaseModel):\n    name: str\n    price: int\n\n@app.post(\"/items\")\ndef create_item(item: Item):\n    return {\"name\": item.name, \"price\": item.price}\n\n# --- 動作確認 ---\nclient = TestClient(app)\n# 正しい形 → 200\nr = client.post(\"/items\", json={\"name\": \"apple\", \"price\": 120})\nprint(r.status_code)\n# price が整数にできない → 422\nr2 = client.post(\"/items\", json={\"name\": \"apple\", \"price\": \"たくさん\"})\nprint(r2.status_code)\n# どのフィールドが原因かは detail の loc に入っている\nprint(r2.json()[\"detail\"][0][\"loc\"])\n",
+  "exercise": {
+    "description": "会員登録 API で自動検証の挙動を確かめます。\n\n- `name`(文字列)と `age`(整数)を持つモデル `Member` を定義する\n- `POST /members` で `Member` を受け取り、そのまま返す\n\n動作確認では「正しいデータ」「age が整数にできないデータ」「age が欠けたデータ」の 3 パターンを送ります。後の 2 つは自動検証で 422 になります。\n\n**期待出力**\n\n```text\n200\n{'name': 'demo', 'age': 13}\n422\n422\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# ここに Member モデルと POST /members を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/members\", json={\"name\": \"demo\", \"age\": 13})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/members\", json={\"name\": \"demo\", \"age\": \"abc\"})\nprint(r2.status_code)\nr3 = client.post(\"/members\", json={\"name\": \"demo\"})\nprint(r3.status_code)\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'name': 'demo', 'age': 13}\n422\n422\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# age: int と宣言するだけで「整数にできない値は 422」になります。\n# 検証コードを自分で書く必要はありません。\nclass Member(BaseModel):\n    name: str\n    age: int\n\n# フィールドが欠けたリクエストも、モデルの宣言と合わないので 422 になります。\n@app.post(\"/members\")\ndef create_member(member: Member):\n    return member\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/members\", json={\"name\": \"demo\", \"age\": 13})\nprint(r.status_code)\nprint(r.json())\nr2 = client.post(\"/members\", json={\"name\": \"demo\", \"age\": \"abc\"})\nprint(r2.status_code)\nr3 = client.post(\"/members\", json={\"name\": \"demo\"})\nprint(r3.status_code)\n"
+  }
+}

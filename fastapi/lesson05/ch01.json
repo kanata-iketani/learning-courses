@@ -1,0 +1,15 @@
+{
+  "lesson": 5,
+  "chapter": 1,
+  "title": "Pydantic の BaseModel",
+  "priority": "🔴",
+  "text": "**Pydantic**(パイダンティック)とは、データの形を宣言してチェックする Python ライブラリで、FastAPI に組み込まれています。`BaseModel` を継承したクラスに「フィールド名: 型」を並べると、それが「受け取るデータの形」の宣言になります。関数の引数にこのクラスを型として指定すると、FastAPI は送られてきた JSON をモデルのインスタンスに変換してくれます。🔴 モデル定義はこの先ずっと使うので、手が覚えるまで書きましょう。\n\n```python\nfrom pydantic import BaseModel\n\nclass User(BaseModel):\n    name: str\n    age: int\n```",
+  "sample": "# lesson05 ch01: BaseModel でデータの形を宣言する\nfrom fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# 受け取るデータの形: name は文字列、age は整数\nclass User(BaseModel):\n    name: str\n    age: int\n\n# 引数の型にモデルを指定すると、リクエストボディとして受け取る\n@app.post(\"/users\")\ndef create_user(user: User):\n    return user  # モデルを返すと自動で JSON になる\n\n# --- 動作確認 ---\nclient = TestClient(app)\nr = client.post(\"/users\", json={\"name\": \"demo\", \"age\": 13})\nprint(r.status_code)\nprint(r.json())\n",
+  "exercise": {
+    "description": "書籍データを受け取る API を作ります。\n\n- `title`(文字列)と `price`(整数)の 2 つのフィールドを持つモデル `Book` を定義する\n- `POST /books` で `Book` を受け取り、そのまま返す\n\n**期待出力**\n\n```text\n200\n{'title': 'FastAPI入門', 'price': 2500}\n```",
+    "starter": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# ここに Book モデルと POST /books を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/books\", json={\"title\": \"FastAPI入門\", \"price\": 2500})\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n{'title': 'FastAPI入門', 'price': 2500}\n",
+    "answer": "from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\nfrom pydantic import BaseModel\n\napp = FastAPI()\n\n# BaseModel を継承したクラスが「受け取る JSON の形」の宣言になります。\nclass Book(BaseModel):\n    title: str\n    price: int\n\n# 引数の型に Book を指定すると、ボディの JSON が Book に変換されて届きます。\n# モデルをそのまま返すと、FastAPI が JSON に変換して返します。\n@app.post(\"/books\")\ndef create_book(book: Book):\n    return book\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.post(\"/books\", json={\"title\": \"FastAPI入門\", \"price\": 2500})\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

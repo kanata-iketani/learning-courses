@@ -1,0 +1,15 @@
+{
+  "lesson": 11,
+  "chapter": 1,
+  "title": "APIRouter でエンドポイントをまとめる",
+  "priority": "🟡",
+  "text": "**APIRouter** とは、エンドポイントをグループにまとめるための部品です。実際の開発では `users.py`・`items.py` のようにファイルを分け、各ファイルで `router = APIRouter()` を作って `@router.get(...)` を書き、最後にアプリ本体で `app.include_router(router)` として合体させます。`@app.get` を直接書いたときと動きは同じで、置き場所を整理できるのが利点です。この演習では 1 ファイル内で同じ形を作ります。🟡 「router に登録 → include_router で合体」という流れを理解しましょう。\n\n```python\nrouter = APIRouter()\n\n@router.get(\"/items\")\ndef list_items():\n    return [\"ペン\", \"ノート\"]\n\napp = FastAPI()\napp.include_router(router)\n```",
+  "sample": "# lesson11 ch01: APIRouter でエンドポイントをまとめる\nfrom fastapi import APIRouter, FastAPI\nfrom fastapi.testclient import TestClient\n\n# 本来は items.py など別ファイルに書く部分\nrouter = APIRouter()\n\nitems = {1: \"ペン\", 2: \"ノート\"}\n\n@router.get(\"/items\")\ndef list_items():\n    return list(items.values())\n\n@router.get(\"/items/{item_id}\")\ndef read_item(item_id: int):\n    return {\"name\": items[item_id]}\n\n# 本来は main.py に書く部分: router を app に合体させる\napp = FastAPI()\napp.include_router(router)\n\nclient = TestClient(app)\nr = client.get(\"/items\")\nprint(r.status_code)\nprint(r.json())\nr = client.get(\"/items/1\")\nprint(r.json())\n",
+  "exercise": {
+    "description": "APIRouter を使って動物一覧 API を作ってください。\n\n- `router = APIRouter()` を作り、`@router.get(\"/animals\")` で `[\"犬\", \"猫\"]` を返すエンドポイントを登録する\n- `app.include_router(router)` で app に合体させる\n\n**期待出力**\n\n```text\n200\n['犬', '猫']\n```",
+    "starter": "from fastapi import APIRouter, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# ここに router の定義・GET /animals・include_router を書く\n\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/animals\")\nprint(r.status_code)\nprint(r.json())\n",
+    "stdin": "",
+    "expected_stdout": "200\n['犬', '猫']\n",
+    "answer": "from fastapi import APIRouter, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n# 本来は animals.py など別ファイルに書く部分\nrouter = APIRouter()\n\n@router.get(\"/animals\")\ndef list_animals():\n    return [\"犬\", \"猫\"]\n\n# include_router を忘れると 404 になる(登録されていないため)\napp.include_router(router)\n\n# --- 動作確認(この下は変更しない) ---\nclient = TestClient(app)\nr = client.get(\"/animals\")\nprint(r.status_code)\nprint(r.json())\n"
+  }
+}

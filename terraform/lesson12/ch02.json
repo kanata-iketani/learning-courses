@@ -1,0 +1,15 @@
+{
+  "lesson": 12,
+  "chapter": 2,
+  "title": "backend \"s3\" の読み方",
+  "priority": "🟡",
+  "text": "**バックエンド**(state の保存先の設定)を S3 にするのが実務の定番です。典型例を読んでみます。\n\n```hcl\nterraform {\n  backend \"s3\" {\n    bucket         = \"skillax-tfstate\"\n    key            = \"prod/network/terraform.tfstate\"\n    region         = \"ap-northeast-1\"\n    dynamodb_table = \"tfstate-lock\"\n  }\n}\n```\n\n`bucket` は保存先バケット、`key` はバケット内のパスです。key は「環境/コンポーネント」で切る命名が多く、ここを見るとその構成がどの単位で分割されているかが分かります。`dynamodb_table` は**ロック**(同時 apply による state 破損を防ぐ排他制御)用のテーブルです。🟡 backend を見たら「どこに・どのパスで・ロックは何か」の3点を読み取りましょう。",
+  "sample": "# backend \"s3\" の key は「環境/コンポーネント」でパスを切る流儀が定番です。\n# ここでは key の組み立てロジックだけを locals で再現します。\nvariable \"env\" {\n  default = \"stg\"\n}\n\nvariable \"component\" {\n  default = \"app\"\n}\n\nlocals {\n  # 例: stg/app/terraform.tfstate\n  state_key = \"${var.env}/${var.component}/terraform.tfstate\"\n}\n\noutput \"state_key\" {\n  value = local.state_key\n}\n",
+  "exercise": {
+    "description": "次の backend 設定を読み、bucket と key の命名ロジックを再現してください(実際の backend ブロックは書かず、locals / output だけで組み立てます)。\n\n```hcl\nterraform {\n  backend \"s3\" {\n    bucket         = \"skillax-tfstate\"\n    key            = \"prod/network/terraform.tfstate\"\n    region         = \"ap-northeast-1\"\n    dynamodb_table = \"tfstate-lock\"\n  }\n}\n```\n\nvariable `project`(default `\"skillax\"`)、`env`(default `\"prod\"`)、`component`(default `\"network\"`)を定義し、\n\n- output `bucket`: `<project>-tfstate` の形\n- output `state_key`: `<env>/<component>/terraform.tfstate` の形\n\nを出力してください。\n\n**期待出力**\n\n```text\nbucket = \"skillax-tfstate\"\nstate_key = \"prod/network/terraform.tfstate\"\n```",
+    "starter": "variable \"project\" {\n  default = \"skillax\"\n}\n\n# env / component の variable と output を書く\n",
+    "stdin": "",
+    "expected_stdout": "bucket = \"skillax-tfstate\"\nstate_key = \"prod/network/terraform.tfstate\"\n",
+    "answer": "# backend の bucket / key は直書きされていることが多いですが、\n# 命名規則としては「project-tfstate」「env/component/terraform.tfstate」の\n# 組み立てです。この規則が読めると state の置き場所を推測できます。\nvariable \"project\" {\n  default = \"skillax\"\n}\n\nvariable \"env\" {\n  default = \"prod\"\n}\n\nvariable \"component\" {\n  default = \"network\"\n}\n\noutput \"bucket\" {\n  value = \"${var.project}-tfstate\"\n}\n\noutput \"state_key\" {\n  value = \"${var.env}/${var.component}/terraform.tfstate\"\n}\n"
+  }
+}

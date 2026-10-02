@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TODOアプリ(土台)</title>
+</head>
+<body>
+  <div id="app">
+    <h1>TODOリスト</h1>
+    <input v-model="newText" placeholder="やることを入力">
+    <button v-on:click="addTodo">追加</button>
+    <ul>
+      <!-- :key には追加・削除しても変わらない id を使う -->
+      <li v-for="todo in todos" :key="todo.id">{{ todo.text }}</li>
+    </ul>
+    <p>全部で {{ todos.length }} 件</p>
+  </div>
+
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          newText: "",
+          nextId: 3,
+          todos: [
+            { id: 1, text: "牛乳を買う" },
+            { id: 2, text: "部屋のそうじ" }
+          ]
+        };
+      },
+      methods: {
+        addTodo() {
+          // 工夫した点: id は nextId で採番し、使ったら 1 増やして重複を防ぐ
+          this.todos.push({ id: this.nextId, text: this.newText });
+          this.nextId++;
+          // v-model のおかげで、data を空にすれば入力欄も空になる
+          this.newText = "";
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

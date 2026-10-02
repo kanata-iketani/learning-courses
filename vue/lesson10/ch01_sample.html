@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>素の JS と Vue の比較</title>
+<script src="/vendor/vue.global.prod.js"></script>
+</head>
+<body>
+  <h2>素の JavaScript 版</h2>
+  <button id="js-btn">+1</button>
+  <span id="js-count">0</span>
+
+  <h2>Vue 版</h2>
+  <div id="app">
+    <button @click="count++">+1</button>
+    <span>{{ count }}</span>
+  </div>
+
+  <script>
+    // --- 素の JS: 値の管理と画面の書きかえを両方自分でやる ---
+    let count = 0;
+    document.getElementById("js-btn").addEventListener("click", () => {
+      count = count + 1;
+      document.getElementById("js-count").textContent = count;
+    });
+
+    // --- Vue: データ count を用意するだけ。画面の更新は Vue が担当 ---
+    const { createApp } = Vue;
+    createApp({
+      data() { return { count: 0 }; }
+    }).mount("#app");
+  </script>
+</body>
+</html>
