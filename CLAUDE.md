@@ -8,7 +8,8 @@
 | FastAPI入門 | `fastapi/` | 8081 | venv python(TestClient) + stdout 照合 |
 | Vue.js入門 | `vue/` | 8082 | JS基礎=node 採点 / HTML・Vue=`kind:"web"` プレビュー+自己チェック |
 | Terraform入門 | `terraform/` | 8083 | `terraform init -backend=false → apply → output` 照合(プロバイダ不要・オフライン) |
-| 宅建どうじょう | `takken/` (別リポジトリ github.com/kanata-iketani/takken) | 8084 | 4択クイズ即時判定。全30章650問。にがて帳・弱点まとめ・復習問題生成 |
+| 宅建どうじょう | `takken/` (別リポジトリ github.com/kanata-iketani/takken) | 8084 | 4択クイズ即時判定。全31章700問(フル模試×3)。にがて帳・弱点まとめ・復習問題生成 |
+| ネスペどうじょう | `nwspec/` (別リポジトリ github.com/kanata-iketani/nwspec) | 8085 | 4択クイズ。全33章602問(午前Ⅰ基礎〜午後事例演習〜模試)。過去問併用前提 |
 
 ## 絶対ルール
 
