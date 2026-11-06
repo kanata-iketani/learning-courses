@@ -1,0 +1,144 @@
+{
+  "lesson": 104,
+  "chapter": 4,
+  "title": "実践プログラムとanyの危険",
+  "priority": "🟡",
+  "text": "### interface を使った小さなプログラム\n\nここまでの要素(型注釈・interface・任意の項目)をすべて使って、動くところまで通します。記事では `hello.ts` として保存します。\n\n```ts\ninterface User {\n  id: number;\n  name: string;\n  nickname?: string;\n}\n\nfunction greet(user: User): string {\n  return `こんにちは、${user.name}さん`;\n}\n\nconst sato: User = { id: 1, name: \"佐藤\" };\nconst suzuki: User = { id: 2, name: \"鈴木\", nickname: \"すず\" };\n\nconsole.log(greet(sato));\nconsole.log(greet(suzuki));\n```\n\n`greet` は引数に `User` 型を受け取り、`string` を返す関数です。`sato` は nickname を省略、`suzuki` は nickname を書いていますが、どちらも User の形を満たしています。コンパイルして実行します。\n\n```sh\nnpx tsc hello.ts && node hello.js\n```\n\n```\nこんにちは、佐藤さん\nこんにちは、鈴木さん\n```\n\n`&&` は「前のコマンドが成功したら次を実行する」という意味です。tsc がエラーを出すと(終了コードが失敗になるので)node は実行されません。\n\n`greet` の引数は User 型なので、`greet({ id: 3 })` のように name の無いオブジェクトを渡すとコンパイルで弾かれます。\n\n```\nerror TS2741: Property 'name' is missing in type '{ id: number; }' but required in type 'User'.\n```\n\n記事では、わざと壊す前に「どんなエラーメッセージが出るか」を予想してから試すのが一番力がつく練習だと勧めています。\n\n### 実技:Product と label 関数\n\n記事の実技問題は、商品を表す `Product` を定義し、「name：price円」を返す `label` を書くものです。\n\n```ts\ninterface Product {\n  id: number;\n  name: string;\n  price: number;\n  description?: string;\n}\n\nfunction label(product: Product): string {\n  return `${product.name}：${product.price}円`;\n}\n\nconst tea: Product = { id: 1, name: \"緑茶\", price: 150 };\nconsole.log(label(tea)); // 緑茶：150円\n```\n\nポイントは 3 つです。任意の項目には `?` を付けること(`description?`)。関数の引数には型を必ず書くこと。戻り値の型 `: string` も書くと、関数の中で誤って数値を返すような変更をしたときにすぐ気づけること。`label({ id: 2, name: \"紅茶\", price: \"200\" })` のように price に文字列を渡すと、TS2322 で弾かれます。\n\n### any は「チェックの放棄」\n\n型が分からないときの逃げ道として **any** 型があります。any にはどんな値でも入り、どんな操作もコンパイルを通ります。つまり型チェックの放棄です。\n\n```ts\n// anyrun.ts\nconst data: any = \"文字列です\";\nconsole.log(data.toFixed(1)); // toFixed は数値のメソッド。でもコンパイルは通る\n```\n\n`toFixed` は数値を小数点以下の桁数で整形するメソッドで、文字列にはありません。それでもコンパイルは通り、実行すると落ちます。\n\n```\nTypeError: data.toFixed is not a function\n```\n\n同じことを `const data: string = \"文字列です\";` で書けば、`toFixed` は string に存在しないとしてコンパイル時にエラー(TS2551)になります。any を書いた場所だけ、チェックが外れて JavaScript の世界に戻ってしまうのです。\n\n```mermaid\nflowchart TD\n  A[\"data.toFixed(1)\"] --> B{\"data の型\"}\n  B -->|\"string\"| C[\"コンパイル時にエラー\"]\n  C --> D[\"書いた時点で直せる\"]\n  B -->|\"any\"| E[\"コンパイルは通る\"]\n  E --> F[\"実行時に TypeError\"]\n  F --> G[\"ユーザーが最初に踏む可能性\"]\n```\n\n既存コードを読んでいて any を見かけたら、「ここは型の保護が効いていない」という警告サインだと考えてください。どうしても型が書けない場面の正しい逃げ方は #5 で扱われます。\n\n### 今は流していいこと\n\ntsconfig.json や strict モードの各オプションは、今は深追い不要です。#6 以降で使う Vite(フロントエンドの開発・ビルドツール)がプロジェクトの雛形ごと用意してくれます。「設定ファイルで tsc の厳しさを調整できる」こと、「デフォルトではエラーがあっても .js が生成される」ことだけ頭に置いておけば十分です。\n\n### 次回へのつながり\n\n記事のまとめでは、次回 #5 で複数の型を受け入れるユニオン型、型を絞り込む型ガード、どんな型でも扱えるジェネリクス、そして「実行時に型が消える」弱点を補う zod を学ぶと予告されています。サーバーから来たデータは tsc がチェックできない(実行時に初めて届く)ので、そこをどう守るかが実務の核心になります。\n\n### まとめ\n\n- interface を引数の型にすると、形の合わないオブジェクトを渡した時点で弾かれる\n- `npx tsc hello.ts && node hello.js` は、コンパイルが成功したときだけ実行する\n- any はどんな操作もコンパイルを通すので、間違いが実行時の TypeError まで隠れる\n- any を見かけたら「型の保護が効いていない場所」と読む\n\n### 何も見ずに言えるように\n\n- 引数を User 型にすれば、name の無いオブジェクトは渡せない\n- any にすると data.toFixed のような間違いも素通りし、実行して初めて落ちる\n- any は JS の世界への逆戻り。見かけたら危険の目印\n",
+  "quiz": [
+    {
+      "question": "次のコードについて正しいものはどれか。\n\n```ts\nconst data: any = \"文字列です\";\nconsole.log(data.toFixed(1));\n```",
+      "choices": [
+        "コンパイルは通るが、実行すると TypeError: data.toFixed is not a function になる",
+        "コンパイル時に「toFixed は string に存在しない」というエラーになる",
+        "コンパイルも実行も成功し、\"文字列です\" が出力される",
+        "実行すると NaN が出力される"
+      ],
+      "correct": 0,
+      "explanation": "any はどんな操作もコンパイルを通すので、文字列に数値用のメソッドを呼ぶ間違いも素通りします。実行して初めて TypeError で落ちます。"
+    },
+    {
+      "question": "上のコードの 1 行目を `const data: string = \"文字列です\";` に変えた。どうなるか。",
+      "choices": [
+        "any と同じくコンパイルは通り、実行時に TypeError になる",
+        "コンパイル時に、string には toFixed が無いというエラーになる",
+        "string は自動で number に変換され、実行すると NaN が出る",
+        "2 行目の console.log が型エラーになる"
+      ],
+      "correct": 1,
+      "explanation": "data が string と分かっていれば、string に存在しない toFixed の呼び出しはコンパイル時に報告されます(TS2551)。any はこのチェックを外してしまいます。"
+    },
+    {
+      "question": "`interface User { id: number; name: string; nickname?: string; }` と `function greet(user: User): string { ... }` があるとき、**型エラーになる**呼び出しはどれか。",
+      "choices": [
+        "`greet({ id: 1, name: \"佐藤\" })`",
+        "`greet({ id: 2, name: \"鈴木\", nickname: \"すず\" })`",
+        "`greet({ id: 3 })`",
+        "`greet(sato)`(sato は `const sato: User = { id: 1, name: \"佐藤\" }`)"
+      ],
+      "correct": 2,
+      "explanation": "引数は User 型なので必須の name が必要です。`{ id: 3 }` には name が無いので TS2741 になります。nickname は任意なので省略しても構いません。"
+    },
+    {
+      "question": "`npx tsc hello.ts && node hello.js` の `&&` の働きとして正しいものはどれか。",
+      "choices": [
+        "tsc と node を同時に並行して実行する",
+        "tsc の結果に関係なく、必ず node も実行する",
+        "node を先に実行し、その後で tsc を実行する",
+        "tsc が成功したときだけ node hello.js を実行する"
+      ],
+      "correct": 3,
+      "explanation": "`&&` は前のコマンドが成功したときだけ次を実行します。型エラーで tsc が失敗すれば node は動きません。"
+    },
+    {
+      "question": "既存コードを読んでいて `function parse(input: any) { ... }` を見かけた。記事の考え方に沿った読み方はどれか。",
+      "choices": [
+        "input の型チェックは効いていないので、ここで型の間違いが実行時まで隠れる可能性があると警戒する",
+        "any は最も安全な型なので、この関数は型の間違いが起きないと判断する",
+        "any は実行時に型をチェックする指定なので、コンパイル時のチェックは不要と判断する",
+        "any は数値専用の型なので、input には数値しか来ないと判断する"
+      ],
+      "correct": 0,
+      "explanation": "any は型チェックの放棄です。その場所だけ JavaScript と同じく実行するまで間違いに気づけないので、危険の目印として読みます。"
+    },
+    {
+      "kind": "essay",
+      "question": "商品を表す interface Product(id:数値・name:文字列・price:数値は必須、description:文字列は任意)を定義し、Product を受け取って「name：price円」という文字列を返す関数 label を書いてください。書き方のポイントも 3 つ説明すること。",
+      "answer": "interface Product {\n  id: number;\n  name: string;\n  price: number;\n  description?: string;\n}\n\nfunction label(product: Product): string {\n  return `${product.name}：${product.price}円`;\n}\n\nconst tea: Product = { id: 1, name: \"緑茶\", price: 150 };\nconsole.log(label(tea)); // 緑茶：150円\n\nポイントは 3 つです。1 つ目は、任意の項目 description には ? を付けて、省略してもエラーにならないようにすること。2 つ目は、関数の引数には型(Product)を必ず書くこと。引数は呼ばれるまで中身が分からず推論できないためです。3 つ目は、戻り値の型 : string も書いておくこと。関数の中で誤って数値を返すような変更をしたときに、その場で気づけます。",
+      "rubric": [
+        "id・name・price が必須で型が正しく、description に ? が付いている",
+        "label の引数に Product 型、戻り値に string 型が書かれ、「name：price円」を返している",
+        "? の意味・引数に型を書く理由・戻り値の型を書く利点のうち 2 つ以上を説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "記事の実技問題 Q5 と同じ内容です。コードとポイントの説明の両方がそろっていれば合格です。"
+    },
+    {
+      "kind": "essay",
+      "question": "次のコードの問題点と直し方を説明してください。\n\n```ts\nconst data: any = \"文字列です\";\nconsole.log(data.toFixed(1));\n```",
+      "answer": "問題点は data を any にしているため、型チェックが完全に外れていることです。toFixed は数値のメソッドで文字列には存在しませんが、any はどんな操作もコンパイルを通すので、この間違いは tsc でもエディタでも見つからず、実行して初めて TypeError: data.toFixed is not a function で落ちます。TypeScript を使っているのに「実行するまで気づけない」JavaScript の状態に戻っています。直し方は、any をやめて実際の型を書くことです。const data: string = \"文字列です\" とすれば、string に toFixed が無いことがコンパイル時に報告され、数値として整形したいなら値を number にする、文字列のまま使うなら toFixed を呼ばない、と書いた時点で直せます。",
+      "rubric": [
+        "any によって型チェックが無効になり、間違いがコンパイルを通ることを指摘している",
+        "実行時に TypeError で落ちる(実行するまで気づけない)ことに触れている",
+        "any をやめて具体的な型(string など)を書くと、コンパイル時に検出できるという直し方を示している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "any の害は「間違いが消えること」ではなく「間違いが実行時まで隠れること」です。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "記事の実技問題を、入力つきで書いてください。\n\n- `interface Product` を定義する: `id`(number・必須)、`name`(string・必須)、`price`(number・必須)、`description`(string・任意)\n- `function label(product: Product): string` を定義する。`name：price円` を返す(「：」は全角コロン)。description があれば末尾に `(description)` を付ける(全角かっこ)\n- 標準入力は 1 行 1 商品で `id,name,price,description`(description が無いときは末尾が空)\n- 各行の label の結果を 1 行ずつ出力する\n\n例: 入力\n```\n1,緑茶,150,\n2,紅茶,200,香りがよい\n```\n出力\n```\n緑茶：150円\n紅茶：200円(香りがよい)\n```\n※ `tsc --strict` で型エラーがあると不正解です。",
+      "setup": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\n// ここに interface Product を定義する\n\n// ここに label 関数を書く\n\nfor (const line of lines) {\n  const [id, name, price, description] = line.split(\",\");\n  // Product を作って label の結果を出力する\n}\n",
+      "answer": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\ninterface Product {\n  id: number;\n  name: string;\n  price: number;\n  description?: string;\n}\n\nfunction label(product: Product): string {\n  const base = `${product.name}：${product.price}円`;\n  if (product.description) {\n    return `${base}(${product.description})`;\n  }\n  return base;\n}\n\nfor (const line of lines) {\n  const [id, name, price, description] = line.split(\",\");\n  const product: Product = { id: Number(id), name, price: Number(price) };\n  if (description) {\n    product.description = description;\n  }\n  console.log(label(product));\n}\n",
+      "tests": [
+        {
+          "stdin": "1,緑茶,150,\n2,紅茶,200,香りがよい\n"
+        },
+        {
+          "stdin": "3,水,0,\n"
+        },
+        {
+          "stdin": "4,ほうじ茶,180,香ばしい\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "記事の Product・label に、任意項目 description の分岐を足した形です。price を `Number()` で変換しないと `price: number` と合わず型エラーになります。description を確かめずに付けると、無い商品で `(undefined)` や `()` が出て不正解です。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "次のコードは any を使っているため、型の間違いが実行時まで隠れています。any をやめて安全に書き直してください。\n\n```ts\nfunction format(data: any): string {\n  return data.toFixed(1);\n}\n```\n\n- `function format(data: number): string` とし、数値を `toFixed(1)` で小数点以下 1 桁の文字列にして返す\n- 標準入力は 1 行 1 個の数値(小数を含むことがある)\n- 各行について `format` の結果を 1 行ずつ出力する。入力は文字列なので、数値に変換してから format に渡す\n- `any` を使ってはいけません\n\n例: 入力 `3.14159` → 出力 `3.1`\n\n※ `tsc --strict` で型エラーがあると不正解です。",
+      "setup": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\n// any をやめて、引数に正しい型を書く\nfunction format(data: any): string {\n  return data.toFixed(1);\n}\n\nfor (const line of lines) {\n  console.log(format(line));\n}\n",
+      "answer": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\nfunction format(data: number): string {\n  return data.toFixed(1);\n}\n\nfor (const line of lines) {\n  console.log(format(Number(line)));\n}\n",
+      "tests": [
+        {
+          "stdin": "3.14159\n"
+        },
+        {
+          "stdin": "2\n10.25\n"
+        },
+        {
+          "stdin": "0\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "雛形のまま実行すると、文字列 line に toFixed を呼んで `TypeError: data.toFixed is not a function` で落ちます。引数を `number` にすると、`format(line)` の時点で「string は number に渡せない」とコンパイル時に分かるので、`Number(line)` で変換して渡します。any は間違いを消すのではなく、実行時まで隠すだけです。"
+    }
+  ]
+}

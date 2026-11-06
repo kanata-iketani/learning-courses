@@ -1,0 +1,105 @@
+{
+  "lesson": 105,
+  "chapter": 4,
+  "title": "zod で境界を検査する",
+  "priority": "🔴",
+  "text": "### スキーマは実行時に消えない\n\nzod では、期待するデータの形をスキーマ(データの形を定義した、実行時にも残るオブジェクト)として書きます。interface と似ていますが、決定的な違いがあります。スキーマはただの JavaScript のオブジェクトなので、**実行時に消えません**。だから実行時に届いた実物と照合できます。\n\n```ts\nimport { z } from \"zod\";\n\nconst UserSchema = z.object({\n  id: z.number(),\n  name: z.string(),\n  email: z.string(),\n});\n\ntype User = z.infer<typeof UserSchema>; // スキーマから型を作れる\n\nconst json = '{\"id\": 1, \"name\": \"佐藤\", \"email\": \"sato@example.com\"}';\nconst user: User = UserSchema.parse(JSON.parse(json));\nconsole.log(user.name); // 佐藤\n```\n\n`UserSchema.parse(データ)` が検問所です。データがスキーマの形と合っていればそのまま返し、合っていなければエラーを投げます。つまり parse を通過した値は、実行時に形が確認済みです。\n\n### z.infer<typeof UserSchema> の読み方\n\nこの 1 行は、第 2 章のジェネリクスの読み方で分解できます。\n\n- `UserSchema` は値(実行時に存在するオブジェクト)\n- `typeof UserSchema` はその値の型を取り出す書き方。`<>` の中には型しか書けないので `typeof` が必要\n- `z.infer<…>` はスキーマの型を受け取り、検証後のデータの型を返す\n\n結果の `User` は `{ id: number; name: string; email: string }` になります。`typeof` を付け忘れて `z.infer<UserSchema>` と書くと、「UserSchema は値なのに型として使われている」というエラーになります。\n\ninterface とスキーマを二重に手書きすると必ずズレるので、**スキーマを正として型を導出する**のが定石です。スキーマに項目を足せば、型にも自動で反映されます。\n\n### safeParse:失敗を if で扱う\n\n壊れたデータを入れてみます。エラーを投げる代わりに結果オブジェクトで受け取る `safeParse` を使うと、失敗をふつうの if で扱えます。\n\n```ts\nconst broken = '{\"id\": \"1\", \"name\": \"佐藤\"}'; // id が文字列、email が無い\nconst result = UserSchema.safeParse(JSON.parse(broken));\n\nif (result.success) {\n  console.log(result.data.name);\n} else {\n  console.log(z.prettifyError(result.error));\n}\n```\n\n```\n✖ Invalid input: expected number, received string\n  → at id\n✖ Invalid input: expected string, received undefined\n  → at email\n```\n\nどの項目がどう違うかまで一覧になります。`result` は「成功(`success: true` と `data`)」か「失敗(`success: false` と `error`)」のユニオン型で、`if (result.success)` が第 1 章の型ガードとして働きます。そのため if の外でいきなり `result.data.name` と書くと、「result.data は undefined かもしれない」というエラーになります。\n\n| | 形が合う | 形が合わない |\n|---|---|---|\n| `parse` | 値を返す | 例外(ZodError)を投げる |\n| `safeParse` | `{ success: true, data }` | `{ success: false, error }` |\n\nzod なしでこの事故が起きると、壊れたデータがアプリの奥まで運ばれて、まったく関係ない画面の undefined エラーとして爆発します。原因から遠い場所で爆発するバグほど、調査に時間を食うものはありません。境界で止めれば、調査は一瞬です。\n\n### 実務の形:fetch + unknown + zod\n\nここまでの道具を全部つなぎます。練習用 API を検証付きで呼ぶ `getUser.ts` です。\n\n```ts\ntype User = z.infer<typeof UserSchema>;\n\nasync function getUser(): Promise<User> {\n  const res = await fetch(\"https://jsonplaceholder.typicode.com/users/1\");\n  const data: unknown = await res.json(); // まず unknown で受ける\n  return UserSchema.parse(data);          // 境界で検査。通れば User 型\n}\n\nasync function main() {\n  const user = await getUser();\n  console.log(user.name, \"/\", user.email);\n}\n```\n\n`npx tsx getUser.ts` で実行すると `Leanne Graham / Sincere@april.biz` と表示されます。tsx(TypeScript を変換しながらそのまま実行するツール)は型チェックを飛ばすので、チェックはエディタか `npx tsc --noEmit` が担当します。\n\n```mermaid\nsequenceDiagram\n    participant A as API サーバー\n    participant G as getUser\n    participant Z as UserSchema.parse\n    participant M as main\n    A-->>G: JSON(中身は未確認)\n    G->>G: unknown で受ける\n    G->>Z: data を渡す\n    alt 形が合う\n        Z-->>G: User 型の値\n        G-->>M: Promise<User>\n    else 形が合わない\n        Z-->>G: ZodError を投げる\n    end\n```\n\n外から来た値を unknown で受け、境界で parse し、通過後は User 型として安全に使う。戻り値が `Promise<User>` なので、呼び出し側はもう中身の形を疑わなくてよくなります。\n\n### わざと壊して確かめる\n\nスキーマの `email: z.string()` を `age: z.number()` に書き換えて実行すると、この API のレスポンスに age は無いので parse がエラーを投げます。メッセージは `expected number, received undefined → at age` です。なお `z.object` は、スキーマに無い項目(このレスポンスの `username` など)を既定では取り除いて返します。\n\n### まとめ\n\n- zod のスキーマは実行時に残るので、届いた実物の形を検査できる\n- 型は `z.infer<typeof Schema>` でスキーマから導出し、二重管理によるズレを防ぐ\n- `parse` は失敗で例外、`safeParse` は成功か失敗のユニオンを返し、if で扱える\n- 実務の形は「unknown で受ける → 境界で parse → 以降は型付きで使う」\n\n### 何も見ずに言えるように\n\n- interface は実行時に消えるが、zod のスキーマは残るので実物を検査できる\n- 型は z.infer でスキーマから作る。手書きで二重に持たない\n- 外の値は unknown で受けて境界で parse。通過後の値は形が保証されている\n",
+  "quiz": [
+    {
+      "question": "次のコードの `User` の型として正しいものはどれか。\n\n```ts\nconst UserSchema = z.object({ id: z.number(), name: z.string(), email: z.string() });\ntype User = z.infer<typeof UserSchema>;\n```",
+      "choices": [
+        "{ id: number; name: string; email: string }",
+        "{ id: ZodNumber; name: ZodString; email: ZodString }",
+        "unknown",
+        "any"
+      ],
+      "correct": 0,
+      "explanation": "z.infer はスキーマから「検証を通った後のデータの型」を導出します。スキーマの部品(z.number() など)の型ではなく、number や string になります。"
+    },
+    {
+      "question": "`type User = z.infer<UserSchema>;` と書くとコンパイルエラーになる。理由として正しいものはどれか。",
+      "choices": [
+        "z.infer は関数なので z.infer(UserSchema) と書く必要がある",
+        "UserSchema は値なので、型を書く場所(<> の中)では typeof UserSchema として値の型を取り出す必要がある",
+        "z.infer は zod 4 で廃止された",
+        "UserSchema という名前は大文字始まりなので型と衝突している"
+      ],
+      "correct": 1,
+      "explanation": "<> の中には型しか書けません。UserSchema は実行時に存在する値(オブジェクト)なので、typeof で型を取り出してから z.infer に渡します。TypeScript も「Did you mean 'typeof UserSchema'?」と候補を出します。"
+    },
+    {
+      "question": "次のコードでコンパイルエラーになるのはどの行か。\n\n```ts\nconst result = UserSchema.safeParse(input);\nconsole.log(result.data.name);        // (A)\nif (result.success) {\n  console.log(result.data.name);      // (B)\n} else {\n  console.log(result.error);          // (C)\n}\n```",
+      "choices": [
+        "(B)",
+        "(C)",
+        "(A)",
+        "どの行もエラーにならない"
+      ],
+      "correct": 2,
+      "explanation": "safeParse の結果は成功か失敗のユニオン型で、失敗側には data がありません。(A) は絞り込み前なので「result.data は undefined かもしれない」というエラーになります。(B) は if (result.success) で成功側に絞り込まれているので通ります。"
+    },
+    {
+      "question": "スキーマの `email: z.string()` を `age: z.number()` に書き換え、age を含まない API レスポンスを `UserSchema.parse(data)` に通した。どうなるか。",
+      "choices": [
+        "age が undefined のまま User 型の値として返る",
+        "age に 0 が自動で入って返る",
+        "コンパイルエラーになり実行できない",
+        "parse が ZodError を投げ、age について number を期待したが undefined だったと報告される"
+      ],
+      "correct": 3,
+      "explanation": "parse は形が合わなければ例外を投げます。メッセージは「expected number, received undefined → at age」です。コンパイル時には中身が分からないので、コンパイルエラーにはなりません。"
+    },
+    {
+      "question": "interface を手書きせず `z.infer` でスキーマから型を導出するのが定石とされる理由はどれか。",
+      "choices": [
+        "z.infer で作った型だけが実行時に残るから",
+        "interface とスキーマを二重に手書きすると、片方だけ直したときにズレるから",
+        "interface は zod と同じファイルに書けないから",
+        "z.infer を使うと parse が不要になるから"
+      ],
+      "correct": 1,
+      "explanation": "検査に使うスキーマと、コードで使う型が別々だと、項目を足したときに片方を直し忘れてズレます。スキーマを正として型を導出すれば、変更が自動で型に反映されます。z.infer の型も実行時には消えるので、検査はあくまで parse の役目です。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "zod の `safeParse` がしていることを、外部パッケージを使わず自前で書いてみます。`parseUser(data: unknown): ParseResult` を書いてください(User と ParseResult の型、main は雛形のまま)。\n\n検査の規則:\n1. data が null でないオブジェクトで配列でもない、でなければ `errors` を 1 件だけ返す: `expected object, received 種類`(種類は配列なら `array`、null なら `null`、それ以外は typeof の結果)\n2. オブジェクトなら id(number)・name(string)・email(string)を **この順に** 確かめ、合わない項目ごとに `expected 期待する型, received 種類 → at 項目名` を errors に足す(種類は値が null なら `null`、それ以外は typeof の結果。項目が無ければ `undefined`)\n3. 3 項目とも合えば `{ success: true, data: { id, name, email } }` を返す(他の項目は含めない)\n\nmain は成功なら `OK 名前 / メール`、失敗なら各エラーを `✖ ` を付けて 1 行ずつ出力します。\n\n例: 入力 `{\"id\":\"1\",\"name\":\"佐藤\"}` → 出力 `✖ expected number, received string → at id` と `✖ expected string, received undefined → at email` の 2 行",
+      "setup": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\ninterface User {\n  id: number;\n  name: string;\n  email: string;\n}\n\ntype ParseResult =\n  | { success: true; data: User }\n  | { success: false; errors: string[] };\n\n// zod の safeParse の代わりに、自前で形を検査する\nfunction parseUser(data: unknown): ParseResult {\n  // ここを書く\n  return { success: false, errors: [] };\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const result = parseUser(JSON.parse(line));\n  if (result.success) {\n    console.log(\"OK \" + result.data.name + \" / \" + result.data.email);\n  } else {\n    for (const e of result.errors) console.log(\"✖ \" + e);\n  }\n}\n",
+      "answer": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\ninterface User {\n  id: number;\n  name: string;\n  email: string;\n}\n\ntype ParseResult =\n  | { success: true; data: User }\n  | { success: false; errors: string[] };\n\nfunction kindOf(v: unknown): string {\n  return v === null ? \"null\" : typeof v;\n}\n\nfunction parseUser(data: unknown): ParseResult {\n  if (typeof data !== \"object\" || data === null || Array.isArray(data)) {\n    return { success: false, errors: [\"expected object, received \" + (Array.isArray(data) ? \"array\" : kindOf(data))] };\n  }\n  const obj = data as Record<string, unknown>;\n  const { id, name, email } = obj;\n  const errors: string[] = [];\n  if (typeof id !== \"number\") errors.push(\"expected number, received \" + kindOf(id) + \" → at id\");\n  if (typeof name !== \"string\") errors.push(\"expected string, received \" + kindOf(name) + \" → at name\");\n  if (typeof email !== \"string\") errors.push(\"expected string, received \" + kindOf(email) + \" → at email\");\n  if (typeof id === \"number\" && typeof name === \"string\" && typeof email === \"string\") {\n    return { success: true, data: { id, name, email } };\n  }\n  return { success: false, errors };\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const result = parseUser(JSON.parse(line));\n  if (result.success) {\n    console.log(\"OK \" + result.data.name + \" / \" + result.data.email);\n  } else {\n    for (const e of result.errors) console.log(\"✖ \" + e);\n  }\n}\n",
+      "tests": [
+        {
+          "stdin": "{\"id\":1,\"name\":\"佐藤\",\"email\":\"sato@example.com\"}\n{\"id\":\"1\",\"name\":\"佐藤\"}\n"
+        },
+        {
+          "stdin": "null\n[1,2]\n\"text\"\n"
+        },
+        {
+          "stdin": "{\"id\":1,\"name\":null,\"email\":\"a@b\"}\n{}\n{\"id\":2,\"name\":\"鈴木\",\"email\":\"s@x\",\"age\":30}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "zod のスキーマがしていることは、unknown の値を 1 項目ずつ typeof で確かめ、合わない項目を記録することです。戻り値を `success` で分けたユニオン型にしておくと、呼び出し側の `if (result.success)` が型ガードになり、成功時だけ data を触れます。typeof null が \"object\" になること、配列もオブジェクト扱いになることに注意します。最初に見つかったエラーで return してしまうと、2 件目以降のエラーが出ません。"
+    },
+    {
+      "kind": "essay",
+      "question": "商品データ用の zod スキーマ `ProductSchema`(id は数値、name は文字列、price は数値)を定義し、型 `Product` を導出してください。さらに JSON 文字列 `'{\"id\": 1, \"name\": \"緑茶\", \"price\": \"150\"}'` を safeParse で検査し、失敗した場合はエラー内容を表示するコードを書き、表示される内容と書き方のポイントを説明してください。",
+      "answer": "```ts\nimport { z } from \"zod\";\n\nconst ProductSchema = z.object({\n  id: z.number(),\n  name: z.string(),\n  price: z.number(),\n});\n\ntype Product = z.infer<typeof ProductSchema>;\n\nconst broken = '{\"id\": 1, \"name\": \"緑茶\", \"price\": \"150\"}';\nconst result = ProductSchema.safeParse(JSON.parse(broken));\n\nif (result.success) {\n  console.log(result.data.name, result.data.price);\n} else {\n  console.log(z.prettifyError(result.error));\n}\n```\n実行すると「✖ Invalid input: expected number, received string → at price」と表示されます。ポイントは、型 Product を手書きせず z.infer でスキーマから導出して二重管理のズレを防ぐこと、safeParse で失敗を例外ではなく if で扱うことです。境界での検証は失敗が起きて当然なので、正常系と同じ流れで失敗を処理できる safeParse が実務では使いやすい形です。",
+      "rubric": [
+        "z.object で id/name/price を z.number()/z.string()/z.number() として定義している",
+        "型を z.infer<typeof ProductSchema> で導出している(typeof を含む)",
+        "safeParse の結果を result.success で分岐し、失敗時に error を表示している",
+        "price が文字列なので price について number を期待したと報告されることを説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "スキーマ定義・z.infer<typeof …>・safeParse の if 分岐の 3 点がそろい、どの項目でどう失敗するかを説明できれば合格です。"
+    }
+  ]
+}

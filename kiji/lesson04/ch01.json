@@ -1,0 +1,106 @@
+{
+  "lesson": 4,
+  "chapter": 1,
+  "title": "DBが必要な理由とドライバ",
+  "priority": "🟡",
+  "text": "### メモリに置いたデータは再起動で消える\n\n前回までの API は、データを Go のメモリ上(変数やスライス)で持っていました。この形には大きな弱点があります。**サーバーを再起動すると、データが全部消えます。**\n\nメモリはプログラムが動いている間だけ存在する場所です。`Ctrl + C` でサーバーを止めた瞬間に、それまで作ったデータもなくなります。そこで DB(データベース。データを整理して保存する専用のソフト)を使います。DB はデータをディスクに書き込むので、サーバーを止めてもデータが残ります。これを**永続化**(プログラムが終わってもデータを残すこと)といいます。\n\n| | メモリ(変数・スライス) | データベース |\n|---|---|---|\n| 保存場所 | RAM(電源が切れると消える) | ディスク(電源が切れても残る) |\n| 再起動後 | 消える | 残る |\n| 用途 | 一時的な計算 | ずっと残したいデータ |\n\n```mermaid\nflowchart LR\n    subgraph before[\"前回まで: メモリ版\"]\n        A1[\"Go のサーバー\"] --> M[\"スライス users\"]\n        M -.->|\"再起動で消える\"| X[\"データなし\"]\n    end\n    subgraph after[\"今回: DB 版\"]\n        A2[\"Go のサーバー\"] -->|\"SQL を送る\"| P[(\"PostgreSQL\")]\n        P -->|\"ディスクに保存\"| D[\"再起動後も残る\"]\n    end\n```\n\nこの記事で本当に覚えるべきことは 2 つです。「DB 接続の準備 → SQL 実行 → 結果を受け取る」という一連の流れと、プレースホルダー(SQL インジェクション対策)です。Docker やポインタは今は流して構いません。\n\n### PostgreSQL を Docker で起動する\n\n今回使う DB は PostgreSQL(ポスグレ。代表的な RDB の 1 つ)です。RDB(リレーショナルデータベース。表の形でデータを持つ DB)の代表格です。PC に直接インストールする代わりに、Docker(アプリを箱=コンテナに入れて動かす道具)で起動します。不要になったら箱ごと捨てられるので、PC を汚しません。\n\n```\ndocker run --name pg-practice \\\n  -e POSTGRES_PASSWORD=password \\\n  -e POSTGRES_DB=testdb \\\n  -p 5432:5432 \\\n  -d postgres:16\n```\n\n| オプション | 意味 |\n|---|---|\n| `--name pg-practice` | コンテナに名前をつける |\n| `-e POSTGRES_PASSWORD=password` | DB のパスワードを設定(`-e` は環境変数を渡す) |\n| `-e POSTGRES_DB=testdb` | 最初に作るデータベースの名前 |\n| `-p 5432:5432` | ポート 5432 を外に公開(5432 は PostgreSQL の標準ポート) |\n| `-d` | バックグラウンドで起動(detach = 切り離して動かす) |\n| `postgres:16` | 使うイメージ(PostgreSQL のバージョン 16) |\n\n起動したら `docker ps`(今動いているコンテナの一覧)で `pg-practice` が `Up` になっているかを確かめます。ここで決めたパスワードと DB 名は、あとで Go から接続するときの設定と**一致させる必要があります**。\n\n### ドライバを入れてプロジェクトを作る\n\nGo から PostgreSQL に話しかけるには、ドライバ(DB と通信するための専用部品)が要ります。\n\n```\nmkdir -p ~/go-practice/day4-db\ncd ~/go-practice/day4-db\ngo mod init day4-db\ngo get github.com/lib/pq\n```\n\n`go mod init` で `go.mod` を作り、`go get` で PostgreSQL 用ドライバ `lib/pq` をダウンロードして、依存関係として `go.mod` に記録します。\n\n### database/sql と lib/pq の役割分担\n\nコードの import には新しい道具箱が 3 つ増えます。\n\n```go\nimport (\n    \"database/sql\"   // DB操作の道具箱(標準ライブラリ)\n    \"encoding/json\"\n    \"fmt\"\n    \"log\"            // ログ出力・エラー終了の道具箱(今回新登場)\n    \"net/http\"\n\n    _ \"github.com/lib/pq\"  // PostgreSQL専用ドライバ(今回新登場)\n)\n```\n\n`database/sql` は Go 標準の「DB 操作の共通窓口」です。PostgreSQL でも MySQL でも、コードはこの窓口を通して書きます。ただし窓口だけでは実際の DB と通信できません。窓口と実物の PostgreSQL をつなぐのがドライバの `lib/pq` です。\n\n### `_` をつけて import する理由\n\nいちばん引っかかるのが先頭の `_` です。これは blank import(直接は使わないが読み込んでおく書き方)と呼ばれます。\n\n`lib/pq` は**読み込まれた瞬間に**、裏で「自分は postgres という名前のドライバです」と `database/sql` に登録します。この登録があるから、あとで `sql.Open(\"postgres\", ...)` と名前で指定できます。コードの中で `pq.何か()` と直接呼ぶ場面はありません。欲しいのは読み込み時の登録だけです。\n\nところが Go には「import したのに使っていないパッケージはコンパイルエラーにする」というルールがあります。そこで `_` をつけて「直接は使わないが、読み込むこと自体に意味がある」と Go に伝えます。\n\n```mermaid\nflowchart LR\n    C[\"自分のコード\"] -->|\"sql.Open で postgres を指定\"| S[\"database/sql 共通窓口\"]\n    Q[\"lib/pq ドライバ\"] -.->|\"読み込み時に postgres として登録\"| S\n    S -->|\"登録されたドライバ経由\"| P[(\"PostgreSQL\")]\n```\n\n`_ \"github.com/lib/pq\"` の行を消すと、コンパイルは通りますが、実行時に `unknown driver \"postgres\"` で失敗します。登録役がいなくなるからです。\n\n### 完成後の確認と後始末\n\n第 4 章までのコードが完成したら、サーバーを `Ctrl + C` で止めて再び `go run main.go` で起動し、`curl http://localhost:8080/users` を送ると、前に作ったデータが残っています。メモリ版との決定的な違いです。\n\n学習を区切るときは `docker stop pg-practice` で止めます。止めるだけならデータは残り、`docker start pg-practice` で再開できます。`docker rm pg-practice` でコンテナを削除すると、中のデータも消えます。\n\n### まとめ\n\n- メモリ上のデータは再起動で消える。DB はディスクに保存するので残る(永続化)\n- PostgreSQL は Docker の `docker run` 一発で起動できる。パスワードと DB 名は接続設定と一致させる\n- `database/sql` は共通窓口、`lib/pq` は PostgreSQL との通信を担うドライバ\n- `_` で import すると、直接は使わずに読み込み時の登録だけを行える\n- `docker stop` はデータが残り、`docker rm` はコンテナごとデータも消える\n\n### 何も見ずに言えるように\n\n- DB を使う理由は、再起動してもデータを残す「永続化」のため\n- `database/sql` が共通窓口で、ドライバ `lib/pq` が PostgreSQL との間をつなぐ\n- `_ \"github.com/lib/pq\"` は「直接呼ばないが、読み込み時のドライバ登録が必要」だからつける\n",
+  "quiz": [
+    {
+      "question": "前回までのメモリ版 API を Ctrl + C で止めて再起動しました。何が起きるか。",
+      "choices": [
+        "スライスの中身はディスクに自動保存されるので、そのまま残る",
+        "JSON タグをつけたフィールドだけが残る",
+        "メモリはプログラムが動いている間だけ存在するので、作ったデータはすべて消える",
+        "http.ListenAndServe が前回のデータを読み込み直すので残る"
+      ],
+      "correct": 2,
+      "explanation": "変数やスライスは RAM 上にあり、プログラムが終わると消えます。再起動後もデータを残したいから DB に保存する(永続化する)、というのがこの回の出発点です。"
+    },
+    {
+      "question": "`_ \"github.com/lib/pq\"` の `_` を消して普通に import するとどうなるか。",
+      "choices": [
+        "コード中で pq を直接使っていないので「使っていない import」としてコンパイルエラーになる",
+        "ドライバが 2 回登録されて実行時エラーになる",
+        "何も変わらず、同じように動く",
+        "PostgreSQL ではなく MySQL に接続しにいく"
+      ],
+      "correct": 0,
+      "explanation": "Go は使っていない import をコンパイルエラーにします。lib/pq は読み込み時の登録だけが目的で `pq.何か()` を呼ばないため、`_` をつけて「読み込むこと自体に意味がある」と伝えます。"
+    },
+    {
+      "question": "`_ \"github.com/lib/pq\"` の行をまるごと削除しました。`sql.Open(\"postgres\", ...)` のあと最初の SQL を実行するまでに起きることとして正しいものはどれか。",
+      "choices": [
+        "コンパイルエラーになり、そもそも実行できない",
+        "database/sql が標準で PostgreSQL に対応しているので、問題なく動く",
+        "接続文字列の dbname が無視されて postgres データベースに接続する",
+        "postgres という名前のドライバが登録されていないので、unknown driver \"postgres\" で失敗する"
+      ],
+      "correct": 3,
+      "explanation": "database/sql は共通窓口にすぎず、実際の通信はドライバが担います。lib/pq を読み込まないと「postgres」という名前の登録が行われず、実行時に unknown driver エラーになります。import 自体がないのでコンパイルは通ります。"
+    },
+    {
+      "question": "docker run を `-e POSTGRES_PASSWORD=secret` で起動したのに、Go 側の接続文字列は `password=password` のままにしました。どうなるか。",
+      "choices": [
+        "Docker が Go 側の設定に合わせてパスワードを書き換える",
+        "接続文字列と DB の設定が食い違うので、接続(最初の SQL 実行)が失敗する",
+        "sslmode=disable を指定していればパスワードは確認されない",
+        "localhost からの接続はパスワードが不要なので成功する"
+      ],
+      "correct": 1,
+      "explanation": "host・port・user・password・dbname は、docker run で起動したときの設定と一致している必要があります。食い違うと接続に失敗します。"
+    },
+    {
+      "kind": "essay",
+      "question": "database/sql と lib/pq の役割の違い、そして lib/pq を `_` つきで import する理由を、何も見ずに 1 分で説明するつもりで書いてください。150〜300 字で。",
+      "answer": "database/sql は Go の標準ライブラリで、DB を操作するための共通の窓口です。PostgreSQL でも MySQL でも、コードはこの窓口の関数(sql.Open や db.Query など)で書きます。ただし窓口だけでは実際の DB と通信できないので、PostgreSQL と話すための専用部品であるドライバ lib/pq を使います。lib/pq は読み込まれた瞬間に「postgres」という名前で database/sql に自分を登録し、そのおかげで sql.Open(\"postgres\", ...) が使えます。コード中で pq を直接呼ぶことはないため、普通に import すると「使っていない import」でコンパイルエラーになります。そこで _ をつけて、読み込み時の登録だけを行わせます。",
+      "rubric": [
+        "database/sql を共通の窓口(標準ライブラリ)と説明している",
+        "lib/pq を PostgreSQL と通信するドライバと説明している",
+        "lib/pq が読み込み時に postgres という名前で登録することに触れている",
+        "直接使わないので普通の import ではコンパイルエラーになる、だから _ をつける、と説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「窓口とドライバの分担 → 登録の仕組み → だから _」の順で話すと筋が通ります。"
+    },
+    {
+      "kind": "sql",
+      "question": "再起動後も users テーブルにデータが残っていることを確かめます。age が 25 以上のユーザーの name と age を、age の大きい順に表示してください。age が同じなら id の小さい順にします(出力列: name, age の 2 列)。",
+      "setup": "CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  age INTEGER NOT NULL\n);\nINSERT INTO users (name, age) VALUES ('washi', 30);\nINSERT INTO users (name, age) VALUES ('taro', 25);\nINSERT INTO users (name, age) VALUES ('hanako', 22);\nINSERT INTO users (name, age) VALUES ('jiro', 41);\nINSERT INTO users (name, age) VALUES ('yuki', 25);\n",
+      "answer": "SELECT name, age\nFROM users\nWHERE age >= 25\nORDER BY age DESC, id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "結果は jiro 41 → washi 30 → taro 25 → yuki 25 の 4 行です。`age > 25` にすると 25 歳の 2 人が落ちます。`ORDER BY age` だけ(昇順)だと並びが逆になり、`age DESC` だけだと 25 歳同士の順が保証されません。\n\n```sql\nSELECT name, age\nFROM users\nWHERE age >= 25\nORDER BY age DESC, id;\n```"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "database/sql の「ドライバ登録簿」を自分で書いて、blank import が何のためにあるかを確かめます。標準入力から 1 行ずつ命令を読み、次のとおり処理してください。\n\n- `register NAME` … NAME を登録する。成功したら `registered NAME` と出力。すでに登録済みなら `error: sql: Register called twice for driver NAME` と出力\n- `open NAME` … NAME が登録済みなら `ok NAME` と出力。未登録なら `error: sql: unknown driver \"NAME\" (forgotten import?)` と出力(NAME はダブルクォートで囲む)\n- 空行や上の形でない行は何も出力せず読み飛ばす\n\n出力は 1 命令につき 1 行です。register と open は関数に分け、どちらも error を返す形にしてください。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// drivers は「ドライバ名 → 登録済みか」の登録簿(database/sql の中にあるものの簡易版)\nvar drivers = map[string]bool{}\n\n// register はドライバを登録する。lib/pq は読み込み時にこれを register(\"postgres\") の形で呼ぶ\nfunc register(name string) error {\n\t// TODO: すでに登録済みなら Register called twice for driver NAME のエラーを返し、\n\t//       そうでなければ登録して nil を返す\n\treturn nil\n}\n\n// open は sql.Open の簡易版。登録されていない名前なら unknown driver のエラーを返す\nfunc open(name string) error {\n\t// TODO\n\treturn nil\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\t// TODO: 1 行ずつ「register NAME」か「open NAME」を処理して結果を出力する\n\t\t_ = strings.Fields(sc.Text())\n\t}\n\t_ = fmt.Println\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nvar drivers = map[string]bool{}\n\nfunc register(name string) error {\n\tif drivers[name] {\n\t\treturn fmt.Errorf(\"sql: Register called twice for driver %s\", name)\n\t}\n\tdrivers[name] = true\n\treturn nil\n}\n\nfunc open(name string) error {\n\tif !drivers[name] {\n\t\treturn fmt.Errorf(\"sql: unknown driver %q (forgotten import?)\", name)\n\t}\n\treturn nil\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tf := strings.Fields(sc.Text())\n\t\tif len(f) != 2 {\n\t\t\tcontinue\n\t\t}\n\t\tvar err error\n\t\tswitch f[0] {\n\t\tcase \"register\":\n\t\t\tif err = register(f[1]); err == nil {\n\t\t\t\tfmt.Println(\"registered\", f[1])\n\t\t\t}\n\t\tcase \"open\":\n\t\t\tif err = open(f[1]); err == nil {\n\t\t\t\tfmt.Println(\"ok\", f[1])\n\t\t\t}\n\t\tdefault:\n\t\t\tcontinue\n\t\t}\n\t\tif err != nil {\n\t\t\tfmt.Println(\"error:\", err)\n\t\t}\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "open postgres\nregister postgres\nopen postgres\n"
+        },
+        {
+          "stdin": "register postgres\nregister postgres\nopen mysql\n"
+        },
+        {
+          "stdin": "\nregister mysql\nopen mysql\nopen postgres\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "lib/pq は読み込まれたときに、この register にあたる処理(本物は sql.Register)を \"postgres\" という名前で呼びます。`_ \"github.com/lib/pq\"` を消すと登録が行われず、sql.Open(\"postgres\", ...) を使ったときに 1 つ目のテストの 1 行目と同じ unknown driver エラーになります。\n\nよくある書き間違いは、2 重登録を確かめ忘れること(2 つ目のテストで差が出ます)と、`%s` で書いて名前がダブルクォートで囲まれないことです。`fmt.Errorf(\"... %q ...\", name)` の `%q` は、値をダブルクォート付きで埋め込みます。"
+    }
+  ]
+}

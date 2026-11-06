@@ -1,0 +1,123 @@
+{
+  "lesson": 3,
+  "chapter": 3,
+  "title": "エラー処理とレスポンスの順番",
+  "priority": "🔴",
+  "text": "## エラー処理とレスポンスを書く順番\n\nGo のコードで最もよく見る形が `if err != nil { ... return }` です。このチャプターでは、この形の意味と、`return` を忘れたときや書く順番を間違えたときに何が起きるかを、コードで確かめます。\n\n### err は「データ」ではなく「失敗を知らせるランプ」 🔴\n\n```go\nerr := json.NewDecoder(r.Body).Decode(&user)\nif err != nil {\n    http.Error(w, \"Bad request\", http.StatusBadRequest)\n    return\n}\n```\n\nここで勘違いしやすいのが、「err に変換したデータが入る」と思ってしまうことです。変換したデータは `&user` で場所を渡した **user の方に入ります**。err に入るのは成功したか失敗したかの報告だけです。\n\n| 届いた JSON | user | err |\n|---|---|---|\n| `{\"name\":\"washi\",\"age\":30}` | `{Name:\"washi\", Age:30}` | nil(エラーなし) |\n| `{\"name\":}`(壊れている) | 空のまま | エラー情報 |\n| 空のボディ | 空のまま | エラー情報(EOF) |\n\n`nil` は「何もない」を表す値です。`err != nil` は「err が空ではない」、つまり**エラーが起きた**という意味です。正常なときこそ err は nil になります。失敗したときだけ点く赤いランプ、と考えると取り違えません。\n\n### Go のエラー処理の型 🔴\n\n```go\n結果, err := なにかの処理()\nif err != nil {\n    // エラーならエラーを返して return\n    return\n}\n// ここに来るのは err が nil のときだけ\n// 正常処理を続ける\n```\n\n「処理する → err をチェック → エラーなら止める → 大丈夫なら続ける」。Go のコードはこの繰り返しでできています。エラーの分岐を先に書いて return で抜けるので、正常な処理は字下げされずに上から下へまっすぐ並びます。\n\n```mermaid\nflowchart TD\n    A[\"処理を呼ぶ: 結果, err := 処理()\"] --> B{\"err != nil ?\"}\n    B -- \"はい(失敗)\" --> C[\"エラーを返す\"] --> D[\"return で関数を抜ける\"]\n    B -- \"いいえ(成功)\" --> E[\"次の処理へ進む\"]\n```\n\n### return を忘れるとどうなるか 🔴\n\n`http.Error` はレスポンスを書くだけで、**関数を終わらせはしません**。`return` がないと、その下の処理が続いてしまいます。\n\n```go\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n    if r.Method != http.MethodPost {\n        http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n        // return がない\n    }\n    var user User\n    err := json.NewDecoder(r.Body).Decode(&user)\n    ...\n```\n\nこのコードに GET を送ると、405 のエラーを書いたあとも Decode に進みます。GET にはボディがないので Decode は失敗し、さらに `http.Error` で 400 を書こうとします。ところがステータスコードは最初に書いた 405 で確定しているので変わらず、ボディに `Method not allowed` と `Bad request` が続けて書き込まれ、サーバーのログには `http: superfluous response.WriteHeader call`(ステータスを二重に書こうとした警告)が出ます。エラーを返したのに正常系の処理まで走る、というのが return 忘れの怖さです。**エラーを返したら必ず return**。これは Go の鉄則です。\n\n### レスポンスは「ヘッダー → ステータス → ボディ」の順 🔴\n\n```go\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.WriteHeader(http.StatusCreated)\njson.NewEncoder(w).Encode(user)\n```\n\n`w.WriteHeader(http.StatusCreated)` はステータスコードを明示的に 201 にします。POST で新しいデータを作ったので、200 ではなく 201 を返すのが REST の慣習です。\n\nこの3行は順番に意味があります。封筒の表書き(ヘッダーとステータス)を書いてから、中身(ボディ)を入れる順番です。\n\n```mermaid\nsequenceDiagram\n    participant H as ハンドラー\n    participant W as w(ResponseWriter)\n    participant C as クライアント\n    H->>W: Header().Set(Content-Type)\n    Note over W: まだ送っていない。書き換えられる\n    H->>W: WriteHeader(201)\n    W->>C: ステータス行とヘッダーを送る(ここで確定)\n    H->>W: Encode(user)\n    W->>C: ボディ {\"name\":\"washi\",\"age\":30}\n```\n\nステータスとヘッダーは、`WriteHeader` を呼んだ時点か、`WriteHeader` を呼ばずにボディを書き始めた時点で確定して送られます。そのため、\n\n- `Encode` のあとに `WriteHeader(201)` を書くと、Encode の時点で 200 が確定しているので **201 にはなりません**(ログに superfluous の警告が出ます)\n- `WriteHeader` のあとに `Header().Set(...)` を書いても、ヘッダーは送ったあとなので**反映されません**\n\n前編で `WriteHeader` を書かなくても 200 が返っていたのは、この「呼ばずにボディを書き始めたら 200 で確定」という動きによるものです。\n\n### サーバー側のログ: fmt.Printf 🟡\n\n```go\nfmt.Printf(\"Received: %s, %d\\n\", user.Name, user.Age)\n```\n\n`fmt.Printf` は書式を指定して表示する関数です。`%s` に文字列、`%d` に整数が順に入ります。`Println` と違って**自動で改行しない**ので、末尾に `\\n` をつけています。型を取り違えて `%d` に文字列を渡すと、エラーにはならず `%!d(string=washi)` のような表示になります。\n\nこの出力はクライアントへのレスポンスではなく、サーバーを起動したターミナルに出る**ログ**です。データをきちんと受け取れたかを開発者が確かめるために出しています。\n\n### まとめ\n\n- 変換結果は `user` に、成功か失敗かの報告は `err` に入る。正常なら err は nil\n- `結果, err := 処理()` → `if err != nil { エラーを返す; return }` → 正常処理、が Go の型\n- `http.Error` は関数を止めない。return を忘れると下の処理が走り、ボディが混ざる\n- `Header().Set` → `WriteHeader` → `Encode` の順。ボディを書き始めると 200 で確定する\n\n### 何も見ずに言えるように\n\n- 「err はデータではなく失敗のランプ。成功したら nil で、データは &user で渡した user に入ります」\n- 「エラーを返したら必ず return。http.Error は書くだけで関数を止めないからです」\n- 「ヘッダー、ステータス、ボディの順に書きます。ボディを書いた後の WriteHeader は効きません」\n",
+  "quiz": [
+    {
+      "question": "次のハンドラーに `curl -i http://localhost:8080/users`(GET)を送りました。レスポンスとして正しいものはどれですか。\n\n```go\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n    if r.Method != http.MethodPost {\n        http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n    }\n\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    w.WriteHeader(http.StatusCreated)\n    json.NewEncoder(w).Encode(User{Name: \"washi\", Age: 30})\n}\n```",
+      "choices": [
+        "405 で、ボディは `Method not allowed` だけ",
+        "201 で、ボディは `{\"name\":\"washi\",\"age\":30}` だけ",
+        "405 で、ボディは `Method not allowed` のあとに `{\"name\":\"washi\",\"age\":30}` が続く",
+        "201 で、ボディは `Method not allowed` のあとに `{\"name\":\"washi\",\"age\":30}` が続く"
+      ],
+      "correct": 2,
+      "explanation": "`http.Error` は 405 とメッセージを書くだけで関数を止めません。return がないので下の処理も実行されます。ステータスは最初に書いた 405 で確定しているので、後の `WriteHeader(201)` は効かず(ログに superfluous の警告)、ボディには Encode の JSON が追記されます。"
+    },
+    {
+      "question": "POST で正しい JSON を送ったとき、次のハンドラーが返すステータスコードはどれですか。\n\n```go\nvar user User\nerr := json.NewDecoder(r.Body).Decode(&user)\nif err != nil {\n    http.Error(w, \"Bad request\", http.StatusBadRequest)\n    return\n}\njson.NewEncoder(w).Encode(user)\nw.WriteHeader(http.StatusCreated)\n```",
+      "choices": [
+        "201(WriteHeader で指定しているので)",
+        "400(WriteHeader の位置がおかしいので Bad request になる)",
+        "500(順番の誤りでサーバー内部エラーになる)",
+        "200(Encode でボディを書き始めた時点で 200 が確定する)"
+      ],
+      "correct": 3,
+      "explanation": "WriteHeader を呼ばずにボディを書き始めると、その時点でステータスが 200 で確定して送られます。後から `WriteHeader(201)` を呼んでも変わらず、ログに `superfluous response.WriteHeader call` が出るだけです。WriteHeader は Encode より前に呼ぶ必要があります。"
+    },
+    {
+      "question": "次の2行を実行したとき、ターミナルの表示はどうなりますか。\n\n```go\nfmt.Printf(\"Received: %s, %d\", \"washi\", 30)\nfmt.Printf(\"Received: %s, %d\", \"taro\", 25)\n```",
+      "choices": [
+        "`Received: washi, 30Received: taro, 25` と1行につながる",
+        "`Received: washi, 30` と `Received: taro, 25` が2行に分かれる",
+        "`Received: %s, %d` が2回表示される",
+        "`\\n` がないのでコンパイルエラーになる"
+      ],
+      "correct": 0,
+      "explanation": "`fmt.Printf` は `Println` と違って自動で改行しません。`%s` と `%d` には順に値が入りますが、末尾に `\\n` がないので2回分が1行につながります。記事のコードが `\\n` をつけているのはこのためです。"
+    },
+    {
+      "question": "`err := json.NewDecoder(r.Body).Decode(&user)` について、正しい説明はどれですか。",
+      "choices": [
+        "正しい JSON が届くと、err に変換したデータが入るので err は nil にならない",
+        "正しい JSON が届くと user にデータが入り、err は nil になる",
+        "壊れた JSON が届くと、user にエラーメッセージが入る",
+        "空のボディが届いたときは、エラーにならず user がゼロ値で返る"
+      ],
+      "correct": 1,
+      "explanation": "変換結果は `&user` で場所を渡した user に入り、err には成功か失敗かの報告だけが入ります。正常なら err は nil です。壊れた JSON や空のボディでは user は空のまま err にエラー(空ボディなら EOF)が入るので、400 を返します。"
+    },
+    {
+      "question": "次のハンドラーは、レスポンスの Content-Type が `application/json` になりませんでした。原因として正しいものはどれですか。\n\n```go\nw.WriteHeader(http.StatusCreated)\nw.Header().Set(\"Content-Type\", \"application/json\")\njson.NewEncoder(w).Encode(user)\n```",
+      "choices": [
+        "`Header().Set` は `http.Error` と一緒にしか使えないから",
+        "Content-Type は `json.NewEncoder` が自動で決めるので、Set しても上書きされるから",
+        "`WriteHeader` を呼んだ時点でヘッダーは送られて確定しており、その後の `Set` は反映されないから",
+        "201 のときは Content-Type を指定できないから"
+      ],
+      "correct": 2,
+      "explanation": "ステータスとヘッダーは WriteHeader を呼んだ時点で確定して送られます。後から Header().Set しても届きません。ヘッダー(Set)→ステータス(WriteHeader)→ボディ(Encode)の順に書くのが正しい形です。"
+    },
+    {
+      "kind": "essay",
+      "question": "次のハンドラーには、記事で「Go の鉄則」とされたことに反する問題と、レスポンスを書く順番の問題が1つずつあります。それぞれ何が起きるかを説明し、正しく直したコードを書いてください。\n\n```go\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n    var user User\n    err := json.NewDecoder(r.Body).Decode(&user)\n    if err != nil {\n        http.Error(w, \"Bad request\", http.StatusBadRequest)\n    }\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    json.NewEncoder(w).Encode(user)\n    w.WriteHeader(http.StatusCreated)\n}\n```",
+      "answer": "1つ目は、`http.Error` のあとに return がないことです。http.Error はエラーを書くだけで関数を止めないので、壊れた JSON が来ても下の Encode まで進み、400 の後ろに空の user の JSON が混ざって返ります。2つ目は、WriteHeader が Encode の後にあることです。ボディを書き始めた時点でステータスは 200 で確定するので、成功しても 201 になりません。直したコードは次のとおりです。\n\n```go\nvar user User\nerr := json.NewDecoder(r.Body).Decode(&user)\nif err != nil {\n    http.Error(w, \"Bad request\", http.StatusBadRequest)\n    return\n}\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.WriteHeader(http.StatusCreated)\njson.NewEncoder(w).Encode(user)\n```",
+      "rubric": [
+        "http.Error のあとに return がないため、エラー後も処理が続くことを指摘している",
+        "return がないと 400 のあとに JSON が混ざるなど、具体的に何が起きるかを述べている",
+        "Encode の後の WriteHeader は効かず、ステータスが 200 になることを指摘している",
+        "修正コードで return を追加し、Header().Set → WriteHeader → Encode の順にしている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「エラーを返したら必ず return」と「ヘッダー → ステータス → ボディの順」は、どちらもビルドが通ってしまうので気づきにくい誤りです。curl -i でステータスとボディを見ると確かめられます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "雛形の `createUserHandler` にはバグが3つあります(エラーを返したあとも処理が続く、成功してもステータスが 201 にならない)。仕様どおりに直してください。\n\n- POST 以外 → 405 `Method not allowed` だけを返す\n- Decode 失敗 → 400 `Bad request` だけを返す\n- 成功 → Content-Type `application/json`、201、受け取った user の JSON\n\n動作確認用の main(書き換え不要)は、標準入力の1行を1リクエスト(`メソッド` または `メソッド ボディ`)として `/users` に送り、`ステータスコード \"Content-Type\" \"ボディ\"` を1行で表示します(ボディは改行を `\\n` と表示)。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"strings\"\n)\n\ntype User struct {\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// このハンドラーにはバグが3つある(エラーのあとも処理が続く/ステータスが 201 にならない)。\n// 仕様どおりに直す:\n// - POST 以外 → 405 \"Method not allowed\" だけを返す\n// - Decode 失敗 → 400 \"Bad request\" だけを返す\n// - 成功 → Content-Type application/json、201、受け取った user の JSON\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n\tif r.Method != http.MethodPost {\n\t\thttp.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n\t}\n\n\tvar user User\n\terr := json.NewDecoder(r.Body).Decode(&user)\n\tif err != nil {\n\t\thttp.Error(w, \"Bad request\", http.StatusBadRequest)\n\t}\n\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tjson.NewEncoder(w).Encode(user)\n\tw.WriteHeader(http.StatusCreated)\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\n// 標準入力の1行 = 1リクエスト。「メソッド」または「メソッド ボディ」の形。\n// 各リクエストについて「ステータスコード Content-Type ボディ」を1行で表示する。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tmethod, body, _ := strings.Cut(sc.Text(), \" \")\n\t\treq := httptest.NewRequest(method, \"/users\", strings.NewReader(body))\n\t\trec := httptest.NewRecorder()\n\t\tcreateUserHandler(rec, req)\n\t\tres := rec.Result()\n\t\tfmt.Printf(\"%d %q %q\\n\", res.StatusCode, res.Header.Get(\"Content-Type\"), rec.Body.String())\n\t}\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"strings\"\n)\n\ntype User struct {\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// 修正版:\n// - POST 以外 → 405 \"Method not allowed\" だけを返す\n// - Decode 失敗 → 400 \"Bad request\" だけを返す\n// - 成功 → Content-Type application/json、201、受け取った user の JSON\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n\tif r.Method != http.MethodPost {\n\t\thttp.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n\t\treturn\n\t}\n\n\tvar user User\n\terr := json.NewDecoder(r.Body).Decode(&user)\n\tif err != nil {\n\t\thttp.Error(w, \"Bad request\", http.StatusBadRequest)\n\t\treturn\n\t}\n\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tw.WriteHeader(http.StatusCreated)\n\tjson.NewEncoder(w).Encode(user)\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\n// 標準入力の1行 = 1リクエスト。「メソッド」または「メソッド ボディ」の形。\n// 各リクエストについて「ステータスコード Content-Type ボディ」を1行で表示する。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tmethod, body, _ := strings.Cut(sc.Text(), \" \")\n\t\treq := httptest.NewRequest(method, \"/users\", strings.NewReader(body))\n\t\trec := httptest.NewRecorder()\n\t\tcreateUserHandler(rec, req)\n\t\tres := rec.Result()\n\t\tfmt.Printf(\"%d %q %q\\n\", res.StatusCode, res.Header.Get(\"Content-Type\"), rec.Body.String())\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "POST {\"name\":\"washi\",\"age\":30}\nGET\n"
+        },
+        {
+          "stdin": "POST {\"name\":}\nPOST\nPUT {\"name\":\"jiro\",\"age\":25}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "2つの `http.Error` のあとに `return` を足し、`w.WriteHeader(http.StatusCreated)` を `Encode` の前に移します。順番は `Header().Set` → `WriteHeader` → `Encode` です。return だけ直すと成功時が 200 のまま、WriteHeader を `Header().Set` より前に置くと Content-Type が反映されません。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "Go のエラー処理の型(`結果, err := 処理()` → `if err != nil { return ... }`)で、文字列を年齢に変換する関数 `parseAge(s string) (int, error)` を書いてください。\n\n- `strconv.Atoi(s)` が失敗したら `errors.New(\"数値ではありません\")` を返す\n- 負の値なら `errors.New(\"負の値です\")` を返す(0 は正常)\n- それ以外は `(年齢, nil)` を返す\n\n標準入力には1行に1つずつ文字列が来ます。main(雛形にあり)が、成功なら `OK: 年齢`、失敗なら `NG: エラー文` を1行ずつ表示します。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n)\n\n// parseAge は文字列を年齢(int)に変換する。\n// - 整数として読めなければ errors.New(\"数値ではありません\") を返す(strconv.Atoi のエラーを確かめる)\n// - 負の値なら errors.New(\"負の値です\") を返す\n// - それ以外は (年齢, nil) を返す\nfunc parseAge(s string) (int, error) {\n\t// ここを書く\n\t_ = errors.New\n\t_ = strconv.Atoi\n\treturn 0, nil\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tage, err := parseAge(sc.Text())\n\t\tif err != nil {\n\t\t\tfmt.Println(\"NG:\", err)\n\t\t\tcontinue\n\t\t}\n\t\tfmt.Println(\"OK:\", age)\n\t}\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"errors\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n)\n\n// parseAge は文字列を年齢(int)に変換する。\n// - 整数として読めなければ errors.New(\"数値ではありません\") を返す(strconv.Atoi のエラーを確かめる)\n// - 負の値なら errors.New(\"負の値です\") を返す\n// - それ以外は (年齢, nil) を返す\nfunc parseAge(s string) (int, error) {\n\tage, err := strconv.Atoi(s)\n\tif err != nil {\n\t\treturn 0, errors.New(\"数値ではありません\")\n\t}\n\tif age < 0 {\n\t\treturn 0, errors.New(\"負の値です\")\n\t}\n\treturn age, nil\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tage, err := parseAge(sc.Text())\n\t\tif err != nil {\n\t\t\tfmt.Println(\"NG:\", err)\n\t\t\tcontinue\n\t\t}\n\t\tfmt.Println(\"OK:\", age)\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "30\nabc\n-1\n"
+        },
+        {
+          "stdin": "0\n25.5\n\n120\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`age, err := strconv.Atoi(s)` のすぐ後で `if err != nil { return 0, errors.New(\"数値ではありません\") }` と止め、次に `age < 0` を確かめます。`25.5` や空行も Atoi では整数にならないのでエラーです。err を `_` で捨てると `abc` が `OK: 0` になり、`age <= 0` と書くと 0 歳が NG になります。"
+    }
+  ]
+}

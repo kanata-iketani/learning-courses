@@ -1,0 +1,105 @@
+{
+  "lesson": 105,
+  "chapter": 2,
+  "title": "ジェネリクスの <T> を読む",
+  "priority": "🟡",
+  "text": "### `<T>` は「型の引数」\n\n実務のコードを読むと `<T>` という記号が頻繁に出てきます。これがジェネリクス(型を引数として後から渡せる仕組み)です。関数の引数が「値を後で渡す」仕組みなら、ジェネリクスは「型を後で渡す」仕組みです。\n\n### API レスポンスで考える\n\nどの API も「ステータスコード + データ本体」という形は共通で、データ本体の型だけが違う、という状況はよくあります。\n\n```ts\ninterface ApiResponse<T> {\n  status: number;\n  data: T;          // ここの型は、使う時に決める\n}\n\ninterface User {\n  id: number;\n  name: string;\n}\n\nconst res1: ApiResponse<User> = {\n  status: 200,\n  data: { id: 1, name: \"佐藤\" },   // data は User 型\n};\n\nconst res2: ApiResponse<string[]> = {\n  status: 200,\n  data: [\"vue\", \"typescript\"],     // data は文字列の配列\n};\n```\n\n`interface ApiResponse<T>` の `<T>` が「型の引数を 1 つ受け取る」という宣言で、`data: T` がその型を使う場所です。`ApiResponse<User>` と書いた瞬間、`T` の場所に `User` がはまり、`res1.data.name` が型チェック付きで使えます。`User` 用と `string[]` 用に interface を 2 つ書く必要はありません。\n\n### 読み方の手順:T を置き換えてみる\n\nジェネリクスの型を読むときは、頭の中で `T` を渡された型に置き換えます。\n\n```mermaid\nflowchart LR\n    A[\"ApiResponse&lt;T&gt;<br/>status: number<br/>data: T\"] -- \"T = User\" --> B[\"ApiResponse&lt;User&gt;<br/>status: number<br/>data: User\"]\n    A -- \"T = string[]\" --> C[\"ApiResponse&lt;string[]&gt;<br/>status: number<br/>data: string[]\"]\n```\n\n- `ApiResponse<User>` → `data` は `User`。だから `res1.data.name` は `string`\n- `ApiResponse<string[]>` → `data` は `string[]`。だから `res2.data[0]` は `string`\n\n置き換えた後の形と合わない値を入れると、ふつうの型エラーになります。たとえば `ApiResponse<User>` の `data` に `[\"vue\"]` を入れると、「string[] には User の id と name が無い」と指摘されます。\n\n入れ子になっても手順は同じです。`ApiResponse<ApiResponse<User>>` なら、外側の `data` が `ApiResponse<User>`、その `data` が `User` なので、`x.data.data.name` が `string` です。外側から 1 段ずつ置き換えていけば読めます。\n\n### 実はもう使っている\n\nジェネリクスは新しく出てきたものではありません。\n\n| 見慣れた書き方 | ジェネリクスで書くと | 意味 |\n|---|---|---|\n| `string[]`(#4) | `Array<string>` | 文字列が入る配列 |\n| `Promise<User>`(#3) | ― | いずれ `User` が入る箱 |\n\n`string[]` は `Array<string>` の省略形で、2 つは同じ型です。`Promise<User>` は「非同期処理が終わると `User` が取り出せる箱」です。`async` 関数の戻り値に書き、呼び出し側は `await` で中身の `User` を取り出します。\n\n```ts\nasync function getUser(): Promise<User> {\n  // ...\n}\n\nconst user = await getUser(); // user は User 型\nconst p = getUser();          // p は Promise<User>。p.name はエラー\n```\n\n`await` を付け忘れると、手元にあるのは `User` ではなく箱(`Promise<User>`)なので、`p.name` は「Promise<User> に name は無い」というエラーになります。`<>` の外側が箱の種類、内側が中身、と読むと迷いません。\n\n### まずは読めればよい\n\nジェネリクスは自分で定義するより、読めることが大事です。`<>` を見たら「型の引数を渡しているんだな」と読み、`T` を具体的な型に置き換えて形を確かめてください。ライブラリの型定義やエディタのホバー表示には `<T>` が大量に出てきますが、この手順で読めます。\n\n### まとめ\n\n- ジェネリクスは「型を後で渡す」仕組みで、`<T>` が型の引数\n- `ApiResponse<User>` のように使う側で型を渡すと、`T` の場所にその型がはまる\n- 読むときは `T` を渡された型に置き換える。入れ子なら外側から 1 段ずつ\n- `string[]` は `Array<string>` の省略形、`Promise<User>` は User が入る箱で `await` で取り出す\n\n### 何も見ずに言えるように\n\n- ジェネリクスは型の引数。形が共通で中身の型だけ違うものを、定義 1 つで表せる\n- `<T>` を見たら、渡された型に置き換えて読む\n- `Array<string>` と `Promise<User>` も同じ仕組みで、`<>` の外が箱、内が中身\n",
+  "quiz": [
+    {
+      "question": "次の定義があるとき、`res.data.name` の型は何か。\n\n```ts\ninterface ApiResponse<T> { status: number; data: T; }\ninterface User { id: number; name: string; }\nconst res: ApiResponse<User> = { status: 200, data: { id: 1, name: \"佐藤\" } };\n```",
+      "choices": [
+        "T",
+        "string",
+        "User",
+        "any"
+      ],
+      "correct": 1,
+      "explanation": "ApiResponse<User> では T の場所に User がはまるので res.data は User、その name は string です。T のまま残ることはありません。"
+    },
+    {
+      "question": "同じ `ApiResponse<T>` と `User` の定義で、コンパイルエラーになるのはどれか。",
+      "choices": [
+        "`const a: ApiResponse<string[]> = { status: 200, data: [\"vue\"] };`",
+        "`const b: ApiResponse<number> = { status: 404, data: 0 };`",
+        "`const c: ApiResponse<User> = { status: 200, data: [\"vue\"] };`",
+        "`const d: ApiResponse<User> = { status: 201, data: { id: 2, name: \"鈴木\" } };`"
+      ],
+      "correct": 2,
+      "explanation": "c は T = User なので data は User でなければなりませんが、string[] を入れています。「string[] には User の id, name が無い」というエラーになります。"
+    },
+    {
+      "question": "次の `x` について、`x.data.data.name` の型として正しいものはどれか。\n\n```ts\nconst x: ApiResponse<ApiResponse<User>> = /* ... */;\n```",
+      "choices": [
+        "string",
+        "User",
+        "ApiResponse<User>",
+        "コンパイルエラー。ジェネリクスは入れ子にできない"
+      ],
+      "correct": 0,
+      "explanation": "外側から置き換えます。x.data は ApiResponse<User>、x.data.data は User、x.data.data.name は string です。入れ子は普通に書けます。"
+    },
+    {
+      "question": "次のコードの説明として正しいものはどれか。\n\n```ts\nasync function getUser(): Promise<User> { /* ... */ }\nconst p = getUser();\nconsole.log(p.name);\n```",
+      "choices": [
+        "p は User 型なので p.name は string として通る",
+        "p は Promise<User> なので p.name はエラー。await getUser() として中身の User を取り出す必要がある",
+        "Promise<User> は User[] の別名なので p[0].name と書く",
+        "async 関数の戻り値に型は書けないので 1 行目がエラーになる"
+      ],
+      "correct": 1,
+      "explanation": "<> の外側が箱(Promise)、内側が中身(User)です。await なしで受けると手元にあるのは箱なので、name は存在しません。"
+    },
+    {
+      "question": "`string[]` と `Array<string>` の関係として正しいものはどれか。",
+      "choices": [
+        "string[] は固定長、Array<string> は可変長の配列",
+        "Array<string> は実行時にだけ存在し、string[] はコンパイル時にだけ存在する",
+        "同じ型で、string[] は Array<string> の省略形",
+        "Array<string> は文字列 1 つ、string[] は文字列の配列"
+      ],
+      "correct": 2,
+      "explanation": "記事のとおり string[] は Array<string> の省略形で、まったく同じ型です。#4 の時点ですでにジェネリクスを使っていたことになります。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "ジェネリクスを使った関数を 2 つ書いてください。雛形の `ApiResponse<T>` と main はそのまま使います。\n\n- `wrap<T>(status: number, data: T): ApiResponse<T>` … status と data をまとめた ApiResponse を返す\n- `first<T>(items: T[]): T | undefined` … 配列の先頭の要素を返す(空なら undefined)\n\nmain は、標準入力 1 行をカンマ区切りの単語として読み、(1) 単語の配列を wrap して先頭を大文字で、(2) 各単語の長さの配列を wrap して先頭を小数点以下 1 桁で、それぞれ `ステータス 値` の形で出力します(先頭が無ければ `(なし)`)。main の中で `f1.toUpperCase()` と `f2.toFixed(1)` が型チェックを通るのは、T が string と number に置き換わるからです。\n\n例: 入力 `vue,typescript` → 出力 `200 VUE` と `200 3.0` の 2 行",
+      "setup": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\ninterface ApiResponse<T> {\n  status: number;\n  data: T;\n}\n\n// status と data を受け取り、ApiResponse<T> を作って返す\nfunction wrap<T>(status: number, data: T): ApiResponse<T> {\n  // ここを書き換える\n  return { status: 0, data: data };\n}\n\n// 配列の先頭の要素を返す。空なら undefined\nfunction first<T>(items: T[]): T | undefined {\n  // ここを書き換える\n  return undefined;\n}\n\nconst words = input.trim() === \"\" ? [] : input.trim().split(\",\");\nconst r1 = wrap(words.length === 0 ? 204 : 200, words);\nconst f1 = first(r1.data);\nconsole.log(r1.status + \" \" + (f1 === undefined ? \"(なし)\" : f1.toUpperCase()));\n\nconst lengths = words.map((w) => w.length);\nconst r2 = wrap(200, lengths);\nconst f2 = first(r2.data);\nconsole.log(r2.status + \" \" + (f2 === undefined ? \"(なし)\" : f2.toFixed(1)));\n",
+      "answer": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\ninterface ApiResponse<T> {\n  status: number;\n  data: T;\n}\n\nfunction wrap<T>(status: number, data: T): ApiResponse<T> {\n  return { status: status, data: data };\n}\n\nfunction first<T>(items: T[]): T | undefined {\n  return items[0];\n}\n\nconst words = input.trim() === \"\" ? [] : input.trim().split(\",\");\nconst r1 = wrap(words.length === 0 ? 204 : 200, words);\nconst f1 = first(r1.data);\nconsole.log(r1.status + \" \" + (f1 === undefined ? \"(なし)\" : f1.toUpperCase()));\n\nconst lengths = words.map((w) => w.length);\nconst r2 = wrap(200, lengths);\nconst f2 = first(r2.data);\nconsole.log(r2.status + \" \" + (f2 === undefined ? \"(なし)\" : f2.toFixed(1)));\n",
+      "tests": [
+        {
+          "stdin": "vue,typescript\n"
+        },
+        {
+          "stdin": "zod\n"
+        },
+        {
+          "stdin": "\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`wrap(200, words)` を呼ぶと T が string[] に、`first(r1.data)` では T が string に推論されます。だから f1 は string | undefined で、undefined を除いた後に toUpperCase が使えます。同じ定義が lengths では number として働きます。first で最後の要素を返す、空配列の扱いを誤る、などの誤りは出力が変わります。"
+    },
+    {
+      "kind": "essay",
+      "question": "`ApiResponse<T>` を例に、ジェネリクスとは何か、なぜ `User` 用と `string[]` 用に interface を別々に書かないのかを、何も見ずに説明してください。",
+      "answer": "ジェネリクスは型を後から渡せる仕組みで、`<T>` は型の引数です。関数の引数が値を後で受け取るのと同じように、`interface ApiResponse<T> { status: number; data: T }` は、data の型を使う側が決めます。`ApiResponse<User>` と書けば T の場所に User がはまり、data は User になるので `res.data.name` が型チェック付きで使えます。`ApiResponse<string[]>` なら data は文字列の配列です。API のレスポンスは「ステータス + データ本体」という形が共通で、データ本体の型だけが違うことが多いので、型ごとに interface を書くと同じ形を何度も書くことになり、修正漏れも起きます。ジェネリクスなら定義 1 つで済みます。`string[]` が `Array<string>`、非同期の結果が `Promise<User>` であるのも同じ仕組みです。",
+      "rubric": [
+        "<T> を「型の引数」「型を後で渡す仕組み」と説明している",
+        "ApiResponse<User> で T が User に置き換わり、data が User になることを示している",
+        "形が共通で中身の型だけ違うものを 1 つの定義で表せる、という理由を述べている",
+        "Array<string> や Promise<User> も同じ仕組みだと触れている(加点)"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「T を渡された型に置き換える」という読み方と、「共通の形を 1 回だけ定義できる」という利点の 2 点が言えれば合格です。"
+    }
+  ]
+}

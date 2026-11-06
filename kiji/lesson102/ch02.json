@@ -1,0 +1,146 @@
+{
+  "lesson": 102,
+  "chapter": 2,
+  "title": "map・filter・find で配列を扱う",
+  "priority": "🔴",
+  "text": "### for ループの代わりに使う 3 つの道具\n\nここが記事の山場です。配列を扱うとき、昔ながらの for ループではなく `map`・`filter`・`find` を使います。この 3 つは実務のフロントエンドで毎日使います。\n\n役割はそれぞれ違います。\n\n| メソッド | やること | 返すもの |\n|---|---|---|\n| `map` | 全部の要素を変換する | 元と**同じ個数**の新しい配列 |\n| `filter` | 条件に合う要素だけ残す | 元と同じか**短い**新しい配列 |\n| `find` | 条件に**最初に**合う 1 件を探す | 要素そのもの(見つからなければ `undefined`) |\n\n```mermaid\nflowchart LR\n    P[\"[120, 300, 80, 500, 200]\"] -->|\"map: 税込に変換\"| M[\"[132, 330, 88, 550, 220] 5件のまま\"]\n    P -->|\"filter: 200以上を残す\"| F[\"[300, 500, 200] 3件に減る\"]\n    P -->|\"find: 100より大きい最初の1件\"| D[\"120 配列ではなく要素\"]\n```\n\n### 実際に動かす\n\n```javascript\nconst prices = [120, 300, 80, 500, 200];\n\n// map: 各要素を税込(10%)に変換する\nconst withTax = prices.map((p) => Math.round(p * 1.1));\nconsole.log(withTax); // [ 132, 330, 88, 550, 220 ]\n\n// filter: 200円以上だけ残す\nconst expensive = prices.filter((p) => p >= 200);\nconsole.log(expensive); // [ 300, 500, 200 ]\n\n// find: 100円より高い最初の1件\nconst firstOver100 = prices.find((p) => p > 100);\nconsole.log(firstOver100); // 120\n```\n\n`map` は 5 つの価格それぞれに 1.1 を掛けて四捨五入(`Math.round`)し、5 つの税込価格の配列を返しています。`filter` は `p >= 200` が `true` になった 300・500・200 だけを残しています。`find` は先頭から調べて、最初に `p > 100` を満たした 120 を返した時点で探すのをやめます。300 や 500 も条件を満たしますが、返るのは最初の 1 件だけです。\n\n### アロー関数の読み方\n\n`(p) => ...` の部分はアロー関数(`=>` を使って短く書く関数)です。「配列の 1 要素を `p` として受け取り、こう処理する」と読みます。\n\n- `map` なら「各 p をこう変換する」\n- `filter` なら「p がこの条件なら残す」\n- `find` なら「p がこの条件を満たす最初の 1 件」\n\n`=>` の右側に式を 1 つ書くと、その式の値がそのまま返ります。ここで間違えやすいのが、右側を `{ }` で囲んだ場合です。`{ }` で囲むと「処理の並び」として扱われ、`return` を書かない限り何も返しません。\n\n```javascript\nconsole.log(prices.map((p) => { p * 2 }));\n// [ undefined, undefined, undefined, undefined, undefined ]\n\nconsole.log(prices.map((p) => { return p * 2; }));\n// [ 240, 600, 160, 1000, 400 ]\n```\n\n1 つ目は `{ }` の中で計算はしていますが返していないので、map は「何も返らなかった」5 件、つまり `undefined` が 5 つの配列を作ります。式 1 つで済むなら `(p) => p * 2` と `{ }` なしで書くのが簡単です。\n\n### なぜ for ループより良いのか\n\n記事の答えは「やりたいことがそのまま読めるから」です。for で同じことを書くと次のようになります。\n\n```javascript\nconst withTax = [];\nfor (let i = 0; i < prices.length; i++) {\n  withTax.push(Math.round(prices[i] * 1.1));\n}\n```\n\n空の配列を用意し、添字 `i` を回し、1 件ずつ push しています。結果は map と同じですが、「全部を税込にしたい」という目的が、添字の管理や push の手順に埋もれています。`i <= prices.length` のような添字のミスも起きます。map なら「全部を税込にする」、filter なら「高いものだけ残す」と、コードが日本語の説明とほぼ一対一になります。\n\nもう 1 つ大事な性質は、**map も filter も元の配列を変えない**ことです。新しい配列を返すだけなので、上のコードを全部実行したあとも `prices` は `[ 120, 300, 80, 500, 200 ]` のままです。元データを壊さないので、予想外の副作用(ある処理が、関係ないはずの別の場所に影響すること)が減ります。\n\n### filter と find の使い分け\n\n「条件に合う最初の 1 件だけ」が欲しいときは `find` を使います。filter でも書けますが、filter は全要素を最後まで調べて「条件に合うものの**配列**」を返すので、1 件だけ欲しい用途には過剰です。返る形も違います。\n\n```javascript\nconst users = [\n  { name: \"佐藤\", age: 28 },\n  { name: \"田中\", age: 17 },\n  { name: \"鈴木\", age: 34 },\n];\nconsole.log(users.find((u) => u.age >= 18).name);   // 佐藤\nconsole.log(users.filter((u) => u.age >= 18).name); // undefined\n```\n\n`find` は要素(オブジェクト)そのものを返すので `.name` で名前が取れます。`filter` は配列を返すので、配列に `.name` はなく `undefined` になります。filter の結果から 1 件目を使いたいなら `[0]` が必要です。\n\n見つからなかったときの戻り値も違います。`filter` は空の配列 `[]`、`find` は `undefined` を返します。`find` の結果にそのまま `.name` を付けると、見つからなかったときに `TypeError: Cannot read properties of undefined` になるので、画面に出す前に見つかったかどうかを確かめます。\n\n```mermaid\nflowchart TD\n    Q{\"欲しいものは?\"} -->|\"全件を別の形に\"| M[\"map\"]\n    Q -->|\"条件に合うものを複数\"| F[\"filter\"]\n    Q -->|\"条件に合う1件だけ\"| D[\"find\"]\n    F --> F2[\"配列が返る(0件なら空配列)\"]\n    D --> D2[\"要素が返る(無ければ undefined)\"]\n```\n\n### まとめ\n\n- `map` は全部を変換して同じ個数、`filter` は条件で絞って同じか短い配列、`find` は最初の 1 件の要素を返す\n- `(p) => 式` は式の値を返す。`{ }` で囲んだら `return` が要る\n- for より目的がそのまま読め、添字のミスがない。map と filter は元の配列を変えない\n- 1 件が欲しいなら find、複数残したいなら filter。find は見つからないと `undefined`\n\n### 何も見ずに言えるように\n\n- 「map は全要素を変換して同じ個数の配列、filter は条件に合うものだけの短い配列、find は条件に合う最初の 1 件そのものを返します」\n- 「for より何をしたいかがそのまま読め、元の配列を壊さないので副作用が減ります」\n- 「find は配列ではなく要素を返し、見つからなければ undefined です」\n",
+  "quiz": [
+    {
+      "question": "次のコードの出力はどれか。\n\n```javascript\nconst prices = [120, 300, 80, 500, 200];\nconsole.log(prices.map((p) => p >= 200));\n```",
+      "choices": [
+        "[ 300, 500, 200 ]",
+        "[ false, true, false, true, true ]",
+        "300",
+        "[ 120, 300, 80, 500, 200 ]"
+      ],
+      "correct": 1,
+      "explanation": "map は「各要素をこう変換する」です。ここでは各 p を `p >= 200` の結果(true/false)に変換しているので、5 件の真偽値の配列になります。200 以上の要素だけを残したいなら filter を使います。map は個数が変わらない、という性質から 3 件の答えは選べません。"
+    },
+    {
+      "question": "次のコードを実行したときの出力はどれか。\n\n```javascript\nconst nums = [1, 2, 3];\nconst doubled = nums.map((n) => { n * 2 });\nconsole.log(doubled);\n```",
+      "choices": [
+        "[ 2, 4, 6 ]",
+        "[ 1, 2, 3 ]",
+        "[ undefined, undefined, undefined ]",
+        "SyntaxError になる"
+      ],
+      "correct": 2,
+      "explanation": "アロー関数の右側を `{ }` で囲むと処理の並びとして扱われ、return がなければ何も返しません。map は 3 件それぞれ undefined を受け取るので `[ undefined, undefined, undefined ]` です。`(n) => n * 2` と `{ }` を外すか、`{ return n * 2; }` と書けば `[ 2, 4, 6 ]` になります。"
+    },
+    {
+      "question": "次のコードの 2 行目と 3 行目の出力の組み合わせはどれか。\n\n```javascript\nconst prices = [120, 300, 80, 500, 200];\nconsole.log(prices.find((p) => p > 1000));\nconsole.log(prices.filter((p) => p > 1000));\n```",
+      "choices": [
+        "[] と []",
+        "undefined と undefined",
+        "エラーで止まる",
+        "undefined と []"
+      ],
+      "correct": 3,
+      "explanation": "条件に合う要素がないとき、find は undefined、filter は空の配列 `[]` を返します。find は「要素そのもの」、filter は「配列」を返す、という違いがそのまま見つからなかったときの戻り値にも出ます。"
+    },
+    {
+      "question": "ユーザー一覧から 18 歳以上の最初の 1 人の名前を表示したい。次のコードの問題点として正しいものはどれか。\n\n```javascript\nconst users = [\n  { name: \"田中\", age: 17 },\n  { name: \"佐藤\", age: 28 },\n];\nconsole.log(users.filter((u) => u.age >= 18).name);\n```",
+      "choices": [
+        "filter は配列を返すので `.name` は undefined になる。1 件が欲しいなら find を使う",
+        "filter は元の配列を書き換えるので users が壊れる",
+        "アロー関数の引数に括弧が要らないので SyntaxError になる",
+        "filter は条件に合わない要素を返すので「田中」が出力される"
+      ],
+      "correct": 0,
+      "explanation": "filter の戻り値は `[ { name: \"佐藤\", age: 28 } ]` という配列で、配列には name がないため undefined になります。`users.find((u) => u.age >= 18).name` と書けば「佐藤」が出ます。filter も map も元の配列は変えません。"
+    },
+    {
+      "question": "次のコードを実行したあと、最後の console.log の出力はどれか。\n\n```javascript\nconst prices = [120, 300, 80];\nconst withTax = prices.map((p) => Math.round(p * 1.1));\nconst cheap = prices.filter((p) => p < 100);\nconsole.log(prices);\n```",
+      "choices": [
+        "[ 132, 330, 88 ]",
+        "[ 80 ]",
+        "[ 88 ]",
+        "[ 120, 300, 80 ]"
+      ],
+      "correct": 3,
+      "explanation": "map も filter も元の配列を変えず、新しい配列を返すだけです。結果は withTax と cheap に入り、prices は `[ 120, 300, 80 ]` のままです。元データを壊さないことが、副作用を減らす理由として記事で挙げられています。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "標準入力の 1 行目に、カンマ区切りの価格(整数)が並びます。記事の例と同じ 3 つの処理を map・filter・find で書き、3 行で出力してください。\n\n1. 1 行目: 各価格を税込(`Math.round(p * 1.1)`)に変換した結果を、カンマ区切りで\n2. 2 行目: 200 円以上の価格だけを、元の順でカンマ区切りで。1 件もなければ `なし`\n3. 3 行目: 100 円より高い最初の 1 件。見つからなければ `なし`\n\n入力例:\n```\n120,300,80,500,200\n```\n出力例:\n```\n132,330,88,550,220\n300,500,200\n120\n```",
+      "setup": "const input = require(\"fs\").readFileSync(0, \"utf8\");\nconst prices = input.trim().split(\",\").map((s) => Number(s));\n// prices は [ 120, 300, 80, 500, 200 ] のような数値の配列です\n\n// ここに map・filter・find を使ったコードを書く\n// ヒント: 配列をカンマ区切りの文字列にするには 配列.join(\",\")\n\n",
+      "answer": "const input = require(\"fs\").readFileSync(0, \"utf8\").trim();\nconst prices = input.split(\",\").map((s) => Number(s));\n\nconst withTax = prices.map((p) => Math.round(p * 1.1));\nconst expensive = prices.filter((p) => p >= 200);\nconst firstOver100 = prices.find((p) => p > 100);\n\nconsole.log(withTax.join(\",\"));\nconsole.log(expensive.length > 0 ? expensive.join(\",\") : \"なし\");\nconsole.log(firstOver100 !== undefined ? firstOver100 : \"なし\");\n",
+      "tests": [
+        {
+          "stdin": "120,300,80,500,200"
+        },
+        {
+          "stdin": "50,80"
+        },
+        {
+          "stdin": "200"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "map は同じ個数の配列、filter は条件に合うものだけの配列(0 件なら空配列)、find は最初の 1 件(無ければ undefined)を返します。2 行目は `expensive.length > 0` で空かどうか、3 行目は `!== undefined` で見つかったかどうかを確かめてから出力します。よくある間違いは `p > 200` と書いて、ちょうど 200 円が落ちることです(入力 `200` のテストで出力が変わります)。find の結果を確かめずに出すと `undefined` と出力されて不正解になります。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "標準入力の 1 行目に探したい名前、2 行目以降に `名前,年齢` が 1 行ずつ並びます。find を使って名前が一致するユーザーを探し、次の形式で 1 行出力してください。\n\n- 見つかったとき: `鈴木は34歳`\n- 見つからないとき: `山田は見つかりません`\n\n入力例:\n```\n鈴木\n佐藤,28\n田中,17\n鈴木,34\n```\n出力例:\n```\n鈴木は34歳\n```",
+      "setup": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").filter((l) => l.trim() !== \"\");\nconst target = lines[0].trim();\nconst users = lines.slice(1).map((line) => {\n  const parts = line.split(\",\");\n  return { name: parts[0].trim(), age: Number(parts[1]) };\n});\n// users は [ { name: \"佐藤\", age: 28 }, ... ] のようなオブジェクトの配列です\n\n// ここに find を使ったコードを書く\n\n",
+      "answer": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").filter((l) => l.trim() !== \"\");\nconst target = lines[0].trim();\nconst users = lines.slice(1).map((line) => {\n  const [name, age] = line.split(\",\");\n  return { name: name.trim(), age: Number(age) };\n});\n\nconst found = users.find((u) => u.name === target);\nif (found) {\n  console.log(`${found.name}は${found.age}歳`);\n} else {\n  console.log(`${target}は見つかりません`);\n}\n",
+      "tests": [
+        {
+          "stdin": "鈴木\n佐藤,28\n田中,17\n鈴木,34\n"
+        },
+        {
+          "stdin": "山田\n佐藤,28\n"
+        },
+        {
+          "stdin": "佐藤\n佐藤,28\n佐藤,40\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "1 件が欲しいので find です。find は要素(オブジェクト)そのものを返すので `found.name`・`found.age` で値が取れます。filter を使って `users.filter(...).name` と書くと、配列には name がないので `undefinedはundefined歳` になります。見つからないとき find は undefined を返すので、`if (found)` で確かめずに `found.name` を読むと TypeError で止まります。同じ名前が 2 人いるテストでは、find は最初の 1 件(28 歳)を返します。"
+    },
+    {
+      "kind": "essay",
+      "question": "次の for ループのコードを map を使って書き直し、なぜ map の方が良いのかを記事の観点で説明してください(150〜300 字)。\n\n```javascript\nconst prices = [120, 300, 80];\nconst withTax = [];\nfor (let i = 0; i < prices.length; i++) {\n  withTax.push(Math.round(prices[i] * 1.1));\n}\n```",
+      "answer": "書き直すと `const withTax = prices.map((p) => Math.round(p * 1.1));` の 1 行になります。for 版は空の配列を用意し、添字 i を回して 1 件ずつ push しているため、「全部の価格を税込にしたい」という目的が手順に埋もれ、`i <= prices.length` のような添字のミスも起きやすくなります。map なら「各 p を税込に変換する」とコードが説明とほぼ一対一で読めます。また map は元の prices を変えずに同じ個数の新しい配列を返すので、元データを壊す副作用が起きません。",
+      "rubric": [
+        "`prices.map((p) => Math.round(p * 1.1))` と同等の正しいコードを書いている(`{ }` を使うなら return がある)",
+        "for 版は目的が添字や push の手順に埋もれる/添字のミスが起きる、と説明している",
+        "map はやりたいことがそのまま読める、と説明している",
+        "map は元の配列を変えず新しい配列を返す(副作用が減る)ことに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「読みやすさ」と「元の配列を壊さない」の 2 点が記事の挙げる理由です。"
+    },
+    {
+      "kind": "essay",
+      "question": "map・filter・find の違いを、返ってくるもの(個数・形・見つからないとき)に注目して何も見ずに 1 分で説明してください。150〜300 字で。",
+      "answer": "map は全部の要素を変換して、元と同じ個数の新しい配列を返します。例えば価格を税込にすると、件数は変わらず中身だけ変わります。filter は条件に合う要素だけを残した新しい配列を返し、合わないものは落ちるので元と同じか短くなります。1 件も合わなければ空の配列です。find は条件に最初に合った 1 件を、配列ではなく要素そのもので返し、見つかった時点で探すのをやめます。見つからなければ undefined です。1 件が欲しいなら find、複数残したいなら filter と使い分けます。map と filter は元の配列を変えません。",
+      "rubric": [
+        "map は同じ個数の配列を返すと述べている",
+        "filter は条件に合うものだけの(同じか短い)配列を返すと述べている",
+        "find は最初の 1 件を配列ではなく要素で返すと述べている",
+        "見つからないときの違い(filter は空配列、find は undefined)か、1 件なら find・複数なら filter の使い分けに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「個数」「形」「見つからないとき」の 3 つの軸で比べると混同しません。"
+    }
+  ]
+}

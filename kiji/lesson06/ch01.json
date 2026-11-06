@@ -1,0 +1,93 @@
+{
+  "lesson": 6,
+  "chapter": 1,
+  "title": "RDBの基本とCRUDの4操作",
+  "priority": "🟡",
+  "text": "### この章で学ぶこと\n\nこの章では、データベースを SQL で直接さわる前に知っておきたい土台を固めます。表の 3 つの言葉(テーブル・カラム・レコード)、「リレーショナル」という名前の意味、SQL の基本 4 操作である CRUD、そして psql での接続方法です。前回(#4)は Go のプログラムから DB に保存・取得しましたが、SQL そのものは最低限しか扱いませんでした。ここからは DB を基礎から学び、AI に SQL を書かせるだけでなく、自分で読み書きして「何が起きているか」がわかる状態を目指します。\n\n### データを「表」で管理する\n\nリレーショナルデータベース(RDB。データを表の形で持つ DB)は、すべてのデータを表(テーブル)にして管理します。PostgreSQL、MySQL、Oracle が代表例です。前回作った `users` テーブルは次のような表です。\n\n| id | name | age |\n|---|---|---|\n| 1 | washi | 30 |\n| 2 | taro | 25 |\n| 3 | hanako | 28 |\n\nこの表を説明する言葉は 3 つです。\n\n| 言葉 | 指すもの | 例 |\n|---|---|---|\n| テーブル | 表そのもの | `users` |\n| カラム(列) | 縦の項目 | `id`, `name`, `age` |\n| レコード(行) | 横 1 行ぶんのデータ | `1, washi, 30` |\n\nExcel にたとえると、シート全体がテーブル、列見出しがカラム、1 行がレコードです。Excel との違いは、DB は大量のデータを高速に検索でき、複数の人やプログラムが同時にアクセスしても安全に扱える点にあります。バックエンドが DB を使うのは、まさにこの 2 点のためです。\n\n### なぜ「リレーショナル」なのか\n\n名前の由来はリレーション(関係)です。RDB では複数のテーブルを関連づけて管理できます。たとえば「ユーザー」と「注文」を別のテーブルに分けて持ち、注文テーブルに「どのユーザーの注文か」を示す `user_id` を入れておけば、2 つの表をつないで読めます。\n\n```mermaid\nerDiagram\n    users ||--o{ orders : \"places\"\n    users {\n        int id\n        string name\n        int age\n    }\n    orders {\n        int id\n        int user_id\n        int amount\n    }\n```\n\n1 人のユーザーが 0 件以上の注文を持つ、という関係を表した図です。この「つないで読む」操作は #7 の JOIN で扱います。この章では「表を分けて持ち、関係でつなげるから“リレーショナル”」とだけ押さえれば十分です。\n\n### SQL の基本 4 操作 CRUD\n\nDB を操作する言語が SQL です。基本の操作は 4 つで、頭文字をとって CRUD(クラッド)と呼びます。\n\n| 操作 | SQL | 意味 |\n|---|---|---|\n| Create | `INSERT` | データを追加する |\n| Read | `SELECT` | データを取得する |\n| Update | `UPDATE` | データを更新する |\n| Delete | `DELETE` | データを削除する |\n\n以前学んだ HTTP メソッドと見比べると、ほぼ対応していることがわかります。\n\n```mermaid\nflowchart LR\n    P[\"POST\"] --> I[\"INSERT 追加\"]\n    G[\"GET\"] --> S[\"SELECT 取得\"]\n    U[\"PUT\"] --> UP[\"UPDATE 更新\"]\n    D[\"DELETE\"] --> DE[\"DELETE 削除\"]\n```\n\nAPI に `POST /users` が来たらハンドラの中で `INSERT` を実行し、`GET /users` なら `SELECT` を実行する、という形です。API の設計と DB の操作はだいたい 1 対 1 でつながるので、片方を覚えるともう片方も覚えやすくなります。\n\n### psql で DB に直接つなぐ\n\n記事では、前回起動した PostgreSQL のコンテナに入り、psql(PostgreSQL に SQL を打ち込む対話ツール)で操作します。\n\n```\ndocker ps\n# pg-practice が Up になっていればOK\n\ndocker exec -it pg-practice psql -U postgres -d testdb\n```\n\n`docker ps` でコンテナが動いているかを確かめ、`docker exec -it pg-practice` で pg-practice コンテナの中でコマンドを実行します。`-it` は対話モードの指定です。続く `psql -U postgres -d testdb` は「ユーザー postgres で、testdb というデータベースにつなぐ」という意味です。接続に成功するとプロンプトが `testdb=#` に変わり、ここに SQL を打てます。抜けるときは `\\q` です。コンテナを止めていた場合は `docker start pg-practice` で再開できます。\n\nこの接続コマンドは今は流してかまいません。毎回打つうちに自然に覚えます。\n\n### この講座での練習環境について\n\nこのアプリの SQL 問題は、PostgreSQL ではなく SQLite(ファイル 1 つで動く軽量な DB)で採点します。CRUD の 4 つの書き方は共通なので、そのまま練習できます。違いは小さく、たとえば PostgreSQL の `SERIAL`(自動採番の型)は、SQLite では `INTEGER PRIMARY KEY` が同じ役目をします。問題の `setup` に書いた表はこの形で作っています。\n\n### まとめ\n\n- RDB はデータを表で持ち、表=テーブル、縦の項目=カラム、横 1 行=レコードと呼ぶ\n- 複数のテーブルを関係(リレーション)でつなげて管理できるのが名前の由来\n- SQL の基本は CRUD の 4 操作(INSERT / SELECT / UPDATE / DELETE)で、HTTP メソッドとほぼ対応する\n- psql は `docker exec -it pg-practice psql -U postgres -d testdb` でつなぎ、`\\q` で抜ける\n\n### 何も見ずに言えるように\n\n- テーブルは表、カラムは列、レコードは 1 行。users なら id・name・age がカラムで、1, washi, 30 がレコード\n- 「リレーショナル」はテーブル同士を関係でつなげて持てるから。ユーザーと注文を分けて user_id で結ぶ\n- CRUD は Create=INSERT、Read=SELECT、Update=UPDATE、Delete=DELETE で、POST/GET/PUT/DELETE に対応する\n",
+  "quiz": [
+    {
+      "question": "users テーブル(id, name, age)の「2, taro, 25」という横 1 行は、何と呼ぶか。",
+      "choices": [
+        "カラム",
+        "テーブル",
+        "レコード",
+        "データベース"
+      ],
+      "correct": 2,
+      "explanation": "横 1 行ぶんのデータはレコード(行)です。カラムは id・name・age のような縦の項目、テーブルは users という表そのものを指します。"
+    },
+    {
+      "question": "RDB の「リレーショナル」という名前は、何に由来するか。",
+      "choices": [
+        "複数のテーブルを関係(リレーション)でつなげて管理できること",
+        "データを JSON の形で保存すること",
+        "複数のサーバーにデータを中継(リレー)して保存すること",
+        "SQL を順番に実行する仕組みのこと"
+      ],
+      "correct": 0,
+      "explanation": "リレーション=関係です。ユーザーと注文のように表を分けて持ち、user_id などで関連づけられるのが特徴です。結合の書き方は #7 の JOIN で扱います。"
+    },
+    {
+      "question": "API に「新しいユーザーを登録する」POST リクエストが来た。ハンドラの中で主に実行する SQL はどれか。",
+      "choices": [
+        "SELECT",
+        "UPDATE",
+        "DELETE",
+        "INSERT"
+      ],
+      "correct": 3,
+      "explanation": "POST は新規作成で、CRUD の Create にあたるので INSERT です。GET は SELECT、PUT は UPDATE、DELETE は DELETE にほぼ対応します。"
+    },
+    {
+      "question": "`docker exec -it pg-practice psql -U postgres -d testdb` の `-d testdb` は何を指定しているか。",
+      "choices": [
+        "コンテナの名前",
+        "接続するデータベースの名前",
+        "接続するユーザー名",
+        "デバッグモードで起動すること"
+      ],
+      "correct": 1,
+      "explanation": "-d は接続先のデータベース名です。コンテナ名は pg-practice、ユーザー名は -U postgres で指定しています。"
+    },
+    {
+      "kind": "essay",
+      "question": "テーブル・カラム・レコードの違いと、CRUD の 4 操作とそれぞれに対応する SQL を、users テーブルを例にして何も見ずに 1 分で説明するつもりで書いてください。150〜300 字で。",
+      "answer": "RDB はデータを表で管理します。表そのものをテーブルと呼び、users がその例です。縦の項目がカラム(列)で、users なら id・name・age です。横 1 行ぶんのデータがレコード(行)で、「1, washi, 30」が 1 件のレコードです。この表を操作する SQL の基本が CRUD の 4 つです。Create は INSERT でレコードを追加、Read は SELECT で取得、Update は UPDATE で更新、Delete は DELETE で削除します。API の HTTP メソッドとほぼ対応していて、POST が INSERT、GET が SELECT、PUT が UPDATE、DELETE が DELETE です。",
+      "rubric": [
+        "テーブル=表、カラム=縦の項目(列)、レコード=横 1 行、を取り違えずに説明している",
+        "users テーブルの具体例(id・name・age など)で説明している",
+        "CRUD の 4 操作と INSERT / SELECT / UPDATE / DELETE の対応がすべて正しい"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "言葉の定義 → 具体例 → 操作の順に話すと短くまとまります。HTTP メソッドとの対応まで言えると、API と DB のつながりが説明できます。"
+    },
+    {
+      "kind": "sql",
+      "question": "users テーブルから name と age の 2 列だけを取り出してください。出力列は name, age の順、並びは id の小さい順(末尾に ORDER BY id を付ける)。",
+      "setup": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER);\nINSERT INTO users (name, age) VALUES ('washi', 30);\nINSERT INTO users (name, age) VALUES ('taro', 25);\nINSERT INTO users (name, age) VALUES ('hanako', 28);\nINSERT INTO users (name, age) VALUES ('jiro', 22);\nINSERT INTO users (name, age) VALUES ('iwata', 35);\nINSERT INTO users (name, age) VALUES ('wataru', 19);",
+      "answer": "SELECT name, age FROM users ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "SELECT のあとに取り出したいカラムを書きます。SELECT * にすると id まで出て 3 列になるので不正解です。ORDER BY は並び順の指定で、詳しくは後の回で扱います。"
+    },
+    {
+      "kind": "sql",
+      "question": "products テーブルの全商品について、price, name の 2 列を「price が先、name が後」の順で出力してください。並びは id の小さい順(ORDER BY id)。",
+      "setup": "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price INTEGER);\nINSERT INTO products (name, price) VALUES ('Tea', 300);\nINSERT INTO products (name, price) VALUES ('Cake', 1000);\nINSERT INTO products (name, price) VALUES ('Mug', 1500);\nINSERT INTO products (name, price) VALUES ('Cookie', 450);\nINSERT INTO products (name, price) VALUES ('Teapot', 3200);",
+      "answer": "SELECT price, name FROM products ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "出力される列の順番は、SELECT に書いた順番で決まります。テーブルの定義順(name, price)のまま書くと列が入れ替わって不正解になります。"
+    }
+  ]
+}

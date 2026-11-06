@@ -1,0 +1,129 @@
+{
+  "lesson": 105,
+  "chapter": 3,
+  "title": "型は実行時に消える・unknown",
+  "priority": "🔴",
+  "text": "### 型は実行時には存在しない\n\n#4 で「tsc は型チェックの後、型を消した JavaScript を出力する」と学びました。これは重要な事実を含んでいます。**実行時には、型は存在しません。**\n\n```mermaid\nflowchart LR\n    A[\"user.ts<br/>interface User と<br/>: User の注釈あり\"] --> B[\"tsc<br/>型チェック\"]\n    B --> C[\"user.js<br/>型の記述はすべて削除\"]\n    C --> D[\"node / ブラウザで実行<br/>型の情報は無い\"]\n```\n\n自分のコードの中だけなら、これで問題ありません。値の受け渡しはコンパイル時に全部チェック済みだからです。問題は**外から来るデータ**です。\n\n### fetch の結果は誰も保証していない\n\n```ts\nconst res = await fetch(\"https://api.example.com/users/1\");\nconst user = await res.json(); // ← この中身が User の形である保証は、どこにもない\n```\n\n`res.json()` が返すのは「サーバーが送ってきた何か」です。サーバー側の仕様変更で `name` が `userName` に変わったら? バグで `id` が文字列になっていたら? interface をどれだけ丁寧に書いても、それはコンパイル時の約束にすぎず、実行時に届く実物のデータは検査されません。\n\nさらに厄介なことに、次のように書いてもコンパイルは通ります。\n\n```ts\nconst user: User = await res.json();\n```\n\n`res.json()` の戻り値の型は `Promise<any>` で、`any` は何にでも代入できるからです。見た目は型が付いているのに、中身は一度も確かめていません。型を付けたつもりで実は中身が違う、という型の世界で一番危ない事故がここで起きます。\n\n外から来るデータには次のようなものがあります。\n\n- API のレスポンス\n- フォームなどのユーザー入力\n- localStorage(ブラウザに文字列を保存できる領域)の中身\n\nこれらがプログラムに入ってくる場所を**境界**と呼びます。対策は、境界で実行時に実物を検査することです。その定番ライブラリが zod で、第 4 章で扱います。\n\n### unknown:any の正しい代替\n\n#4 で「any は型チェックの放棄」と学びました。では `res.json()` のような、本当に型が分からない値はどう受けるのが正解か。`unknown` 型です。\n\n```ts\nconst data: unknown = JSON.parse('{\"id\": 1}');\nconsole.log(data.id);\n```\n\n```\nunk.ts(2,13): error TS18046: 'data' is of type 'unknown'.\n```\n\nany と unknown はどちらも「何でも入る」型ですが、入れた後の扱いが正反対です。\n\n| | 代入 | プロパティ参照・メソッド呼び出し | 他の型の変数への代入 |\n|---|---|---|---|\n| `any` | 何でも入る | 何をしてもノーチェック | どこにでも入る |\n| `unknown` | 何でも入る | 絞り込むまでエラー | 絞り込むまでエラー |\n\n`any` の値で `data.id.foo.bar()` と書いてもコンパイルは通り、実行して初めて落ちます。`unknown` は「分からないなら、確かめるまで触らせない」という安全側の設計です。`const u: User = data;` のように別の型の変数に入れることもできません。\n\n### unknown は確かめれば使える\n\nunknown の値を使うには、第 1 章の型ガードや、zod の `parse` で正体を確かめます。\n\n```ts\nconst data: unknown = JSON.parse(text);\nif (typeof data === \"string\") {\n  console.log(data.toUpperCase()); // ここでは string として使える\n}\n```\n\nただ、`{ id, name, email }` のようなオブジェクトの形を `typeof` と `if` だけで 1 項目ずつ確かめるのは大変です。そこで zod の出番になります。外から来た値は**まず unknown で受け、境界で確かめてから使う**、と覚えてください。\n\n### まとめ\n\n- tsc が型を消すので、実行中のプログラムに型の情報は無い\n- interface はコンパイル時の約束で、API レスポンスなど外から来る実物のデータは検査できない\n- `const user: User = await res.json()` は any 経由で通ってしまうが、中身は未検査\n- 型が分からない値は any ではなく unknown で受ける。unknown は確かめるまで操作できない\n\n### 何も見ずに言えるように\n\n- 型は実行時に消える。だから外から来るデータは interface では守れない\n- データが入ってくる境界で、実行時に実物を検査する必要がある\n- any は何をしてもノーチェック、unknown は確かめるまで触らせない。外の値は unknown で受ける\n",
+  "quiz": [
+    {
+      "question": "次のコードはコンパイルできるか。サーバーが `{\"userName\": \"佐藤\"}` を返した場合、実行時にどうなるか。\n\n```ts\ninterface User { id: number; name: string; }\nconst res = await fetch(\"/api/users/1\");\nconst user: User = await res.json();\nconsole.log(user.name.length);\n```",
+      "choices": [
+        "コンパイルエラーになる。res.json() の結果は User に代入できない",
+        "コンパイルは通り、実行時に TypeScript が形の違いを検出してエラーを出す",
+        "コンパイルは通り、user.name は undefined になる。length を読もうとして実行時エラーになる",
+        "コンパイルは通り、TypeScript が userName を name に自動で変換する"
+      ],
+      "correct": 2,
+      "explanation": "res.json() は Promise<any> を返すので、User への代入はコンパイルを通ります。しかし型は実行時に消えているため誰も検査せず、name が無いまま進み、user.name.length で undefined を読んで落ちます。"
+    },
+    {
+      "question": "次の 3 行のうち、コンパイルエラーになる行をすべて選んだものはどれか。\n\n```ts\nconst d: unknown = JSON.parse('{\"id\":1}');\nd.id;                        // (A)\nconst u: User = d;           // (B)\nif (typeof d === \"string\") d.toUpperCase(); // (C)\n```",
+      "choices": [
+        "(A) と (B)",
+        "(A) だけ",
+        "(A)(B)(C) すべて",
+        "(C) だけ"
+      ],
+      "correct": 0,
+      "explanation": "unknown は絞り込むまでプロパティ参照も他の型への代入もできないので (A)(B) はエラーです。(C) は typeof で string に絞り込んだ後なので toUpperCase を呼べます。"
+    },
+    {
+      "question": "`const d: any = JSON.parse('{\"id\":1}'); d.id.foo.bar();` について正しいものはどれか。",
+      "choices": [
+        "コンパイルエラーになる。foo は存在しない",
+        "コンパイルは通る。実行すると d.id.foo が undefined なので bar() を呼んだところで落ちる",
+        "コンパイルも実行も問題なく通る",
+        "any は JSON.parse の結果には使えない"
+      ],
+      "correct": 1,
+      "explanation": "any は何をしてもノーチェックなので、存在しないプロパティを連ねてもコンパイルは通ります。間違いは実行時エラーになるまで分かりません。これが unknown を使う理由です。"
+    },
+    {
+      "question": "tsc で次の TypeScript を JavaScript に変換したとき、出力に残るものはどれか。\n\n```ts\ninterface User { id: number; name: string; }\nconst u: User = { id: 1, name: \"佐藤\" };\n```",
+      "choices": [
+        "interface User の定義と : User の注釈の両方",
+        "interface User の定義だけ(注釈は消える)",
+        ": User の注釈だけ(定義は消える)",
+        "const u = { id: 1, name: \"佐藤\" }; だけ"
+      ],
+      "correct": 3,
+      "explanation": "型の記述は変換時にすべて削除されます。interface も : User も消え、値を作る部分だけが残ります。だから実行時には User という型の情報がどこにもありません。"
+    },
+    {
+      "question": "「境界で実行時に検査する」必要が**最も薄い**データはどれか。",
+      "choices": [
+        "外部 API のレスポンス",
+        "フォームからのユーザー入力",
+        "localStorage から読み出した文字列",
+        "同じプロジェクト内で、型注釈付きの関数同士が受け渡す値"
+      ],
+      "correct": 3,
+      "explanation": "自分のコードの中の受け渡しはコンパイル時に型チェック済みです。API レスポンス・ユーザー入力・localStorage は外から入ってくるため、interface では守れず、境界での実行時検証が要ります。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "`unknown` で受けた値を、型ガードで絞り込んでから使う関数 `describe(data: unknown): string` を書いてください。標準入力の各行は JSON で、main が `JSON.parse` した結果を unknown として describe に渡し、戻り値を 1 行ずつ出力します。\n\n戻り値の規則(上から順に判定):\n- 文字列 → `文字列: 値`\n- 数値 → `数値: 小数点以下1桁`(例 `数値: 3.0`)\n- 真偽値 → `真偽値: true` または `真偽値: false`\n- null → `null`\n- 配列 → `配列: 長さN`\n- それ以外のオブジェクト → `オブジェクト: キーN個`\n\nunknown のまま `.length` などを書くと tsc がエラーにします。必ず確かめてから触ってください。",
+      "setup": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\n// 中身の分からない値を受け取り、正体を確かめてから説明の文字列を返す\nfunction describe(data: unknown): string {\n  // ここを書く\n  return \"\";\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const data: unknown = JSON.parse(line);\n  console.log(describe(data));\n}\n",
+      "answer": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\nfunction describe(data: unknown): string {\n  if (typeof data === \"string\") {\n    return \"文字列: \" + data;\n  }\n  if (typeof data === \"number\") {\n    return \"数値: \" + data.toFixed(1);\n  }\n  if (typeof data === \"boolean\") {\n    return \"真偽値: \" + data;\n  }\n  if (data === null) {\n    return \"null\";\n  }\n  if (Array.isArray(data)) {\n    return \"配列: 長さ\" + data.length;\n  }\n  if (typeof data === \"object\") {\n    return \"オブジェクト: キー\" + Object.keys(data).length + \"個\";\n  }\n  return \"その他\";\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const data: unknown = JSON.parse(line);\n  console.log(describe(data));\n}\n",
+      "tests": [
+        {
+          "stdin": "\"vue\"\n3\ntrue\n"
+        },
+        {
+          "stdin": "null\n[1,2,3]\n{\"id\":1,\"name\":\"佐藤\"}\n"
+        },
+        {
+          "stdin": "[]\n{}\nfalse\n-0.25\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "unknown は確かめるまで何もさせない型なので、typeof・`=== null`・Array.isArray で 1 つずつ正体を確定させてから使います。`typeof null` は \"object\" になるため、null の判定をオブジェクトの判定より先に置くのがポイントです。配列も typeof では \"object\" なので、Array.isArray を先に確かめます。順番を誤ると null で Object.keys が落ちたり、配列がオブジェクトとして数えられたりします。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "API のレスポンスを unknown で受け、`id` が数値のときだけ取り出す関数 `getId(data: unknown): number | undefined` を書いてください。`as` や `any` は使わず、型ガードだけで絞り込むこと。\n\n- data がオブジェクト(null でない)で、`id` プロパティを持ち、その値が number なら id を返す\n- それ以外(id が文字列、id が無い、null、数値そのもの など)は undefined を返す\n\nmain は各行の JSON を getId に渡し、`id=次のID (次のID)` か `id が不正` を出力します(雛形のまま)。\n\nヒント: `typeof data === \"object\" && data !== null && \"id\" in data` まで確かめると、TypeScript は `data.id` を unknown として読ませてくれます。",
+      "setup": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\n// data が「id が数値のオブジェクト」なら id を返す。それ以外は undefined\nfunction getId(data: unknown): number | undefined {\n  // ここを書く(as や any は使わない)\n  return undefined;\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const id = getId(JSON.parse(line));\n  console.log(id === undefined ? \"id が不正\" : \"id=\" + (id + 1) + \" (次のID)\");\n}\n",
+      "answer": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\nfunction getId(data: unknown): number | undefined {\n  if (typeof data === \"object\" && data !== null && \"id\" in data && typeof data.id === \"number\") {\n    return data.id;\n  }\n  return undefined;\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const id = getId(JSON.parse(line));\n  console.log(id === undefined ? \"id が不正\" : \"id=\" + (id + 1) + \" (次のID)\");\n}\n",
+      "tests": [
+        {
+          "stdin": "{\"id\":1,\"name\":\"佐藤\"}\n{\"id\":\"1\"}\n"
+        },
+        {
+          "stdin": "{\"name\":\"佐藤\"}\nnull\n5\n"
+        },
+        {
+          "stdin": "{\"id\":41}\n[1]\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "unknown のオブジェクトは、typeof で object か、null でないか、`in` でプロパティがあるか、とその値の typeof を順に確かめて絞り込みます。`id: \"1\"` のような文字列の id を通してしまうと、`id + 1` が文字列連結になり \"11\" が出ます。これが記事の言う「型を付けたつもりで中身が違う」事故です。"
+    },
+    {
+      "kind": "essay",
+      "question": "「型は実行時に消える」とはどういう意味か、そしてそのせいで interface だけでは守れないデータは何か、どう守るべきかを何も見ずに説明してください。any と unknown の違いにも触れてください。",
+      "answer": "tsc は型チェックをした後、型の記述をすべて削除した JavaScript を出力します。そのため実行中のプログラムには interface も型注釈も存在しません。自分のコード内の受け渡しはコンパイル時にチェック済みなので問題ありませんが、API レスポンス、ユーザー入力、localStorage の中身のように外から来るデータは、実行時に届く実物を誰も検査しません。`const user: User = await res.json()` は res.json() が any を返すのでコンパイルが通ってしまい、中身が違っていても気づけません。対策は、データが入ってくる境界で実行時に検査することで、zod の parse を使うのが定番です。また型が分からない値は any ではなく unknown で受けます。any は何をしてもノーチェックですが、unknown は型ガードや parse で確かめるまでプロパティ参照も代入もできないので、確かめ忘れをコンパイル時に防げます。",
+      "rubric": [
+        "tsc が型を削除し、実行時に型情報が無いことを説明している",
+        "外から来るデータ(API レスポンス・ユーザー入力など)は interface では検査されないと述べている",
+        "境界で実行時に検査する(zod の parse など)という対策を示している",
+        "any はノーチェック、unknown は確かめるまで操作できない、という違いを述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「型が消える → 外のデータは未検査 → 境界で実行時に検査」の因果がつながっていれば合格です。res.json() が any を返すので代入が通ってしまう点まで言えると説得力が増します。"
+    }
+  ]
+}

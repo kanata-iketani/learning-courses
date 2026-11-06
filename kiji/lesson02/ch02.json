@@ -1,0 +1,129 @@
+{
+  "lesson": 2,
+  "chapter": 2,
+  "title": "変数・型・スコープ",
+  "priority": "🔴",
+  "text": "## 変数・型・スコープ\n\nこの章では、Go の変数の作り方2種類(`var` と `:=`)と型、そして変数が使える範囲であるスコープを学びます。`var` と `:=` は 🔴 覚える、スコープは 🟡 理解する対象です。\n\n### Go は型がある言語\n\nGo は Python や JavaScript と違い、変数を作るときに「何が入るか」を決める言語です。型を決めておくと、間違ったデータを入れようとしたときにエラーで教えてくれます。最低限覚える型は4つです。\n\n```go\nvar name string  = \"washi\"    // 文字列\nvar age int      = 30         // 整数\nvar score float64 = 3.14      // 小数\nvar active bool  = true       // 真偽値(true または false)\n```\n\n型が違うもの同士はそのまま混ぜられません。たとえば `\"age: \" + age`(文字列 + int)はコンパイルエラーになります。表示したいだけなら `fmt.Println(\"age:\", age)` のように別々の値として渡します。\n\n### 変数宣言の2つの書き方\n\n**方法1: `var` で型を明示する**\n\n```go\nvar name string = \"washi\"\nvar age int = 30\n```\n\n「name という変数を作る。型は string、値は \"washi\"」という丁寧な書き方です。\n\n**方法2: `:=` で短縮する**\n\n```go\nname := \"washi\"\nage := 30\n```\n\n`:=` は右辺を見て型を自動で推測します(型推論)。`\"washi\"` なら string、`30` なら int です。やっていることは方法1と同じで、Go 開発者はほぼこちらを使います。\n\nただし **`:=` は func の中でしか使えません**。func の外に `g := 1` と書くと、`expected declaration`(ここには宣言を書け)という構文エラーになります。func の外では `var` を使います。\n\n```go\nvar global string = \"OK\"    // ← func の外でもOK\n\nfunc main() {\n    local := \"OK\"           // ← func の中でだけ使える\n}\n```\n\n補足として、`:=` は「新しい変数を作る」記号なので、同じ関数内で同じ名前にもう一度 `:=` を使うと `no new variables on left side of :=` というエラーになります。2回目以降に値を入れ直すときは `=` を使います。\n\n```go\na := 1\na = 2      // OK: 入れ直し\n// a := 2  // エラー: 新しい変数がない\n```\n\nもう1つ補足すると、`var age int` のように値を書かずに宣言すると、型ごとの初期値(ゼロ値)が入ります。int なら `0`、string なら `\"\"`(空文字)、bool なら `false` です。この性質は第4章の JSON で再び出てきます。\n\n### 構造体の中で := は使っていない\n\n構造体(違う型のデータをまとめた型。第3章)のコードで `:=` を見かけても、それは定義ではなく「データを作る」行で、必ず func の中に書かれています。\n\n```go\ntype User struct {   // 定義: フィールド名と型を書くだけ。:= なし\n    Name string\n    Age  int\n}\n\nfunc main() {\n    user := User{Name: \"washi\", Age: 30}   // 作成: func の中なので := が使える\n}\n```\n\n### スコープ：変数の生存範囲\n\n関数の中で作った変数は、その関数の中でしか存在しません。これをスコープといいます。各関数は別々の部屋で、部屋Aで作ったメモは部屋Bからは見えません。関数が終わると、その中の変数は消えます。\n\n```go\nfunc main() {\n    name := \"washi\"          // ← main の中でしか使えない\n    fmt.Println(name)        // ← OK\n}\n\nfunc otherFunc() {\n    fmt.Println(name)        // ← エラー！name は main の中にしかない\n}\n```\n\n複数の関数から使いたい変数は、func の外に `var` で書きます。\n\n```go\nvar name string = \"washi\"    // ← func の外。どの関数からでもアクセスできる\n\nfunc main() {\n    fmt.Println(name)        // ← OK\n}\n\nfunc otherFunc() {\n    fmt.Println(name)        // ← OK\n}\n```\n\n```mermaid\nflowchart TB\n    subgraph PKG[\"func の外(var で宣言)\"]\n        G[\"var name = washi: どの関数からも見える\"]\n        subgraph M[\"func main の部屋\"]\n            L1[\"name := ... は main の中だけ\"]\n        end\n        subgraph O[\"func otherFunc の部屋\"]\n            L2[\"main の変数は見えない\"]\n        end\n    end\n    G --> M\n    G --> O\n```\n\nもう1つ Go らしい決まりがあります。**関数の中で作って一度も使わない変数はコンパイルエラー**(`x declared and not used`)です。未使用 import と同じく、無駄を許さない設計です。記事のスコープの説明用コードのように、作っただけの変数を置いたまま実行すると止まるので、実際に動かすときは `fmt.Println` などで使ってください。\n\n### var と := の使い分けまとめ\n\n| | var(func の外) | var(func の中) | :=(func の中のみ) |\n|---|---|---|---|\n| 使える場所 | どこでも | func の中 | func の中だけ |\n| スコープ | パッケージ全体(今は1ファイルなのでプログラム全体) | その func の中だけ | その func の中だけ |\n| 型の指定 | 基本は書く(初期値があれば省略可) | 省略可 | 不要(自動推測) |\n\n### 手を動かす：変数を使ってみる\n\n```go\nfunc main() {\n    var name string = \"washi\"\n    var age int = 30\n    job := \"Infrastructure Engineer\"\n\n    fmt.Println(name, age, job)\n}\n// → washi 30 Infrastructure Engineer\n```\n\n`name` と `age` は `var`、`job` は `:=` で作っています。どちらも変数を作るという点では同じです。\n\n### まとめ\n\n- 型は string / int / float64 / bool の4つをまず覚える。型が違う値はそのまま混ぜられない\n- `:=` は型推論つきの短縮形で func の中専用。func の外では `var`\n- 関数の中の変数はその関数の中だけで生きる(スコープ)。共有したいなら func の外に `var`\n- 未使用のローカル変数・未使用の import はどちらもコンパイルエラー\n\n### 何も見ずに言えるように\n\n- 「var は型を明示する丁寧な書き方、:= は型を推測する短縮形で func の中だけ」\n- 「関数は別々の部屋。中で作った変数は外からも他の関数からも見えない」\n- 「複数の関数で使う変数は func の外に var で置く」\n",
+  "quiz": [
+    {
+      "question": "次のコードをビルドするとどうなりますか。\n\n```go\npackage main\n\nimport \"fmt\"\n\ncount := 0\n\nfunc main() {\n    fmt.Println(count)\n}\n```",
+      "choices": [
+        "`0` と表示される",
+        "`count` が見つからないという実行時エラーになる",
+        "`count` はゼロ値なので何も表示されない",
+        "func の外で `:=` を使っているためコンパイルエラーになる"
+      ],
+      "correct": 3,
+      "explanation": "`:=` は func の中でしか使えません。func の外に書くと構文エラー(expected declaration)になります。func の外で変数を作るなら `var count int = 0`(または `var count = 0`)と書きます。"
+    },
+    {
+      "question": "次のプログラムの出力はどれですか(「 / 」は改行を表します)。\n\n```go\npackage main\n\nimport \"fmt\"\n\nvar name string = \"washi\"\n\nfunc greet() {\n    fmt.Println(\"hi\", name)\n}\n\nfunc main() {\n    greet()\n    fmt.Println(\"bye\", name)\n}\n```",
+      "choices": [
+        "hi washi / bye washi",
+        "bye washi(greet からは name が見えない)",
+        "コンパイルエラー(name は main の中にないため)",
+        "hi / bye washi"
+      ],
+      "correct": 0,
+      "explanation": "`name` は func の外で `var` によって宣言されているので、`greet` からも `main` からも使えます。`main` が先に `greet()` を呼ぶので `hi washi`、続いて `bye washi` が表示されます。"
+    },
+    {
+      "question": "次のコードでコンパイルエラーになる行はどれですか。\n\n```go\nfunc main() {\n    a := 1        // (ア)\n    a = 2         // (イ)\n    a := 3        // (ウ)\n    fmt.Println(a) // (エ)\n}\n```",
+      "choices": [
+        "(ア)。func の中では var を使う必要がある",
+        "(イ)。一度作った変数に値を入れ直すことはできない",
+        "(ウ)。`a` は既にあるので `:=` で新しく作れない",
+        "(エ)。`a` の型が決まっていない"
+      ],
+      "correct": 2,
+      "explanation": "`:=` は新しい変数を作る記号です。(ウ)では `a` が既にあるため `no new variables on left side of :=` になります。値の入れ直しは(イ)のように `=` で書きます。"
+    },
+    {
+      "question": "次のコードの出力はどれですか。\n\n```go\nvar age int\nvar name string\nvar active bool\nfmt.Println(age, name == \"\", active)\n```",
+      "choices": [
+        "コンパイルエラー(値を入れていない変数は使えない)",
+        "0 true false",
+        "nil true nil",
+        "0 false false"
+      ],
+      "correct": 1,
+      "explanation": "値を書かずに `var` で宣言すると、型ごとのゼロ値が入ります。int は `0`、string は `\"\"`(空文字)、bool は `false` です。`name == \"\"` は true になるので `0 true false` です。"
+    },
+    {
+      "question": "`age := 30` のあとに `fmt.Println(\"age: \" + age)` と書いたらコンパイルエラーになりました。原因と直し方として正しいものはどれですか。",
+      "choices": [
+        "`:=` で作った変数は Println に渡せない。`var age int = 30` に直す",
+        "`+` は数値専用なので、`fmt.Println(\"age: \" - age)` に直す",
+        "文字列と int を `+` でつなげようとしている。`fmt.Println(\"age:\", age)` のように別々に渡す",
+        "`age` は予約語なので、変数名を `myAge` に変える"
+      ],
+      "correct": 2,
+      "explanation": "Go は型がある言語なので、string と int をそのまま `+` で混ぜることはできません(mismatched types)。Println には複数の値を渡せるので、`fmt.Println(\"age:\", age)` とすれば `age: 30` と表示されます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力から「名前 年齢」(半角スペース区切り。年齢は0以上の整数)を読み、次の2行を出力するプログラムを書いてください。\n\n- 1行目: `名前 is 年齢 years old`\n- 2行目: `next year: 年齢+1`\n\n条件: 名前は `var name string`、年齢は `var age int` で受け取る(雛形どおり)。来年の年齢は `:=` で新しい変数 `next` を作って計算すること。\n\n例: 入力 `washi 30` → 出力\n```\nwashi is 30 years old\nnext year: 31\n```",
+      "setup": "package main\n\nimport \"fmt\"\n\nfunc main() {\n    var name string\n    var age int\n    fmt.Scan(&name, &age) // 名前と年齢を読む\n\n    // ここに処理を書く\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\nfunc main() {\n    var name string\n    var age int\n    fmt.Scan(&name, &age)\n\n    fmt.Println(name, \"is\", age, \"years old\")\n    next := age + 1\n    fmt.Println(\"next year:\", next)\n}\n",
+      "tests": [
+        {
+          "stdin": "washi 30\n"
+        },
+        {
+          "stdin": "taro 0\n"
+        },
+        {
+          "stdin": "hanako 99\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`fmt.Println` に複数の値を渡すと間にスペースが入るので、`fmt.Println(name, \"is\", age, \"years old\")` で1行目ができます。`name + \" is \" + age` のように string と int を `+` でつなぐと型が違うためコンパイルエラーです。`next := age + 1` は右辺が int なので `next` も int になります。`age := age + 1` のように既にある名前へ `:=` を使うと `no new variables` エラーになる点にも注意してください。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "スコープの確認です。複数の関数から使う変数を func の外に置くプログラムを書いてください。\n\n- func の外に `var count int` を宣言する\n- 関数 `visit()` を作り、呼ばれるたびに `count` を1増やす\n- `main` は標準入力から回数 N(0以上の整数)を読み、`visit()` を N 回呼んだあと `visits: N回分の count` を1行出力する\n\n例: 入力 `3` → 出力 `visits: 3`\n\n(N 回繰り返すための `for i := 0; i < n; i++ { ... }` は雛形に書いてあります)",
+      "setup": "package main\n\nimport \"fmt\"\n\n// ここに count を宣言する\n\n// ここに visit 関数を書く\n\nfunc main() {\n    var n int\n    fmt.Scan(&n)\n    for i := 0; i < n; i++ {\n        // visit を呼ぶ\n    }\n    // 結果を出力する\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\nvar count int\n\nfunc visit() {\n    count = count + 1\n}\n\nfunc main() {\n    var n int\n    fmt.Scan(&n)\n    for i := 0; i < n; i++ {\n        visit()\n    }\n    fmt.Println(\"visits:\", count)\n}\n",
+      "tests": [
+        {
+          "stdin": "3\n"
+        },
+        {
+          "stdin": "0\n"
+        },
+        {
+          "stdin": "10\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`count` を func の外で `var` 宣言すると、`visit` からも `main` からも同じ変数が見えます。値を書かなければゼロ値の 0 から始まるので、N 回呼べば N です。よくある間違いは `visit` の中で `count := count + 1` と書くことで、これは `visit` の中だけの新しい変数を作ってしまい(外の count は変わらない)、さらにその変数を使っていないので `declared and not used` でコンパイルエラーになります。値を入れ直すときは `=` です。"
+    },
+    {
+      "kind": "essay",
+      "question": "次のコードはコンパイルエラーになります。理由を「スコープ」という言葉を使って説明し、直し方を2通り示してください。\n\n```go\nfunc main() {\n    name := \"washi\"\n    fmt.Println(name)\n    otherFunc()\n}\n\nfunc otherFunc() {\n    fmt.Println(name)\n}\n```",
+      "answer": "`name` は `main` の中で `:=` によって作られた変数なので、スコープ(変数が存在する範囲)は `main` の中だけです。関数は別々の部屋のようなもので、`otherFunc` からは `main` の `name` が見えないため、`otherFunc` の `fmt.Println(name)` で「name が未定義」というエラーになります。直し方1は、`var name string = \"washi\"` を func の外に書き、どの関数からも使える変数にすることです(main の中の `name :=` は消す)。直し方2は、`otherFunc(name string)` のように引数で受け取るようにし、main から `otherFunc(name)` と渡すことです。",
+      "rubric": [
+        "name のスコープが main の中だけであり、otherFunc からは見えないことを説明している",
+        "直し方として「func の外に var で宣言する」方法を挙げている",
+        "もう1つの直し方として「引数で渡す」など、func の外の var 以外の妥当な方法を挙げている",
+        "エラーの発生箇所が otherFunc の Println(name) であることを特定している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "記事では「複数の関数で使う変数は func の外に var」と紹介しています。もう1つの定番は引数で渡す方法で、第3章の関数の書き方(`func 関数名(引数名 型)`)とつながります。実務では共有変数より引数で渡す方が、どこで値が変わるかを追いやすいので好まれます。"
+    }
+  ]
+}

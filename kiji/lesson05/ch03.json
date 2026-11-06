@@ -1,0 +1,126 @@
+{
+  "lesson": 5,
+  "chapter": 3,
+  "title": "HTTPサーバーとPOST・入力バリデーション",
+  "priority": "🔴",
+  "text": "この章は Q35〜Q50 を土台に、`net/http` で JSON を返す HTTP サーバーと、POST でデータを受け取るエンドポイント、そして入力を弾くバリデーションを書けるようにします。前の章の構造体・エラー処理・map がそのまま道具になります。\n\n## JSON を返すサーバーの型\n\nハンドラ（リクエストが来たときに動く関数）の中で「ヘッダーで JSON と宣言 → データを Encode して返す」の2ステップを書きます。\n\n```go\nfunc healthHandler(w http.ResponseWriter, r *http.Request) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    json.NewEncoder(w).Encode(map[string]string{\"status\": \"ok\"})\n}\n\nfunc main() {\n    http.HandleFunc(\"/health\", healthHandler)\n    http.ListenAndServe(\":8080\", nil)\n}\n```\n\n`w.Header().Set(\"Content-Type\", \"application/json\")` は「このレスポンスの中身は JSON です」と受け取り側に伝える宣言です。`json.NewEncoder(w).Encode(data)` は Go のデータを JSON に変換してレスポンス `w` に書き込みます（Go から JSON へ、送信用）。`http.HandleFunc(\"/health\", healthHandler)` はルーティング、つまり「/health に来たらこの関数を動かす」という紐づけです。`http.ListenAndServe(\":8080\", nil)` でポート8080で起動します。`nil` は「ルーティングをカスタマイズせず、HandleFunc で登録したデフォルトを使う」という意味です。\n\n起動するとターミナルが止まって見えますが、これは異常ではなく、`ListenAndServe` がリクエストを待ち続けている状態です。`Ctrl + C` で止められます。エンドポイントを増やすときは「ハンドラを作る → HandleFunc で登録」を繰り返すだけです。型が決まったデータは map より構造体（JSON タグ付き）で返すほうが安全です。\n\n## POST でデータを受け取る\n\n受け取るときは Encode の逆、`Decode` を使います。\n\n```go\nfunc usersHandler(w http.ResponseWriter, r *http.Request) {\n    var user User\n    json.NewDecoder(r.Body).Decode(&user)\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    w.WriteHeader(http.StatusCreated) // 201\n    json.NewEncoder(w).Encode(user)\n}\n```\n\n`json.NewDecoder(r.Body).Decode(&user)` はリクエスト本文の JSON を Go の構造体に変換して読み取ります（JSON から Go へ、受信用）。`&user` で「ここに書き込んで」と変数のありかを渡します。Encode と Decode は方向が逆、と覚えます。`w.WriteHeader(http.StatusCreated)` は 201（作成成功）を返します。\n\n## 弾くケースを先に並べる\n\n外から来るデータは信用できないので、正常系の前に「弾くケース」を上から並べます。\n\n```go\nfunc usersHandler(w http.ResponseWriter, r *http.Request) {\n    if r.Method != http.MethodPost {\n        http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed) // 405\n        return\n    }\n    var user User\n    if err := json.NewDecoder(r.Body).Decode(&user); err != nil {\n        http.Error(w, \"Bad request\", http.StatusBadRequest) // 400\n        return\n    }\n    w.WriteHeader(http.StatusCreated)\n    json.NewEncoder(w).Encode(user)\n}\n```\n\n`r.Method` で来たメソッドが分かり、POST 以外なら405を返して `return` で止めます。`Decode` は失敗しうるので戻り値の err を受け、壊れた JSON なら400を返します。前の章の「エラーを受けたら return」がそのまま効いています。GET はデータ取得、POST は新規作成、PUT は更新、DELETE は削除、という役割分担が土台にあります。\n\n\n```mermaid\nsequenceDiagram\n  participant C as クライアント\n  participant S as サーバー\n  C->>S: POST /users (JSON本文)\n  S->>S: メソッド確認(POST以外は405)\n  S->>S: Decode(壊れたJSONは400)\n  S-->>C: 201 Created と JSON を返す\n```\n\n### まとめ\nJSON を返すには Content-Type を宣言して Encode します。HandleFunc でルーティングし、ListenAndServe で起動します。受け取るときは Decode を使い、Encode とは方向が逆です。外から来るデータは、正常系の前に「POST 以外は405」「壊れた JSON は400」と弾くケースを上から並べ、弾いたら return で止めます。\n\n### 何も見ずに言えるように\n・JSON を返す=Content-Type を application/json にして Encode。受け取る=Decode（方向が逆）\n・HandleFunc でルーティング、ListenAndServe で起動。止まって見えるのは待機中\n・外部入力は正常系の前に弾く。メソッド違いは405、壊れた JSON は400、弾いたら return",
+  "quiz": [
+    {
+      "question": "`json.NewEncoder(w).Encode(data)` と `json.NewDecoder(r.Body).Decode(&user)` の違いとして正しいのはどれですか。",
+      "choices": [
+        "Encode は JSON を Go に変換（受信用）、Decode は Go を JSON に変換（送信用）",
+        "Encode は Go を JSON に変換してレスポンスへ書き込む（送信用）、Decode はリクエストの JSON を Go に変換して読み取る（受信用）",
+        "どちらも Go を JSON に変換する同じ処理",
+        "Encode はファイル用、Decode はネットワーク用"
+      ],
+      "correct": 1,
+      "explanation": "Encode は Go のデータを JSON にしてレスポンス w に書き込む送信用、Decode はリクエスト本文 r.Body の JSON を Go に読み取る受信用です。方向が逆、と覚えます。"
+    },
+    {
+      "question": "`http.ListenAndServe(\":8080\", nil)` を実行するとターミナルが止まって見えます。これはなぜですか。",
+      "choices": [
+        "プログラムがクラッシュして固まっているから",
+        "ListenAndServe がリクエストを待ち続けている（待機中の）状態だから",
+        "ポート8080が他のプロセスに使われているから",
+        "nil を渡したせいでエラーになっているから"
+      ],
+      "correct": 1,
+      "explanation": "サーバーは止まっているのではなく、リクエストが来るのを待ち続けている状態です。Ctrl + C で止められます。異常ではありません。"
+    },
+    {
+      "question": "POST 専用のエンドポイントで、GET できたときに 405 を返したい場合、正常系のどこに判定を置くのが適切ですか。",
+      "choices": [
+        "正常系の処理をすべて終えた最後に置く",
+        "正常系より前（先頭）に置き、POST 以外なら return で止める",
+        "main 関数の中に置く",
+        "判定は不要で Go が自動で弾く"
+      ],
+      "correct": 1,
+      "explanation": "弾くケースは正常系の前に上から並べます。`if r.Method != http.MethodPost { http.Error(..., 405); return }` を先頭に置けば、許可しないメソッドを先に落とせます。"
+    },
+    {
+      "question": "次の Decode のコードには危険があります。壊れた JSON を POST されたときの問題はどれですか。\n```go\nvar user User\njson.NewDecoder(r.Body).Decode(&user)\njson.NewEncoder(w).Encode(user)\n```",
+      "choices": [
+        "Decode の戻り値のエラーを受けていないため、壊れた JSON でも気づかず空のまま処理が進む",
+        "Encode が2回必要なのに1回しかない",
+        "&user ではなく user を渡すべき",
+        "Content-Type を宣言していればこのコードで十分安全"
+      ],
+      "correct": 0,
+      "explanation": "Decode はエラーを返しますが、ここでは受け取らずに捨てています。壊れた JSON が来ても気づかず、空の user のまま処理が進みます。`if err := ...; err != nil { http.Error(..., 400); return }` で弾くべきです。"
+    },
+    {
+      "question": "`w.Header().Set(\"Content-Type\", \"application/json\")` を書く目的として正しいのはどれですか。",
+      "choices": [
+        "レスポンスを暗号化するため",
+        "受け取り側に「このレスポンスの中身は JSON だ」と伝え、正しく処理させるため",
+        "レスポンスを圧縮してサイズを小さくするため",
+        "ステータスコードを 200 に固定するため"
+      ],
+      "correct": 1,
+      "explanation": "Content-Type はレスポンスの中身が何の形式かを伝えるヘッダーです。application/json と宣言することで、受け取った側が JSON として正しく解釈できます。"
+    },
+    {
+      "kind": "essay",
+      "question": "POST で JSON を受け取るエンドポイントを実装するとき、正常系より前に置くべき「弾くケース」を2つ挙げ、それぞれどんな HTTP ステータスで弾くか、なぜ先に弾くのかを説明してください。120〜350字で。",
+      "answer": "1つめは、許可していない HTTP メソッドで来たケースです。POST 専用なら、r.Method が POST 以外のときに 405（Method Not Allowed）を返して return で止めます。2つめは、リクエスト本文の JSON が壊れていて Decode に失敗したケースです。このときは 400（Bad Request）を返して止めます。これらを正常系より前に並べる理由は、外から来るデータは信用できないからです。先に弾いておけば、正常系のコードは「メソッドは正しく、JSON も正しく読めた」という前提だけを考えればよくなり、見通しが良くなります。弾いたら必ず return で抜けて、正常系まで処理が進まないようにします。",
+      "rubric": [
+        "メソッド違いを 405 で弾く、を挙げている",
+        "壊れた JSON（Decode 失敗）を 400 で弾く、を挙げている",
+        "外部入力は信用できないので先に弾く、という理由を述べている",
+        "弾いたら return で止める点に触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「405＝メソッド違い」「400＝壊れた入力」と、ステータスと理由をセットで言えると実装でそのまま使えます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で `Authorization` ヘッダーの値が与えられます(例: `Bearer abc.def.ghi`)。先頭の `Bearer ` を取り除いたトークン部分だけを1行出力してください。入力 `Bearer abc.def.ghi` なら出力は `abc.def.ghi`。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\tline, _ := reader.ReadString('\\n')\n\tline = strings.TrimRight(line, \"\\r\\n\")\n\t// ここで line の先頭の \"Bearer \" を取り除いてトークンだけを出力する\n\t_ = fmt.Sprint\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\tline, _ := reader.ReadString('\\n')\n\tline = strings.TrimRight(line, \"\\r\\n\")\n\ttoken := strings.TrimPrefix(line, \"Bearer \")\n\tfmt.Println(token)\n}\n",
+      "tests": [
+        {
+          "stdin": "Bearer abc.def.ghi\n"
+        },
+        {
+          "stdin": "Bearer xyz.123.qqq\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "値は `Bearer トークン` の形なので、`strings.TrimPrefix(line, \"Bearer \")` で先頭の `Bearer `(末尾の空白まで含む)を削ります。空白を含む1行なので、雛形のように bufio で行ごと読みます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で文字列が1つ与えられます。それを整数に変換し(`strconv.Atoi`)、変換できたらその整数を1行出力してください。数値でなく変換に失敗したら `Bad request` と1行出力してください。入力 `42` なら `42`、入力 `abc` なら `Bad request`。",
+      "setup": "package main\n\nimport (\n\t\"fmt\"\n\t\"strconv\"\n)\n\nfunc main() {\n\tvar s string\n\tfmt.Scan(&s)\n\t// s を整数に変換し、成功なら整数を、失敗なら Bad request を出力する\n\t_ = strconv.Atoi\n}\n",
+      "answer": "package main\n\nimport (\n\t\"fmt\"\n\t\"strconv\"\n)\n\nfunc main() {\n\tvar s string\n\tfmt.Scan(&s)\n\tn, err := strconv.Atoi(s)\n\tif err != nil {\n\t\tfmt.Println(\"Bad request\")\n\t\treturn\n\t}\n\tfmt.Println(n)\n}\n",
+      "tests": [
+        {
+          "stdin": "42"
+        },
+        {
+          "stdin": "abc"
+        },
+        {
+          "stdin": "0"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "URL から取れる値は必ず文字列なので、`strconv.Atoi` で整数に直します。変換は失敗しうるので err を受け、失敗なら `Bad request` を出して return します。外から来る値は必ずエラーチェックします。"
+    }
+  ]
+}

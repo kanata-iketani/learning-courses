@@ -1,0 +1,128 @@
+{
+  "lesson": 104,
+  "chapter": 2,
+  "title": "基本の型と型推論",
+  "priority": "🔴",
+  "text": "### 型注釈の書き方と基本の 4 つ\n\n型注釈は `変数名: 型` の形で書きます。最初に使うのは実質次の 4 つです。\n\n| 型 | 意味 | 例 |\n|---|---|---|\n| `string` | 文字列 | `const title: string = \"入門\"` |\n| `number` | 数値(整数も小数も) | `const price: number = 1200` |\n| `boolean` | true / false | `const isAdmin: boolean = false` |\n| `string[]` | 文字列の配列 | `const tags: string[] = [\"vue\", \"ts\"]` |\n\n押さえておきたい点が 2 つあります。\n\n- `number` は整数と小数を区別しません。`1200` も `12.5` も同じ `number` です\n- 配列の型は `要素の型[]` と書きます。`number[]` なら数値の配列で、中に 1 つでも文字列が混ざるとエラーになります\n\n```ts\nconst ids: number[] = [1, 2, \"3\"];\n// error TS2322: Type 'string' is not assignable to type 'number'.\n```\n\n`\"3\"` は見た目は数字でも、引用符で囲まれているので `string` です。`\"false\"` も同じで、`boolean` の変数には入りません。**値の見た目ではなく、値の種類で判定される**と覚えておくと、コードを読むときに迷いません。\n\n### 型推論:毎回書かなくていい\n\n全部の変数に型を書くのは面倒に見えますが、実は書かなくていい場面のほうが多いです。TypeScript は代入された値から型を推測します。これを**型推論**(初期値などから型を自動で決める仕組み)と呼びます。\n\n```ts\n// infer.ts\nlet count = 1;          // 型を書いていないが、number と推論される\ncount = \"たくさん\";     // だからこれはエラーになる\n```\n\n```\ninfer.ts(2,1): error TS2322: Type 'string' is not assignable to type 'number'.\n```\n\n`count` には `1` を代入したので、TypeScript は「`count` は number」と判断します。以降、文字列の代入は弾かれます。**型を 1 文字も書いていないのに、型チェックは効いています。**\n\n```mermaid\nflowchart TD\n  A[\"let count = 1\"] --> B[\"初期値 1 から number と推論\"]\n  B --> C[\"count = 5\"]\n  B --> D[\"count = 'たくさん'\"]\n  C --> E[\"OK\"]\n  D --> F[\"TS2322 エラー\"]\n```\n\n`let title = \"入門\";` なら `string`、`let flag = true;` なら `boolean` と推論されます。後から `flag = 0;` と書けば、`number` を `boolean` に入れようとしているのでエラーです。\n\n### 推論に任せる所・必ず書く所\n\n実務での書き分けは次のとおりです。\n\n- **初期値のある変数**:推論に任せる。わざわざ `: number` を書かない\n- **関数の引数**:必ず書く。引数は「呼ばれるまで何が来るか分からない」ので推論のしようがない\n\n引数に型を書かないとどうなるかを、記事と同じ TypeScript 7.0 で試すと次のようになります。\n\n```ts\nfunction double(n) {\n  return n * 2;\n}\n// error TS7006: Parameter 'n' implicitly has an 'any' type.\n```\n\n推論できない引数は `any`(どんな値も通す型。次の次の章で扱います)扱いになり、チェックが効かなくなります。この設定ではそれ自体がエラーとして報告されます。どの程度厳しくチェックするかは tsconfig.json の strict 系の設定で変わりますが、どの設定でも「引数には型を書く」が正しい習慣です。\n\n```mermaid\nflowchart LR\n  Q{\"初期値はあるか\"} -->|\"ある (変数)\"| R[\"推論に任せる\"]\n  Q -->|\"ない (関数の引数)\"| S[\"型を必ず書く\"]\n  S --> T[\"戻り値の型も書いておくと安全\"]\n```\n\n### 戻り値の型を書くと、関数の中のミスも捕まる\n\n記事の実技問題の解説では、戻り値の型 `: string` を書いておくと、関数の中で誤って別の型を返すような変更をしたときにすぐ気づける、と説明されています。例えば次のコードはエラーになります。\n\n```ts\nfunction total(price: number, count: number): number {\n  return `${price * count}円`; // 文字列を返してしまった\n}\n// error TS2322: Type 'string' is not assignable to type 'number'.\n```\n\n「この関数は number を返す」と宣言しているので、テンプレート文字列(バッククォートで囲んだ文字列)を返すと食い違いが報告されます。戻り値の型は宣言であると同時に、関数の中身に対するチェックでもあります。\n\n### まとめ\n\n- 型注釈は `変数名: 型`。基本は `string`・`number`・`boolean`・`要素の型[]`\n- `\"3\"` や `\"false\"` は引用符があるので `string`。見た目ではなく値の種類で判定される\n- 初期値のある変数は型推論に任せてよい。推論後に別の型を代入するとエラー\n- 関数の引数は推論できないので必ず型を書く。戻り値の型も書くと関数内のミスも捕まる\n\n### 何も見ずに言えるように\n\n- `let count = 1` は number と推論され、後から文字列は入らない\n- 変数は推論に任せ、引数には必ず書く。引数は呼ばれるまで中身が分からないから\n- 戻り値の型を書くと、関数の中で違う型を返したときにも気づける\n",
+  "quiz": [
+    {
+      "question": "次のうち、**型エラーになる**のはどれか。",
+      "choices": [
+        "`const price: number = \"1200\";`",
+        "`const rate: number = 12.5;`",
+        "`const tags: string[] = [\"vue\", \"ts\"];`",
+        "`const isAdmin: boolean = false;`"
+      ],
+      "correct": 0,
+      "explanation": "`\"1200\"` は引用符で囲まれているので string です。number には入りません(TS2322)。12.5 のような小数も number なので問題ありません。"
+    },
+    {
+      "question": "次のコードをコンパイルしたとき、どうなるか。\n\n```ts\nlet count = 1;\ncount = \"たくさん\";\n```",
+      "choices": [
+        "型注釈が無いので、どんな値でも代入でき、エラーにならない",
+        "1 行目で「型注釈が無い」というエラーになる",
+        "2 行目で TS2322(string を number に代入できない)のエラーになる",
+        "コンパイルは通るが、実行時に TypeError になる"
+      ],
+      "correct": 2,
+      "explanation": "初期値 1 から count は number と推論されます(型推論)。型を書いていなくてもチェックは効くので、文字列の代入は 2 行目で弾かれます。"
+    },
+    {
+      "question": "次のうち、**型エラーにならない**のはどれか。",
+      "choices": [
+        "`const ids: number[] = [1, 2, \"3\"];`",
+        "`const ok: boolean = \"false\";`",
+        "`let flag = true; flag = 0;`",
+        "`let title = \"入門\"; title = title + \"編\";`"
+      ],
+      "correct": 3,
+      "explanation": "title は string と推論され、string + string は string なので問題ありません。配列に \"3\" が混ざる、boolean に \"false\"(文字列)を入れる、boolean と推論された flag に 0 を入れる、はいずれもエラーです。"
+    },
+    {
+      "question": "記事の考え方に沿うと、型注釈を**必ず書くべき**なのはどこか。",
+      "choices": [
+        "`let count = 1;` のような、初期値のある変数",
+        "`function greet(user) { ... }` の引数 user",
+        "`const title = \"入門\";` のような、const で宣言した文字列",
+        "`console.log()` に渡す値"
+      ],
+      "correct": 1,
+      "explanation": "引数は呼ばれるまで何が来るか分からないので推論できません。初期値のある変数は推論に任せて構いません。TypeScript 7.0 の既定では、型の無い引数は TS7006(暗黙の any)として報告されます。"
+    },
+    {
+      "question": "次のコードがエラーになる理由として正しいものはどれか。\n\n```ts\nfunction total(price: number, count: number): number {\n  return `${price * count}円`;\n}\n```",
+      "choices": [
+        "引数の型と戻り値の型を同時に書くことはできないから",
+        "テンプレート文字列の中で掛け算はできないから",
+        "戻り値の型を number と宣言しているのに、文字列を返しているから",
+        "関数名 total が予約語だから"
+      ],
+      "correct": 2,
+      "explanation": "`: number` は「この関数は数値を返す」という宣言です。テンプレート文字列は string なので食い違いが TS2322 で報告されます。戻り値の型は関数の中身のチェックにも効きます。"
+    },
+    {
+      "kind": "essay",
+      "question": "「型推論に任せる所」と「型を必ず書く所」の書き分けを、`let count = 1; count = \"たくさん\";` の例と関数の引数を使って、理由とともに説明してください。",
+      "answer": "TypeScript は代入された値から型を推測します(型推論)。let count = 1; と書くと、型注釈が無くても count は number と推論され、後から count = \"たくさん\" と文字列を代入すると TS2322 のエラーになります。つまり初期値のある変数は、型を書かなくてもチェックが効くので推論に任せて構いません。一方、関数の引数は、呼ばれるまで何が渡されるか分からず、推論の材料がありません。型を書かないと any 扱いになりチェックが効かなくなる(TS 7.0 の既定では TS7006 エラーにもなる)ので、引数には必ず型を書きます。戻り値の型も書いておくと、関数の中で誤って別の型を返したときに気づけます。",
+      "rubric": [
+        "初期値から型が決まる(型推論)ことを count の例で説明している",
+        "推論後に別の型を代入するとエラーになることに触れている",
+        "引数は呼ばれるまで中身が分からず推論できないので必ず書く、という理由を述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "書き分けの軸は「推論の材料(初期値)があるかどうか」です。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "価格の配列を受け取って合計を返す関数を書いてください。\n\n- `function sum(prices: number[]): number` を定義する\n- 標準入力は 1 行で、半角スペース区切りの整数(0 個以上)。空行の場合は価格が 0 個とみなす\n- 出力は `件数: N` と `合計: X円` の 2 行\n\n例: 入力 `100 250 50` → 出力\n```\n件数: 3\n合計: 400円\n```\n価格が 0 個なら `件数: 0` / `合計: 0円`。\n\n※ `tsc --strict` で型エラーがあると不正解です。",
+      "setup": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\n// lines[0] が無い(空行)ときは価格 0 個として扱う\n\n// ここに sum 関数を書く\n\n// 入力を number[] に変換して sum を呼び、2 行出力する\n",
+      "answer": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\nfunction sum(prices: number[]): number {\n  let s = 0;\n  for (const p of prices) {\n    s += p;\n  }\n  return s;\n}\n\nconst prices: number[] = lines.length === 0 ? [] : lines[0].trim().split(/\\s+/).map(Number);\nconsole.log(`件数: ${prices.length}`);\nconsole.log(`合計: ${sum(prices)}円`);\n",
+      "tests": [
+        {
+          "stdin": "100 250 50\n"
+        },
+        {
+          "stdin": "1200\n"
+        },
+        {
+          "stdin": "\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`number[]` は数値の配列です。`split` の結果は `string[]` なので、そのまま `sum` に渡すと型エラーになります。`map(Number)` で `number[]` に変換します。`let s = 0` は型推論で number になるので注釈は不要です。空行の扱いを忘れると `lines[0]` が undefined になり実行時に落ちます。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "タグの配列を「#」付きでつなげる関数を書いてください。\n\n- `function formatTags(tags: string[]): string` を定義する\n- 各タグの先頭に `#` を付け、半角スペース 1 つで区切った文字列を返す。タグが 0 個なら `(タグなし)` を返す\n- 標準入力は 1 行で、カンマ区切りのタグ(空行ならタグ 0 個)\n- 出力は formatTags の戻り値を 1 行\n\n例: 入力 `vue,ts` → 出力 `#vue #ts`\n\n※ `tsc --strict` で型エラーがあると不正解です。",
+      "setup": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\n// ここに formatTags 関数を書く\n\n// lines[0] をカンマで分けて string[] にし、結果を出力する(空行ならタグ 0 個)\n",
+      "answer": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\nfunction formatTags(tags: string[]): string {\n  if (tags.length === 0) {\n    return \"(タグなし)\";\n  }\n  return tags.map((t) => `#${t}`).join(\" \");\n}\n\nconst tags: string[] = lines.length === 0 ? [] : lines[0].split(\",\");\nconsole.log(formatTags(tags));\n",
+      "tests": [
+        {
+          "stdin": "vue,ts\n"
+        },
+        {
+          "stdin": "typescript\n"
+        },
+        {
+          "stdin": "\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "引数は `string[]`(文字列の配列)、戻り値は `string` です。0 個のときの分岐を忘れると空行が出力されて不正解になります。`map` のコールバックの `t` は、配列が `string[]` と分かっているので型推論で string になり、注釈を書かなくても型チェックが効きます。"
+    }
+  ]
+}
