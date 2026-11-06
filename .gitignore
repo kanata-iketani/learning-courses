@@ -21,3 +21,29 @@ takken/
 
 # OS / エディタ
 .DS_Store
+
+# 社内情報・IPA 過去問を含む講座(ローカル専用。CLAUDE.local.md を参照)
+finatext/
+nippo/
+fukuri/
+dbspec/
+awsnet/
+_archive/
+CLAUDE.local.md
+STUDY_PLAN.md
+
+# 別リポジトリの講座
+nwspec/
+cissp/
+ddd/
+
+# 共有の大きな依存物
+shared/tsrun/node_modules/
+shared/aws-icons/
+kiji/source/
+
+# 復習(間隔反復)の個人データ
+*/app/review.json
+*/app/quizstate.json
+*/app/mistakes.json
+*/app/ai_usage.json
