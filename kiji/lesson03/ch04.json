@@ -1,0 +1,143 @@
+{
+  "lesson": 3,
+  "chapter": 4,
+  "title": "GETとPOSTを1つのハンドラーで",
+  "priority": "🟡",
+  "text": "## GETとPOSTを1つのハンドラーで扱う\n\n記事の最後の課題は、1つの URL `/users` で GET と POST の両方に答えることです。GET なら一覧を 200 で、POST なら受け取った JSON を 201 で返し、それ以外は 405 にします。\n\n### r.Method で分岐する 🔴\n\n```go\nfunc usersHandler(w http.ResponseWriter, r *http.Request) {\n    if r.Method == http.MethodGet {\n        w.Header().Set(\"Content-Type\", \"application/json\")\n        response := map[string][]string{\n            \"users\": {\"washi\", \"taro\", \"hanako\"},\n        }\n        json.NewEncoder(w).Encode(response)\n\n    } else if r.Method == http.MethodPost {\n        var user User\n        err := json.NewDecoder(r.Body).Decode(&user)\n        if err != nil {\n            http.Error(w, \"Bad request\", http.StatusBadRequest)\n            return\n        }\n        fmt.Printf(\"Created: %s, %d\\n\", user.Name, user.Age)\n        w.Header().Set(\"Content-Type\", \"application/json\")\n        w.WriteHeader(http.StatusCreated)\n        json.NewEncoder(w).Encode(user)\n\n    } else {\n        http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n    }\n}\n```\n\n- GET の枝は `WriteHeader` を書いていないので、ボディを書き始めた時点で自動的に 200 になります\n- POST の枝は `WriteHeader(http.StatusCreated)` で明示的に 201 にしています\n- どちらでもなければ `else` で 405 です。`/users` に PUT や DELETE が来るとここに入ります\n\n```mermaid\nflowchart TD\n    A[\"/users にリクエスト\"] --> B{\"r.Method\"}\n    B -- GET --> G[\"一覧の map を Encode(200)\"]\n    B -- POST --> P[\"Decode\"]\n    P --> Q{\"err != nil ?\"}\n    Q -- はい --> P1[\"400 Bad request\"]\n    Q -- いいえ --> P2[\"201 + 受け取った user\"]\n    B -- \"それ以外(PUT, DELETE など)\" --> X[\"405 Method not allowed\"]\n```\n\n`createUserHandler` は「POST 以外を先に弾く」形でしたが、今回は受け付けるメソッドが2つなので `if` / `else if` / `else` で枝を並べます。\n\n### map[string][]string を読み解く 🟡\n\n```go\nresponse := map[string][]string{\n    \"users\": {\"washi\", \"taro\", \"hanako\"},\n}\n```\n\nmap の型は `map[キーの型]値の型` でした。ここではキーが `string`、値が `[]string` です。`[]` は**スライス**(同じ型の値を複数並べたリスト)を表し、`[]string` は文字列のリスト、`[]int` は整数のリストです。\n\n| 型 | 値の中身 | JSON にすると |\n|---|---|---|\n| `map[string]string` | 文字列1個 | `{\"status\":\"ok\"}` |\n| `map[string][]string` | 文字列のリスト | `{\"users\":[\"washi\",\"taro\"]}` |\n\nスライスは JSON の配列 `[...]` になります。\n\n`\"users\"` はどこかで定義した変数ではなく、map のキーをその場で書いたものです。値の `{\"washi\", \"taro\", \"hanako\"}` は、本来は `[]string{\"washi\", \"taro\", \"hanako\"}` と書くところを省略した形です。値の型が `[]string` だと map の型から分かっているので、`[]string` を省けます。逆に、値の型が `string` の `map[string]string` に `{\"washi\", \"taro\"}` を書くと、文字列は `{...}` で作れないのでコンパイルエラーになります。\n\n### なぜ GET にはエラー処理がないのか 🟡\n\nPOST の枝には `if err != nil` があるのに、GET の枝にはありません。エラー処理が要るのは**失敗するかもしれない処理**をしたときだけだからです。\n\n- GET の `{\"washi\", \"taro\", \"hanako\"}` は自分でその場で書いた固定データです。壊れようがありません\n- POST の Decode は相手から届いたデータを変換します。相手が壊れた JSON を送ってくるかもしれません\n\n判断の基準は「**外から来るデータは疑う、自分で作ったデータは信じてよい**」です。Decode のように外からの入力を扱う処理は、必ず err を確かめます。\n\n### 実技: /health と /items を書く 🔴\n\n記事の確認テストにある2つの実技は、ここまでの組み合わせです。`/health` は「GET 以外を先に 405 で弾き、GET なら `{\"status\":\"ok\"}` を返す(WriteHeader を書かないので 200)」。`/items` は次の形です。\n\n```go\ntype Item struct {\n    Name  string `json:\"name\"`\n    Price int    `json:\"price\"`\n}\n\nfunc itemsHandler(w http.ResponseWriter, r *http.Request) {\n    if r.Method != http.MethodPost {\n        http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n        return\n    }\n    var item Item\n    err := json.NewDecoder(r.Body).Decode(&item)\n    if err != nil {\n        http.Error(w, \"Bad request\", http.StatusBadRequest)\n        return\n    }\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    w.WriteHeader(http.StatusCreated)\n    json.NewEncoder(w).Encode(item)\n}\n```\n\n組み立てる順番は「受け取るデータの形を構造体で決める → 弾くケースを上から(メソッド違いは 405、Decode 失敗は 400)→ 正常系(201 で返す)」です。正常系より先に弾くケースを書くと、各エラーのたびに return で抜けるので見通しがよくなります。\n\nなお Go 1.22 からは `http.HandleFunc(\"POST /users\", ...)` と登録時にメソッドを書く方法もありますが、まずは `r.Method` で分岐する形を手で書けるようにしてください。\n\n### まとめ\n\n- 1つのハンドラーで `if r.Method == GET` / `else if POST` / `else 405` と分岐できる\n- GET の枝は WriteHeader なしで 200、POST の枝は明示的に 201\n- `map[string][]string` は「キーが文字列、値が文字列のリスト」。値の `[]string` は省略して `{...}` と書ける\n- エラー処理は失敗しうる処理(外から来るデータの Decode)にだけ書く\n\n### 何も見ずに言えるように\n\n- 「r.Method で GET・POST・それ以外に分け、GET は 200、POST は 201、それ以外は 405 を返します」\n- 「`[]string` は文字列のスライスで、JSON では配列になります」\n- 「外から来るデータは疑う。だから Decode の後には必ず err チェックを書き、固定データの GET には書きません」\n",
+  "quiz": [
+    {
+      "question": "`usersHandler` を登録したサーバーに次のコマンドを送りました。結果として正しいものはどれですか。\n\n```\ncurl -X PUT -H \"Content-Type: application/json\" -d '{\"name\":\"jiro\",\"age\":25}' http://localhost:8080/users\n```",
+      "choices": [
+        "201 で `{\"name\":\"jiro\",\"age\":25}` が返る(ボディがあるので POST の枝に入る)",
+        "200 で一覧 `{\"users\":[\"washi\",\"taro\",\"hanako\"]}` が返る",
+        "400 で `Bad request` が返る",
+        "405 で `Method not allowed` が返る"
+      ],
+      "correct": 3,
+      "explanation": "`-X PUT` を指定しているので r.Method は `\"PUT\"` です。GET でも POST でもないので `else` の枝に入り、405 が返ります。ボディの有無で枝が決まるのではなく、r.Method の値で決まります。"
+    },
+    {
+      "question": "次のコードで `Encode` したときに出力される JSON はどれですか(encoding/json は map のキーを辞書順に並べて出力します)。\n\n```go\nresponse := map[string][]string{\n    \"guests\": {},\n    \"admins\": {\"washi\"},\n}\njson.NewEncoder(w).Encode(response)\n```",
+      "choices": [
+        "`{\"guests\":[],\"admins\":[\"washi\"]}`",
+        "`{\"admins\":[\"washi\"],\"guests\":[]}`",
+        "`{\"admins\":\"washi\",\"guests\":\"\"}`",
+        "`{\"admins\":[\"washi\"]}`(空のリストは出力されない)"
+      ],
+      "correct": 1,
+      "explanation": "値の型は `[]string`(文字列のスライス)なので、JSON では配列 `[...]` になります。`{}` は要素0個のスライスを書いたもので `[]` として出力されます。キーは辞書順に並ぶので admins が先です。"
+    },
+    {
+      "question": "次のうち、コンパイルエラーになるものはどれですか。",
+      "choices": [
+        "`m := map[string][]string{\"users\": {\"washi\", \"taro\"}}`",
+        "`m := map[string][]string{\"users\": []string{\"washi\", \"taro\"}}`",
+        "`m := map[string]string{\"users\": {\"washi\", \"taro\"}}`",
+        "`m := map[string]string{\"status\": \"ok\"}`"
+      ],
+      "correct": 2,
+      "explanation": "値の型が `string` の map に `{\"washi\", \"taro\"}` は入れられません(`invalid composite literal type string`)。`map[string][]string` なら値の型 `[]string` が分かっているので、`[]string{...}` を省略して `{...}` と書けます。"
+    },
+    {
+      "question": "記事の「外から来るデータは疑う、自分で作ったデータは信じてよい」という基準で、`if err != nil` のチェックが**必要な**処理はどれですか。",
+      "choices": [
+        "クライアントが POST したボディを `json.NewDecoder(r.Body).Decode(&user)` で読む処理",
+        "GET の枝で `map[string][]string{\"users\": {\"washi\"}}` を作る処理",
+        "`w.Header().Set(\"Content-Type\", \"application/json\")` でヘッダーを設定する処理",
+        "`r.Method == http.MethodGet` でメソッドを比べる処理"
+      ],
+      "correct": 0,
+      "explanation": "Decode は相手から届いたデータを変換するので、壊れた JSON や空のボディで失敗する可能性があります。固定の map、ヘッダーの設定、メソッドの比較はエラーを返す処理ではなく、そもそも err がありません。"
+    },
+    {
+      "question": "`usersHandler` の GET の枝には `w.WriteHeader(...)` が書かれていません。`curl -i http://localhost:8080/users` で見えるステータスコードはどれですか。",
+      "choices": [
+        "ステータスコードなし(WriteHeader を呼んでいないので)",
+        "201 Created(POST と同じハンドラーなので)",
+        "204 No Content(ステータスを指定していないので)",
+        "200 OK(WriteHeader を呼ばずにボディを書くと 200 になる)"
+      ],
+      "correct": 3,
+      "explanation": "WriteHeader を呼ばずに Encode でボディを書き始めると、その時点で 200 OK が自動で送られます。GET で正常にデータを返すときは 200 が正しいので、GET の枝ではあえて書いていません。"
+    },
+    {
+      "kind": "essay",
+      "question": "`/items` エンドポイントのハンドラーを書いてください。POST で送られた JSON(name は文字列、price は整数)を受け取り、そのまま 201 で返します。JSON が不正なら 400、POST 以外のメソッドは 405 を返します。構造体の定義も含め、どの順番で組み立てたかを一言添えてください。",
+      "answer": "受け取るデータの形を構造体で決め、弾くケース(405、400)を上から書き、最後に正常系(201)を書く順で組み立てます。\n\n```go\ntype Item struct {\n    Name  string `json:\"name\"`\n    Price int    `json:\"price\"`\n}\n\nfunc itemsHandler(w http.ResponseWriter, r *http.Request) {\n    if r.Method != http.MethodPost {\n        http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n        return\n    }\n    var item Item\n    err := json.NewDecoder(r.Body).Decode(&item)\n    if err != nil {\n        http.Error(w, \"Bad request\", http.StatusBadRequest)\n        return\n    }\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    w.WriteHeader(http.StatusCreated)\n    json.NewEncoder(w).Encode(item)\n}\n```",
+      "rubric": [
+        "name(string)と price(int)を持つ構造体を JSON タグつきで定義している",
+        "POST 以外を http.StatusMethodNotAllowed(405)で返し、return している",
+        "Decode(&item) の err をチェックし、失敗時に 400 を返して return している",
+        "Header().Set → WriteHeader(201) → Encode の順で受け取ったデータを返している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "記事の createUserHandler が雛形です。「入口の形を決める → 弾くケース → 正常系」の順で書き、エラーのたびに return します。WriteHeader は Encode の前です。"
+    },
+    {
+      "kind": "essay",
+      "question": "`usersHandler` の POST の枝には `if err != nil` があり、GET の枝にはありません。この違いの理由と、どこにエラー処理を書くべきかの判断基準を、何も見ずに 1 分で説明するつもりで書いてください。150〜300 字で。",
+      "answer": "エラー処理が必要なのは、失敗するかもしれない処理をしたときだけです。GET の枝で返す map は、自分でその場に書いた固定データなので壊れようがなく、エラーを返す処理もしていません。一方 POST の枝の Decode は、クライアントから届いたボディを変換します。相手が壊れた JSON や空のボディ、型の合わない値を送ってくるかもしれないので、Decode はエラーを返すことがあり、err を確かめて 400 を返す必要があります。判断基準は「外から来るデータは疑う、自分で作ったデータは信じてよい」です。外部からの入力を扱う処理の直後には、必ず if err != nil を書きます。",
+      "rubric": [
+        "GET の固定データは自分で作ったもので失敗しようがないことを述べている",
+        "POST の Decode は外から来たデータを扱うので失敗しうることを述べている",
+        "「外から来るデータは疑い、自分で作ったデータは信じてよい」という判断基準を示している",
+        "失敗したときは 400 を返して return する、という対応に触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "エラー処理を「全部に書く」「どこにも書かない」ではなく、失敗しうる処理を見分けて書く、というのが記事の考え方です。外部入力の境界で必ず確かめる、と覚えておくと判断できます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "記事の `usersHandler` を何も見ずに書いてください。1つの URL で GET と POST の両方に答えます。\n\n- GET → Content-Type `application/json`、200(WriteHeader は書かない)、`map[string][]string` で `{\"users\":[\"washi\",\"taro\",\"hanako\"]}` を返す\n- POST → ボディを `User` に Decode。失敗したら 400 `Bad request`。成功したら Content-Type `application/json`、201、受け取った user の JSON\n- それ以外 → 405 `Method not allowed`\n- サーバー側のログ出力は書かない\n\n動作確認用の main(書き換え不要)は、標準入力の1行を1リクエスト(`メソッド` または `メソッド ボディ`)として `/users` に送り、`ステータスコード \"Content-Type\" \"ボディ\"` を1行で表示します(ボディは改行を `\\n` と表示)。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"strings\"\n)\n\ntype User struct {\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// usersHandler を書く。1つの URL で GET と POST の両方に答える。\n// - GET  → Content-Type application/json、200(WriteHeader は書かなくてよい)、\n//          map[string][]string で {\"users\":[\"washi\",\"taro\",\"hanako\"]} を返す\n// - POST → ボディを User に Decode。失敗したら 400 \"Bad request\"。\n//          成功したら Content-Type application/json、201、受け取った user の JSON\n// - それ以外 → 405 \"Method not allowed\"\n// (サーバー側のログ出力は書かない)\nfunc usersHandler(w http.ResponseWriter, r *http.Request) {\n\t// ここを書く\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\nvar _ = json.Marshal // 雛形のままでもビルドできるようにするための行\n\n// 標準入力の1行 = 1リクエスト。「メソッド」または「メソッド ボディ」の形。\n// 各リクエストについて「ステータスコード Content-Type ボディ」を1行で表示する。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tmethod, body, _ := strings.Cut(sc.Text(), \" \")\n\t\treq := httptest.NewRequest(method, \"/users\", strings.NewReader(body))\n\t\trec := httptest.NewRecorder()\n\t\tusersHandler(rec, req)\n\t\tres := rec.Result()\n\t\tfmt.Printf(\"%d %q %q\\n\", res.StatusCode, res.Header.Get(\"Content-Type\"), rec.Body.String())\n\t}\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"strings\"\n)\n\ntype User struct {\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// usersHandler を書く。1つの URL で GET と POST の両方に答える。\n// - GET  → Content-Type application/json、200(WriteHeader は書かなくてよい)、\n//          map[string][]string で {\"users\":[\"washi\",\"taro\",\"hanako\"]} を返す\n// - POST → ボディを User に Decode。失敗したら 400 \"Bad request\"。\n//          成功したら Content-Type application/json、201、受け取った user の JSON\n// - それ以外 → 405 \"Method not allowed\"\n// (サーバー側のログ出力は書かない)\nfunc usersHandler(w http.ResponseWriter, r *http.Request) {\n\tif r.Method == http.MethodGet {\n\t\tw.Header().Set(\"Content-Type\", \"application/json\")\n\t\tresponse := map[string][]string{\n\t\t\t\"users\": {\"washi\", \"taro\", \"hanako\"},\n\t\t}\n\t\tjson.NewEncoder(w).Encode(response)\n\n\t} else if r.Method == http.MethodPost {\n\t\tvar user User\n\t\terr := json.NewDecoder(r.Body).Decode(&user)\n\t\tif err != nil {\n\t\t\thttp.Error(w, \"Bad request\", http.StatusBadRequest)\n\t\t\treturn\n\t\t}\n\t\tw.Header().Set(\"Content-Type\", \"application/json\")\n\t\tw.WriteHeader(http.StatusCreated)\n\t\tjson.NewEncoder(w).Encode(user)\n\n\t} else {\n\t\thttp.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n\t}\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\nvar _ = json.Marshal // 雛形のままでもビルドできるようにするための行\n\n// 標準入力の1行 = 1リクエスト。「メソッド」または「メソッド ボディ」の形。\n// 各リクエストについて「ステータスコード Content-Type ボディ」を1行で表示する。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tmethod, body, _ := strings.Cut(sc.Text(), \" \")\n\t\treq := httptest.NewRequest(method, \"/users\", strings.NewReader(body))\n\t\trec := httptest.NewRecorder()\n\t\tusersHandler(rec, req)\n\t\tres := rec.Result()\n\t\tfmt.Printf(\"%d %q %q\\n\", res.StatusCode, res.Header.Get(\"Content-Type\"), rec.Body.String())\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "GET\nPOST {\"name\":\"jiro\",\"age\":25}\n"
+        },
+        {
+          "stdin": "DELETE\nPOST {\"name\":}\nPUT {\"name\":\"jiro\",\"age\":25}\nGET\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`if r.Method == http.MethodGet { ... } else if r.Method == http.MethodPost { ... } else { 405 }` と分岐します。GET の枝は固定データなので err チェックは不要、POST の枝は Decode の err を確かめます。`else` を書き忘れると DELETE や PUT に何も返さず 200 の空ボディになり、`map[string]string` で `\"washi,taro,hanako\"` と書くと JSON が配列になりません。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力には1行に1人ずつユーザー名が並んでいます(0人のこともあります)。`map[string][]string` を使って `{\"users\":[...]}` の形の JSON を作り、`json.Marshal` で文字列にして1行表示してください。\n\n- 名前は入力の順番のまま\n- 0人のときは `{\"users\":[]}` と表示する(`{\"users\":null}` ではない)\n\n例: 入力 `washi` `taro` の2行 → `{\"users\":[\"washi\",\"taro\"]}`",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n)\n\n// 標準入力には1行に1人ずつユーザー名が並んでいる(0人のこともある)。\n// map[string][]string を使って {\"users\":[...]} の形の JSON を作り、\n// json.Marshal で文字列にして1行表示する。名前は入力の順番のまま。\n// 0人のときは {\"users\":[]} と表示すること({\"users\":null} ではない)。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\t// ここを書く\n\t_ = sc\n\t_ = json.Marshal\n\t_ = fmt.Println\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n)\n\n// 標準入力には1行に1人ずつユーザー名が並んでいる(0人のこともある)。\n// map[string][]string を使って {\"users\":[...]} の形の JSON を作り、\n// json.Marshal で文字列にして1行表示する。名前は入力の順番のまま。\n// 0人のときは {\"users\":[]} と表示すること({\"users\":null} ではない)。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tnames := []string{}\n\tfor sc.Scan() {\n\t\tnames = append(names, sc.Text())\n\t}\n\tresponse := map[string][]string{\n\t\t\"users\": names,\n\t}\n\tb, err := json.Marshal(response)\n\tif err != nil {\n\t\tfmt.Println(\"error\")\n\t\treturn\n\t}\n\tfmt.Println(string(b))\n}\n",
+      "tests": [
+        {
+          "stdin": "washi\ntaro\nhanako\n"
+        },
+        {
+          "stdin": ""
+        },
+        {
+          "stdin": "jiro\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`names := []string{}` で空のスライスを用意し、`append` で1行ずつ足してから `map[string][]string{\"users\": names}` を Marshal します。`var names []string` と宣言だけすると、1人も足さなかったときにスライスが nil(まだ何も割り当てられていない状態)のままで、JSON では `null` になります。`[]string{}` は要素0個のスライスなので `[]` になります。"
+    }
+  ]
+}

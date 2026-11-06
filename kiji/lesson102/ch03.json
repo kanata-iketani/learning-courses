@@ -1,0 +1,126 @@
+{
+  "lesson": 102,
+  "chapter": 3,
+  "title": "分割代入と import/export",
+  "priority": "🔴",
+  "text": "### オブジェクトから値を取り出す\n\nオブジェクトは、名前(キー)と値の組を `{ }` でまとめたものです。値は `.キー名` で取り出します。\n\n```javascript\nconst user = { name: \"佐藤\", age: 28 };\nconsole.log(user.name); // 佐藤\n```\n\n### 分割代入でまとめて取り出す\n\nよく使う値をまとめて取り出すときは、分割代入(オブジェクトや配列から値を取り出して変数に入れる書き方)が便利です。\n\n```javascript\nconst user = { name: \"佐藤\", age: 28 };\nconst { name, age } = user;\nconsole.log(name, age); // 佐藤 28\n```\n\n`const { name, age } = user` は「user から name と age を取り出して、それぞれ同じ名前の変数にする」という意味です。次の 2 行を 1 行にまとめたものと同じです。\n\n```javascript\nconst name = user.name;\nconst age = user.age;\n```\n\n左側の `{ }` はオブジェクトを作っているのではなく、「どのキーを取り出すか」の指定です。キー名と変数名が一致している必要があり、オブジェクトにないキーを書くと、その変数は `undefined` になります。\n\n```javascript\nconst { name, email } = user;\nconsole.log(name, email); // 佐藤 undefined\n```\n\n補足として、別の名前で受け取りたいときは `const { name: userName } = user;`(user.name を userName という変数に入れる)、キーがないときの初期値を決めたいときは `const { age = 20 } = obj;` と書けます。\n\nVue のコードでは、この分割代入が大量に出てきます。必要な機能だけを取り出して使う場面が多いからです。形に慣れておくと、後の回がとても楽になります。\n\n### モジュール:ファイルを分けて import / export する\n\nコードが増えてきたら、1 つのファイルに全部書くのではなく、役割ごとにファイルを分けます。別のファイルの関数や値を使うための仕組みが `import` / `export` です。\n\n```javascript\n// math.js … 外から使えるように export する\nexport function add(a, b) {\n  return a + b;\n}\n```\n\n```javascript\n// main.js … 別ファイルから import して使う\nimport { add } from \"./math.js\";\nconsole.log(add(2, 3)); // 5\n```\n\n`export` で「このファイルの外に出す」と宣言し、`import` で「あのファイルから取り込む」と書きます。`\"./math.js\"` は、今のファイルと同じフォルダにある math.js という意味です。\n\n```mermaid\nflowchart LR\n    subgraph mathjs[\"math.js\"]\n        A[\"export function add\"]\n        S[\"function sub(export なし)\"]\n    end\n    subgraph mainjs[\"main.js\"]\n        I[\"import { add }\"]\n        C[\"add(2, 3) → 5\"]\n    end\n    A -->|\"外に出している\"| I\n    I --> C\n    S -.-x|\"外から使えない\"| mainjs\n```\n\nexport を付けていない関数は、そのファイルの中だけで使う部品になり、外から import できません。export していない `sub` を import しようとすると、次のエラーで止まります。\n\n```text\nSyntaxError: The requested module './math.js' does not provide an export named 'sub'\n```\n\nもう 1 つ、記事の `import { add }` の `{ }` を外して `import add from \"./math.js\"` と書くと、これも同じ種類のエラー(`export named 'default'` がない)になります。`{ }` 付きの import は、export した名前を指定して取り込む書き方です。`{ }` なしの形は別の仕組み(default export)用で、今は「`export function add` を使うなら `import { add }`」と形で覚えておけば十分です。\n\nVue のアプリは、小さなファイル(コンポーネントや関数)を import でつなぎ合わせてできています。どのファイルが何を外に出し、どこから使われているかを import / export でたどれることが、コードを読む力の土台になります。\n\n### 手を動かす:ユーザー一覧を加工する\n\n最後に、実務に近い形を動かします。「オブジェクトの配列」を filter と map で加工します。\n\n```javascript\nconst users = [\n  { name: \"佐藤\", age: 28 },\n  { name: \"田中\", age: 17 },\n  { name: \"鈴木\", age: 34 },\n];\n\n// filter: 18歳以上だけ残す\nconst adults = users.filter((u) => u.age >= 18);\n// map: 名前だけの配列にする\nconst names = adults.map((u) => u.name);\n\nconsole.log(names); // [ '佐藤', '鈴木' ]\n```\n\n「18 歳以上を残して(filter)、名前だけ取り出す(map)」が、そのままコードになっています。filter が返した新しい配列に、さらに map をかけています。途中の変数を作らず、続けて書くこともできます(メソッドチェーン。メソッドの結果にすぐ次のメソッドをつなぐ書き方)。\n\n```javascript\nconst names = users\n  .filter((u) => u.age >= 18)\n  .map((u) => u.name);\n```\n\n順番には意味があります。先に `map((u) => u.name)` で名前だけにしてしまうと、年齢の情報が消えて、そのあと 18 歳以上で絞れません。「条件に使う情報が残っているうちに絞り、最後に必要な形へ変換する」と考えます。\n\n```mermaid\nflowchart LR\n    U[\"users 3人(name, age)\"] -->|\"filter: age >= 18\"| A[\"2人(佐藤, 鈴木)\"]\n    A -->|\"map: u.name\"| N[\"[ '佐藤', '鈴木' ]\"]\n```\n\nmap でオブジェクトを返したいときは注意が要ります。`(u) => { name: u.name }` と書くと、`{ }` が処理の並びとして扱われて `undefined` の配列になります。オブジェクトを返すときは `(u) => ({ name: u.name })` と丸括弧で包みます。\n\nサーバーから届いたデータを画面用に整える処理は、たいていこの filter と map の組み合わせでできています。\n\n### まとめ\n\n- `const { name, age } = user` は user から同じ名前のキーを取り出して変数にする分割代入。ないキーは `undefined`\n- `export` で外に出し、`import { 名前 } from \"./ファイル.js\"` で取り込む。export していないものは取り込めない\n- Vue のアプリは小さなファイルを import でつないだもの。export / import をたどれることが読む力になる\n- filter と map はつなげて書ける。条件に使う情報があるうちに絞り、最後に map で形を変える\n\n### 何も見ずに言えるように\n\n- 「const { name, age } = user は、user.name と user.age を同じ名前の変数に取り出す 1 行の書き方です」\n- 「export でファイルの外に出したものだけを、別ファイルから import { 名前 } で取り込めます」\n- 「サーバーのオブジェクトの配列は、filter で絞ってから map で表示用の形に変えるのが定番です」\n",
+  "quiz": [
+    {
+      "question": "次のコードの出力はどれか。\n\n```javascript\nconst user = { name: \"佐藤\", age: 28 };\nconst { name, email } = user;\nconsole.log(name, email);\n```",
+      "choices": [
+        "SyntaxError になる",
+        "佐藤 28",
+        "佐藤 undefined",
+        "undefined undefined"
+      ],
+      "correct": 2,
+      "explanation": "分割代入は「同じ名前のキーを取り出す」ので、name には \"佐藤\" が入ります。user に email というキーはないので、email は undefined です。エラーにはなりません。"
+    },
+    {
+      "question": "math.js が次の内容のとき、main.js を実行するとどうなるか。\n\n```javascript\n// math.js\nexport function add(a, b) { return a + b; }\nfunction sub(a, b) { return a - b; }\n```\n\n```javascript\n// main.js\nimport { sub } from \"./math.js\";\nconsole.log(sub(5, 3));\n```",
+      "choices": [
+        "2 が出力される",
+        "undefined が出力される",
+        "-2 が出力される",
+        "sub は export されていないので、import の時点でエラーになる"
+      ],
+      "correct": 3,
+      "explanation": "export を付けていない関数はファイルの中だけの部品で、外から import できません。`does not provide an export named 'sub'` という SyntaxError で止まります。使いたいなら math.js 側で `export function sub` にします。"
+    },
+    {
+      "question": "次のコードの出力はどれか。\n\n```javascript\nconst users = [\n  { name: \"佐藤\", age: 28 },\n  { name: \"田中\", age: 17 },\n  { name: \"鈴木\", age: 34 },\n];\nconst result = users.map((u) => u.age).filter((a) => a >= 18);\nconsole.log(result);\n```",
+      "choices": [
+        "[ 28, 34 ]",
+        "[ '佐藤', '鈴木' ]",
+        "[ 28, 17, 34 ]",
+        "[ { name: '佐藤', age: 28 }, { name: '鈴木', age: 34 } ]"
+      ],
+      "correct": 0,
+      "explanation": "先に map で各ユーザーを年齢の数値に変換して `[ 28, 17, 34 ]` にし、その配列を filter で 18 以上に絞るので `[ 28, 34 ]` です。名前の情報は map の時点で消えています。どの順番でつなぐかで、最後に残る形が変わります。"
+    },
+    {
+      "question": "ユーザー一覧から「名前だけのオブジェクト」の配列 `[ { name: '佐藤' }, ... ]` を作るつもりで次のコードを書いたが、結果が `[ undefined, undefined, undefined ]` になった。原因はどれか。\n\n```javascript\nconst list = users.map((u) => { name: u.name });\n```",
+      "choices": [
+        "map は元の配列を書き換えるので、users が壊れたため",
+        "`=>` の右の `{ }` がオブジェクトではなく処理の並びと解釈され、何も返していないため。`(u) => ({ name: u.name })` と丸括弧で包む",
+        "map ではオブジェクトを返せないので、filter を使う必要があるため",
+        "分割代入で name を取り出していないため"
+      ],
+      "correct": 1,
+      "explanation": "アロー関数の右側の `{` は処理の並びの始まりと読まれます。そこにある `name: u.name` はオブジェクトとして扱われず、return もないので undefined が返ります。オブジェクトを返すときは `({ ... })` と丸括弧で包みます。"
+    },
+    {
+      "question": "在庫がある商品の名前だけの配列を作りたい。次のうち、期待どおり `[ 'ノート', '消しゴム' ]` になるものはどれか。\n\n```javascript\nconst items = [\n  { name: \"ペン\", stock: 0 },\n  { name: \"ノート\", stock: 5 },\n  { name: \"消しゴム\", stock: 3 },\n];\n```",
+      "choices": [
+        "items.map((item) => item.name).filter((item) => item.stock >= 1)",
+        "items.filter((item) => item.name).map((item) => item.stock >= 1)",
+        "items.filter((item) => item.stock >= 1).map((item) => item.name)",
+        "items.find((item) => item.stock >= 1).map((item) => item.name)"
+      ],
+      "correct": 2,
+      "explanation": "条件に使う stock が残っているうちに filter で絞り、最後に map で名前だけにします。先に map で名前の文字列にすると stock が消え、`item.stock` が undefined になって全部落ちます。find は 1 件の要素を返すので、その後に map はつなげません。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "標準入力に、1 行に 1 つずつユーザーの JSON(`{\"name\":\"佐藤\",\"age\":28,\"role\":\"admin\"}` の形)が並びます。`role` はない行もあります。ユーザーを受け取って表示用の文字列を返す関数 `label(user)` を、**分割代入を使って**書き、各行の結果を 1 行ずつ出力してください。\n\n- 出力形式: `佐藤(28歳・admin)`(丸括弧は半角、間の「・」は全角の中黒)\n- role がないときは `member` として扱う\n\n本来は `export function label` として別ファイルに置き、`import { label }` で使う関数です。ここでは 1 ファイルで完結させます。\n\n入力例:\n```\n{\"name\":\"佐藤\",\"age\":28,\"role\":\"admin\"}\n{\"name\":\"田中\",\"age\":17}\n```\n出力例:\n```\n佐藤(28歳・admin)\n田中(17歳・member)\n```",
+      "setup": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").filter((l) => l.trim() !== \"\");\n\n// 本来は format.js に置いて export する関数\nfunction label(user) {\n  // ここに分割代入を使ったコードを書く\n}\n\nfor (const line of lines) {\n  console.log(label(JSON.parse(line)));\n}\n",
+      "answer": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").filter((l) => l.trim() !== \"\");\n\nfunction label(user) {\n  const { name, age, role = \"member\" } = user;\n  return `${name}(${age}歳・${role})`;\n}\n\nfor (const line of lines) {\n  console.log(label(JSON.parse(line)));\n}\n",
+      "tests": [
+        {
+          "stdin": "{\"name\":\"佐藤\",\"age\":28,\"role\":\"admin\"}\n{\"name\":\"田中\",\"age\":17}\n"
+        },
+        {
+          "stdin": "{\"name\":\"鈴木\",\"age\":34,\"role\":\"owner\"}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`const { name, age, role = \"member\" } = user;` の 1 行で、3 つのキーを同じ名前の変数に取り出し、role がないときの初期値も決められます。初期値を書き忘れると、ないキーは undefined になるので `田中(17歳・undefined)` と出力されます。関数の最後で `return` を書き忘れると、console.log には undefined が渡ります。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "標準入力に、1 行に 1 つずつ商品が `名前,在庫数,税抜価格` の形で並びます。在庫が 1 以上の商品だけを残し、`名前: 税込価格円` の形に変換して、入力の順に 1 行ずつ出力してください(税込は `Math.round(価格 * 1.1)`)。在庫がある商品が 1 つもなければ `在庫なし` と 1 行出力します。filter と map をつなげて書いてください。\n\n入力例:\n```\nペン,0,100\nノート,5,150\n消しゴム,3,80\n```\n出力例:\n```\nノート: 165円\n消しゴム: 88円\n```",
+      "setup": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").filter((l) => l.trim() !== \"\");\nconst items = lines.map((line) => {\n  const parts = line.split(\",\");\n  return { name: parts[0].trim(), stock: Number(parts[1]), price: Number(parts[2]) };\n});\n// items は [ { name: \"ペン\", stock: 0, price: 100 }, ... ] です\n\n// ここに filter と map をつなげたコードを書く\n\n",
+      "answer": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").filter((l) => l.trim() !== \"\");\nconst items = lines.map((line) => {\n  const [name, stock, price] = line.split(\",\");\n  return { name: name.trim(), stock: Number(stock), price: Number(price) };\n});\n\nconst labels = items\n  .filter((item) => item.stock >= 1)\n  .map((item) => `${item.name}: ${Math.round(item.price * 1.1)}円`);\n\nif (labels.length === 0) {\n  console.log(\"在庫なし\");\n} else {\n  console.log(labels.join(\"\\n\"));\n}\n",
+      "tests": [
+        {
+          "stdin": "ペン,0,100\nノート,5,150\n消しゴム,3,80\n"
+        },
+        {
+          "stdin": "ペン,0,100\n"
+        },
+        {
+          "stdin": "定規,1,200\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "条件に使う stock が残っているうちに filter で絞り、最後に map で表示用の文字列に変換します。`items.filter((item) => item.stock >= 1).map((item) => `${item.name}: ${Math.round(item.price * 1.1)}円`)` です。先に map で文字列にすると stock が消えて絞れません。`stock >= 0` と書くと在庫 0 のペンが残ります。結果が空配列かどうかは `labels.length === 0` で確かめます。"
+    },
+    {
+      "kind": "essay",
+      "question": "次のコードについて、① 分割代入の行が何をしているか、② import / export の関係、の 2 点を何も見ずに説明してください(150〜300 字)。\n\n```javascript\n// format.js\nexport function label(user) {\n  const { name, age } = user;\n  return `${name}(${age}歳)`;\n}\n```\n\n```javascript\n// main.js\nimport { label } from \"./format.js\";\nconsole.log(label({ name: \"佐藤\", age: 28 }));\n```",
+      "answer": "① `const { name, age } = user;` は分割代入で、受け取った user オブジェクトから name と age のキーを取り出し、同じ名前の変数 name・age に入れています。`const name = user.name; const age = user.age;` を 1 行にまとめた書き方です。そのあとテンプレートリテラルで埋め込むので、出力は「佐藤(28歳)」になります。② format.js は label 関数に export を付けてファイルの外に出しており、main.js は `import { label } from \"./format.js\"` で同じフォルダの format.js から label を名前で取り込んで使っています。export がなければ main.js からは使えません。",
+      "rubric": [
+        "分割代入が user から name と age を同じ名前の変数に取り出していると説明している",
+        "user.name / user.age を個別に書くのと同じ意味だと示している、または出力「佐藤(28歳)」を正しく述べている",
+        "export でファイルの外に出し、import { label } で取り込んでいる関係を説明している",
+        "export がないと import できない、または \"./format.js\" が同じフォルダのファイルを指すことに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「何を取り出しているか」「どこからどこへ渡っているか」を順に言えれば、Vue のコードもこの 2 つでかなり読めます。"
+    }
+  ]
+}

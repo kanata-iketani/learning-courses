@@ -1,0 +1,170 @@
+{
+  "lesson": 1,
+  "chapter": 3,
+  "title": "署名の仕組みとalg:none攻撃",
+  "priority": "🔴",
+  "text": "### 署名はどうやって作られるのか\n\n署名は、ヘッダーとペイロードをドットでつないだ文字列と、サーバーの秘密鍵を材料に計算します。\n\n```\n署名 = HMAC-SHA256(\n    \"eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ\",  ← ヘッダー.ペイロード\n    \"my-secret-key\"                                ← 秘密鍵\n)\n→ \"fhCkmQBv40jv6nLxcaqqAZmlV0lxwkUfQ1Bzse1W-B0\"\n```\n\nSHA256 は、どんな長さのデータからも 256 ビットの固定長の値を作るハッシュ関数(入力が 1 文字でも変わると結果が大きく変わる計算)です。HMAC は、そこに秘密鍵を混ぜて計算する方式(鍵を知る人だけが同じ値を作れる仕組み)です。HS256 は HMAC-SHA256 の略です。\n\n結果はランダムに見えますが、**同じ入力と同じ秘密鍵なら必ず同じ結果**になります。この性質を使って検証します。\n\n### サーバーはどうやって検証するのか\n\nサーバーは、送られてきたヘッダーとペイロードから署名をもう一度計算し、送られてきた署名と比べます。\n\n```\nユーザーがJWTを送ってくる\n  ↓\nヘッダーとペイロードから署名を再計算する\n  HMAC-SHA256(\"ヘッダー.ペイロード\", 秘密鍵) → 署名X\n  ↓\n送られてきた署名と署名Xを比較\n  ↓\n一致 → 改ざんされていない → リクエストを受け入れる\n不一致 → 誰かが中身を書き換えた → リクエストを拒否する\n```\n\n```mermaid\nflowchart TD\n    A[\"JWT を受け取る\"] --> B[\"ヘッダー.ペイロード を取り出す\"]\n    B --> C[\"サーバーの秘密鍵で署名 X を再計算\"]\n    C --> D{\"送られてきた署名と X は一致するか\"}\n    D -->|\"一致\"| E{\"exp の期限内か\"}\n    D -->|\"不一致\"| R[\"拒否(改ざんあり)\"]\n    E -->|\"期限内\"| OK[\"受け入れる\"]\n    E -->|\"期限切れ\"| R2[\"拒否(再ログインを求める)\"]\n```\n\nここで大事な点があります。どのアルゴリズムで検証するかは、**サーバーが自分で決めておく**ものです。ヘッダーの `alg` は攻撃者も自由に書き換えられるので、「ヘッダーに HS256 と書いてあるから HS256 で検証する」という作りにすると、後で説明する alg:none 攻撃の入口になります。\n\n### ペイロードを書き換えるとどうなるか\n\n攻撃者が `{\"role\":\"viewer\"}` を `{\"role\":\"admin\"}` に書き換えたとします。ペイロードが変わるので、サーバーが再計算する署名も変わります。元の署名とは一致しないので、サーバーは改ざんを見つけて拒否します。\n\n攻撃者が署名も作り直せばよいと考えても、正しい署名を作るには秘密鍵が必要です。でたらめな鍵で計算した署名は、サーバーの秘密鍵で計算した値と一致しません。\n\n### 署名アルゴリズムの種類\n\n| | HS256(共通鍵方式) | RS256(公開鍵方式) |\n|---|---|---|\n| 正式名 | HMAC + SHA256 | RSA + SHA256 |\n| 鍵 | 1 つの秘密鍵で署名も検証もする | 秘密鍵で署名し、公開鍵で検証する |\n| 向いている場面 | 発行も検証も 1 つのサーバー内で完結する | 発行するシステムと検証するシステムが別 |\n\nRS256 では、検証する側は公開鍵(配っても困らない検証専用の鍵)だけを持てば済みます。発行元の秘密鍵を他のシステムに渡さずに済むので、異なるシステム間で JWT をやりとりするときに使います。HS256 で同じことをすると、検証する全システムに秘密鍵を配ることになり、どこか 1 か所から漏れれば偽造できてしまいます。\n\n### alg:none 攻撃\n\nJWT の代表的な脆弱性が alg:none 攻撃です。ヘッダーの `alg` を `none` にすると「署名なし」を意味します。脆弱なサーバーはこれを受け入れ、署名の検証を飛ばしてしまいます。\n\n```\n攻撃者の思考:\n  ペイロードを {\"role\":\"admin\"} に変えたい\n    ↓\n  でも変えると署名が合わなくなる\n    ↓\n  正しい署名を作るには秘密鍵が必要、でも知らない\n    ↓\n  じゃあ署名の検証自体をスキップさせよう!\n    ↓\n  ヘッダーを {\"alg\":\"none\"} にする!\n```\n\n偽の JWT は鍵なしで作れます。\n\n```\n# ① ヘッダー:署名なしを宣言\necho -n '{\"alg\":\"none\"}' | base64\n# → eyJhbGciOiJub25lIn0=\n\n# ② ペイロード:admin権限を主張\necho -n '{\"user\":\"attacker\",\"role\":\"admin\"}' | base64\n# → eyJ1c2VyIjoiYXR0YWNrZXIiLCJyb2xlIjoiYWRtaW4ifQ==\n```\n\nこの 2 つを `.` でつなぎ、署名は空にします。JWT は必ず 3 パーツなので、署名が空でも**末尾の `.` は必須**です。Base64URL のルールに合わせて `=` を取ると、次の形になります。\n\n```\neyJhbGciOiJub25lIn0.eyJ1c2VyIjoiYXR0YWNrZXIiLCJyb2xlIjoiYWRtaW4ifQ.\n```\n\nこれを脆弱なサーバーに送ると、admin 権限で通ってしまいます。\n\n```mermaid\nflowchart TD\n    A[\"alg が none の JWT を受け取る\"] --> B{\"サーバーの作り\"}\n    B -->|\"ヘッダーの alg を信じる(脆弱)\"| C[\"署名の検証を飛ばす\"]\n    C --> D[\"ペイロードの role が admin のまま通る\"]\n    B -->|\"許可するアルゴリズムを HS256 に固定(安全)\"| E[\"none は許可外なので拒否\"]\n```\n\n対策は、サーバー側で `alg: none` を絶対に受け入れないことです。具体的には、JWT ライブラリに「受け付けるアルゴリズムは HS256 だけ」のように許可するものを明示し、ヘッダーの `alg` に検証方法を決めさせません。\n\n### まとめ\n\n- 署名は HMAC-SHA256(ヘッダー.ペイロード, 秘密鍵)。同じ入力と鍵なら必ず同じ値になる\n- 検証は「再計算して比べる」。中身を 1 文字でも変えれば一致しなくなる\n- HS256 は 1 つの秘密鍵で署名と検証、RS256 は秘密鍵で署名し公開鍵で検証する\n- alg:none 攻撃は署名検証そのものを飛ばさせる攻撃。サーバーで許可アルゴリズムを固定して防ぐ\n\n### 何も見ずに言えるように\n\n- サーバーは受け取ったヘッダーとペイロードから署名を再計算し、送られてきた署名と一致するかで改ざんを見つける\n- 攻撃者は秘密鍵を知らないので、書き換えた中身に合う署名を作れない\n- alg:none 攻撃は `alg` を none にして検証を飛ばさせる手口で、許可するアルゴリズムをサーバー側で固定すれば防げる\n",
+  "quiz": [
+    {
+      "question": "攻撃者がペイロードの role を viewer から admin に書き換え、署名部分は元のまま送ってきた。正しく実装されたサーバーはどう判断するか。",
+      "choices": [
+        "署名部分は触られていないので、改ざんなしとして受け入れる",
+        "role が admin なので、管理者として受け入れる",
+        "ペイロードを元に戻してから受け入れる",
+        "再計算した署名と送られてきた署名が一致しないので、拒否する"
+      ],
+      "correct": 3,
+      "explanation": "署名はヘッダーとペイロードから計算します。ペイロードが変われば再計算した値も変わり、元の署名とは一致しません。署名部分だけが無事でも、改ざんは見つかります。"
+    },
+    {
+      "question": "HS256 の JWT で、攻撃者がペイロードを書き換えたうえで、自分で考えた鍵を使って HMAC-SHA256 を計算し、署名を付け替えて送ってきた。サーバーはどう判断するか。",
+      "choices": [
+        "署名の形式が正しいので受け入れる",
+        "サーバーの秘密鍵で再計算した値と一致しないので拒否する",
+        "攻撃者の鍵で再計算するので受け入れる",
+        "HMAC-SHA256 は毎回違う値になるので、どの JWT も判定できない"
+      ],
+      "correct": 1,
+      "explanation": "サーバーは自分の秘密鍵で再計算します。鍵が違えば結果も違うので一致しません。秘密鍵を知らない人は正しい署名を作れない、というのが偽造できない理由です。"
+    },
+    {
+      "question": "認証サーバーが JWT を発行し、それを別チームが運用する 5 つの API サーバーが検証する。署名アルゴリズムの選び方として最も適切なものはどれか。",
+      "choices": [
+        "HS256 にして、5 つの API サーバーすべてに同じ秘密鍵を配る",
+        "alg を none にして、署名の検証を省く",
+        "RS256 にして、認証サーバーは秘密鍵で署名し、API サーバーには公開鍵だけを配る",
+        "署名はやめて、ペイロードを Base64 で 2 回エンコードする"
+      ],
+      "correct": 2,
+      "explanation": "発行と検証が別システムなら RS256 が向いています。検証側は公開鍵だけで済み、偽造に使える秘密鍵を配らずに済みます。HS256 で秘密鍵を配ると、1 か所の漏えいで誰でも偽造できます。"
+    },
+    {
+      "question": "alg:none 攻撃で作る偽の JWT が `ヘッダー.ペイロード.` のように末尾にドットを付ける理由はどれか。",
+      "choices": [
+        "JWT は必ず 3 パーツの形なので、署名が空でも区切りのドットが必要だから",
+        "末尾のドットが none の意味だから",
+        "ドットを付けると Base64 のパディングの代わりになるから",
+        "ドットがないとペイロードが暗号化されてしまうから"
+      ],
+      "correct": 0,
+      "explanation": "JWT は ヘッダー.ペイロード.署名 の 3 パーツです。署名が空でも 3 パーツの形を保つため、末尾のドットは必須です。"
+    },
+    {
+      "question": "alg:none 攻撃への対策として最も適切なものはどれか。",
+      "choices": [
+        "ペイロードを暗号化して攻撃者に読めなくする",
+        "JWT の有効期限を 1 年に延ばす",
+        "ヘッダーの alg を読み、そこに書かれたアルゴリズムで検証する",
+        "サーバー側で受け付けるアルゴリズムを HS256 などに固定し、none を受け入れない"
+      ],
+      "correct": 3,
+      "explanation": "攻撃の原因は、攻撃者が書き換えられるヘッダーの alg に検証方法を決めさせていることです。許可するアルゴリズムをサーバー側で固定すれば、none は拒否されます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "【Go で書く】HS256 の署名を作り、JWT を完成させるプログラムを書いてください。\n\n- 入力: 標準入力の 1 行目に秘密鍵、2 行目に `ヘッダー.ペイロード`(どちらもエンコード済み)\n- 2 行目の文字列全体を、1 行目の秘密鍵で HMAC-SHA256 し、結果を Base64URL(`=` なし)にしたものを署名とする\n- `ヘッダー.ペイロード.署名` を 1 行出力\n\n例: 秘密鍵 `my-secret-key`、入力 `eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ` → 署名は `fhCkmQBv40jv6nLxcaqqAZmlV0lxwkUfQ1Bzse1W-B0`",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"crypto/hmac\"\n\t\"crypto/sha256\"\n\t\"encoding/base64\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// sign は「ヘッダー.ペイロード」を秘密鍵で HMAC-SHA256 し、Base64URL(= なし)で返す\nfunc sign(signingInput, secret string) string {\n\t// ここを書く(hmac.New(sha256.New, 鍵) → Write → Sum)\n\t_ = hmac.New\n\t_ = sha256.New\n\t_ = base64.RawURLEncoding\n\treturn \"\"\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tsecret := sc.Text()\n\tsc.Scan()\n\tinput := strings.TrimSpace(sc.Text())\n\n\tfmt.Println(input + \".\" + sign(input, secret))\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"crypto/hmac\"\n\t\"crypto/sha256\"\n\t\"encoding/base64\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// sign は「ヘッダー.ペイロード」を秘密鍵で HMAC-SHA256 し、Base64URL(= なし)で返す\nfunc sign(signingInput, secret string) string {\n\tmac := hmac.New(sha256.New, []byte(secret))\n\tmac.Write([]byte(signingInput))\n\treturn base64.RawURLEncoding.EncodeToString(mac.Sum(nil))\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tsecret := sc.Text()\n\tsc.Scan()\n\tinput := strings.TrimSpace(sc.Text())\n\n\tfmt.Println(input + \".\" + sign(input, secret))\n}\n",
+      "tests": [
+        {
+          "stdin": "my-secret-key\neyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ\n"
+        },
+        {
+          "stdin": "k1-secret\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoidGFuYWthIiwicm9sZSI6InZpZXdlciIsImV4cCI6MTcxMjQ0ODAwMH0\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`hmac.New(sha256.New, []byte(secret))` で HMAC-SHA256 の計算器を作り、`Write` で「ヘッダー.ペイロード」を入れ、`Sum(nil)` で 32 バイトの結果を取り出します。署名の対象はペイロードだけではなく、**ドットを含めたヘッダー.ペイロード全体**です。ペイロードだけを署名するとヘッダーの書き換え(alg の差し替えなど)を見つけられず、出力も変わります。エンコードは `=` なしの `RawURLEncoding` です。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "【Go で書く】安全な JWT 検証関数を書いてください。ヘッダーの alg を信用しないことが要点です。\n\n- 入力: 標準入力の 1 行目に秘密鍵、2 行目に現在時刻(Unix 秒)、3 行目に JWT\n- 次をすべて満たすときだけ `OK ユーザー名`(ペイロードの `user` の値)を 1 行出力し、1 つでも満たさなければ `NG` だけを出力\n  1. `.` で区切って 3 パーツ\n  2. ヘッダーをデコードした JSON の `alg` がちょうど `HS256`(`none` やその他は拒否。サーバーが HS256 に固定している想定)\n  3. 署名が、1 行目の秘密鍵で計算した HMAC-SHA256(`ヘッダー.ペイロード`)と一致する(比較は `hmac.Equal` を使う)\n  4. ペイロードの `exp` が現在時刻より大きい(`exp` がない、または `exp <= 現在時刻` なら拒否)\n- エンコードはすべて Base64URL(`=` なし)",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"crypto/hmac\"\n\t\"crypto/sha256\"\n\t\"encoding/base64\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n\t\"strings\"\n)\n\ntype Header struct {\n\tAlg string `json:\"alg\"`\n}\n\ntype Claims struct {\n\tUser string `json:\"user\"`\n\tExp  int64  `json:\"exp\"`\n}\n\n// verify は検証に通ればユーザー名と true を返す\nfunc verify(token, secret string, now int64) (string, bool) {\n\t// ここを書く(① 3 パーツ ② alg は HS256 だけ ③ 署名 ④ 期限)\n\t_ = hmac.Equal\n\t_ = sha256.New\n\t_ = base64.RawURLEncoding\n\t_ = json.Unmarshal\n\treturn \"\", false\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tsecret := sc.Text()\n\tsc.Scan()\n\tnow, _ := strconv.ParseInt(strings.TrimSpace(sc.Text()), 10, 64)\n\tsc.Scan()\n\ttoken := strings.TrimSpace(sc.Text())\n\n\tif user, ok := verify(token, secret, now); ok {\n\t\tfmt.Println(\"OK \" + user)\n\t} else {\n\t\tfmt.Println(\"NG\")\n\t}\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"crypto/hmac\"\n\t\"crypto/sha256\"\n\t\"encoding/base64\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n\t\"strings\"\n)\n\ntype Header struct {\n\tAlg string `json:\"alg\"`\n}\n\ntype Claims struct {\n\tUser string `json:\"user\"`\n\tExp  int64  `json:\"exp\"`\n}\n\n// verify は検証に通ればユーザー名と true を返す\nfunc verify(token, secret string, now int64) (string, bool) {\n\tenc := base64.RawURLEncoding\n\tparts := strings.Split(token, \".\")\n\tif len(parts) != 3 {\n\t\treturn \"\", false\n\t}\n\n\t// ① アルゴリズムはサーバーが決める。HS256 以外(none を含む)は拒否\n\thb, err := enc.DecodeString(parts[0])\n\tif err != nil {\n\t\treturn \"\", false\n\t}\n\tvar h Header\n\tif json.Unmarshal(hb, &h) != nil || h.Alg != \"HS256\" {\n\t\treturn \"\", false\n\t}\n\n\t// ② 署名を再計算して比べる(hmac.Equal で比較)\n\tmac := hmac.New(sha256.New, []byte(secret))\n\tmac.Write([]byte(parts[0] + \".\" + parts[1]))\n\tgot, err := enc.DecodeString(parts[2])\n\tif err != nil || !hmac.Equal(got, mac.Sum(nil)) {\n\t\treturn \"\", false\n\t}\n\n\t// ③ 期限を確かめる(exp がない・過ぎているものは拒否)\n\tpb, err := enc.DecodeString(parts[1])\n\tif err != nil {\n\t\treturn \"\", false\n\t}\n\tvar c Claims\n\tif json.Unmarshal(pb, &c) != nil || c.Exp <= now {\n\t\treturn \"\", false\n\t}\n\treturn c.User, true\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tsecret := sc.Text()\n\tsc.Scan()\n\tnow, _ := strconv.ParseInt(strings.TrimSpace(sc.Text()), 10, 64)\n\tsc.Scan()\n\ttoken := strings.TrimSpace(sc.Text())\n\n\tif user, ok := verify(token, secret, now); ok {\n\t\tfmt.Println(\"OK \" + user)\n\t} else {\n\t\tfmt.Println(\"NG\")\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "k1-secret\n1712440000\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoidGFuYWthIiwicm9sZSI6InZpZXdlciIsImV4cCI6MTcxMjQ0ODAwMH0.WkiVPcWWbGHAx3RQVmgl9ACUXlNmoPf0I4L0WqNFaQQ\n"
+        },
+        {
+          "stdin": "k1-secret\n1712440000\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoidGFuYWthIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzEyNDQ4MDAwfQ.WkiVPcWWbGHAx3RQVmgl9ACUXlNmoPf0I4L0WqNFaQQ\n"
+        },
+        {
+          "stdin": "k1-secret\n1712440000\neyJhbGciOiJub25lIn0.eyJ1c2VyIjoiYXR0YWNrZXIiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE5OTk5OTk5OTl9.\n"
+        },
+        {
+          "stdin": "k1-secret\n1712440000\neyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoic3V6dWtpIiwiZXhwIjoxNzAwMDAwMDAwfQ._nQAdr0kRJwuFhbEWaYL21HO0XtPQQlnzh4gApEc4v4\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "テストは「正しいトークン」「role を admin に書き換えたトークン」「alg:none の偽トークン」「期限切れのトークン」の 4 つです。よくある間違いは、ヘッダーの alg を読んで `none` なら署名検証を飛ばす作りで、alg:none の偽トークンに `OK attacker` を出してしまいます。alg は「HS256 以外はすべて拒否」とサーバー側で固定します。署名の比較に `==` ではなく `hmac.Equal` を使うのは、一致するまでの時間の差から署名を推測される攻撃(タイミング攻撃)を防ぐためです。期限は署名を確かめた後に見ます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "【Go で書く】alg:none 攻撃の偽トークンを作るプログラムを書いてください(検証用の自分の環境でだけ使う前提です)。\n\n- 入力: 標準入力の 1 行目にペイロードの JSON 文字列(例 `{\"user\":\"attacker\",\"role\":\"admin\"}`)。前後の空白は取り除いて、そのままの文字列を使う\n- ヘッダーは `{\"alg\":\"none\"}` という文字列で固定\n- ヘッダーとペイロードを、JWT の規則どおり Base64URL(`=` なし)でエンコードし、`ヘッダー.ペイロード.` の形で 1 行出力(署名は空、末尾の `.` は必須)\n\n例: 入力 `{\"user\":\"attacker\",\"role\":\"admin\"}` → 出力 `eyJhbGciOiJub25lIn0.eyJ1c2VyIjoiYXR0YWNrZXIiLCJyb2xlIjoiYWRtaW4ifQ.`",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/base64\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tpayload := strings.TrimSpace(sc.Text())\n\n\t// ここを書く\n\t_ = payload\n\t_ = base64.RawURLEncoding\n\tfmt.Println()\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/base64\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tpayload := strings.TrimSpace(sc.Text())\n\n\tenc := base64.RawURLEncoding // JWT は Base64URL・= なし\n\theader := enc.EncodeToString([]byte(`{\"alg\":\"none\"}`))\n\tbody := enc.EncodeToString([]byte(payload))\n\n\t// 署名は空。3 パーツの形を保つため末尾の . は必須\n\tfmt.Println(header + \".\" + body + \".\")\n}\n",
+      "tests": [
+        {
+          "stdin": "{\"user\":\"attacker\",\"role\":\"admin\"}\n"
+        },
+        {
+          "stdin": "{\"user\":\"hacker\",\"role\":\"admin\"}\n"
+        },
+        {
+          "stdin": "{\"user\":\"a>b?\"}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "鍵を一切使わずに作れることが、この攻撃の怖さです。`RawURLEncoding` を使うと `=` が付きません。`URLEncoding`(`=` あり)を使うと記事の例と同じく `eyJhbGciOiJub25lIn0=.` のように `=` が残り、JWT の規則から外れます(ライブラリによっては形式エラーで弾かれます)。末尾の `.` を忘れると 2 パーツになり、JWT として読まれません。"
+    },
+    {
+      "kind": "essay",
+      "question": "alg:none 攻撃とは何か、なぜ成立するのか、どう防ぐのかを、何も見ずに 1 分で説明するつもりで書いてください。150〜300 字で。",
+      "answer": "alg:none 攻撃は、JWT のヘッダーの alg を none(署名なし)に書き換え、サーバーに署名の検証を飛ばさせる攻撃です。攻撃者はペイロードの role を admin に書き換えたいのですが、書き換えると署名が合わなくなり、正しい署名を作るには知らない秘密鍵が必要です。そこで検証そのものを飛ばさせます。ヘッダー {\"alg\":\"none\"} とペイロードを Base64URL でエンコードし、署名を空にして末尾にドットを付けて送ります。ヘッダーの alg を信じて検証方法を決めるサーバーは、この偽の JWT を受け入れてしまいます。対策は、サーバー側で受け付けるアルゴリズムを固定し、none を絶対に受け入れないことです。",
+      "rubric": [
+        "ヘッダーの alg を none にして署名検証を飛ばさせる攻撃だと書いている",
+        "秘密鍵がないと署名を作れないので検証自体を回避する、という動機に触れている",
+        "ヘッダーの alg を信じるサーバーで成立する、という原因を書いている",
+        "サーバー側で許可するアルゴリズムを固定し none を拒否する、という対策を書いている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「動機(鍵がない)→手口(none)→原因(ヘッダーを信じる)→対策(固定)」の 4 段で話せると強いです。"
+    },
+    {
+      "kind": "essay",
+      "question": "次の検証処理(疑似コード)の問題点と直し方を説明してください。100〜250 字で。\n\n```\nheader = decode(parts[0])\nif header.alg == \"none\":\n    return decode(parts[1])   # 署名なしなのでそのまま信用\nif header.alg == \"HS256\":\n    verify_hs256(parts, SECRET)\n    return decode(parts[1])\n```",
+      "answer": "ヘッダーの alg が none のとき、署名を確かめずにペイロードをそのまま返しています。ヘッダーは攻撃者が自由に書き換えられるので、alg を none にして role を admin にした偽の JWT が通ってしまいます。これは alg:none 攻撃そのものです。直し方は、none の分岐を消し、ヘッダーの alg に検証方法を決めさせないことです。サーバー側で許可するアルゴリズムを HS256 に固定し、それ以外の alg の JWT はすべて拒否します。そのうえで署名を検証し、exp の期限も確認してからペイロードを使います。",
+      "rubric": [
+        "alg が none のとき署名を検証せずに信用している点を問題として挙げている",
+        "ヘッダーは攻撃者が書き換えられるので偽の JWT が通る(alg:none 攻撃)と説明している",
+        "none の分岐を消し、許可するアルゴリズムをサーバー側で固定する直し方を書いている",
+        "(加点)期限の確認にも触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「ヘッダーの alg で分岐する」こと自体が危険の入口です。固定したアルゴリズム以外は拒否、が基本です。"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "lesson": 2,
+  "chapter": 1,
+  "title": "Goプログラムの骨格を読み解く",
+  "priority": "🔴",
+  "text": "## Goプログラムの骨格を読み解く\n\nこの章では、Go の環境を用意して最初のプログラムを動かし、たった6行の Hello World に入っている「Go プログラムに必ず必要な4つの要素」を分解します。ここは何度も書く部分なので 🔴 覚える対象です。\n\n### 環境構築：インストールとプロジェクト作成\n\nGo は公式サイト(https://go.dev/dl/)から入れるのがおすすめです。apt や snap でも入りますが、バージョンが古いことが多いからです。インストール後は `go version` で確認します。\n\n```sh\ngo version\n# → go version go1.24.1 linux/amd64 のように表示されればOK\n\nmkdir -p ~/go-practice/day2\ncd ~/go-practice/day2\ngo mod init day2\n```\n\n`go mod init` は「ここが Go プロジェクトのルート(一番上の階層)です」と宣言するコマンドです。実行すると `go.mod` というファイルが作られ、このファイルがあるディレクトリが1つのプロジェクトとして独立します。そのため、業務用の `~/work/my-project/` と学習用の `~/go-practice/day2/` はそれぞれ別の `go.mod` を持ち、お互いに干渉しません。学習用コードを安心して書ける理由はここにあります。\n\n### Hello World の6行\n\n```go\npackage main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, World!\")\n}\n```\n\n`go run main.go` で実行すると `Hello, World!` と表示されます。この6行には次の4つの要素が入っています。\n\n| 要素 | 役割 |\n|---|---|\n| `package main` | このファイルが属するパッケージ(ファイルのグループ)の宣言 |\n| `import \"fmt\"` | 使う道具箱(標準パッケージ)の宣言 |\n| `func main()` | プログラムの入口 |\n| `fmt.Println()` | 画面に表示して改行する |\n\n### ① package main：実行できるプログラムの印\n\nGo のファイルは必ずどこかのパッケージに属し、1行目にその宣言を書きます。`main` は特別な名前で、「このプログラムは実行できます」という意味を持ちます。`go run` で実行するには `package main` が必須です。たとえば1行目を `package utils` にして `go run main.go` すると、`package command-line-arguments is not a main package` と言われて実行できません。\n\nプロジェクトが大きくなると `package database`(DB担当)や `package auth`(認証担当)のように役割ごとのパッケージが登場しますが、今は「1行目は `package main`」と覚えれば十分です。\n\n### ② import：道具箱を使う宣言\n\n`import` は「この道具箱(パッケージ)を使います」という宣言です。1つなら `import \"fmt\"`、複数ならカッコでまとめます。\n\n```go\nimport (\n    \"encoding/json\"   // JSONを扱う道具箱\n    \"fmt\"             // 画面表示・文字列フォーマットの道具箱\n    \"net/http\"        // HTTPサーバーの道具箱\n)\n```\n\n| パッケージ | 何ができるか |\n|---|---|\n| `fmt` | 画面に文字を表示する、文字列を整形する |\n| `encoding/json` | Go のデータと JSON を相互変換する |\n| `net/http` | HTTP サーバーを作る、リクエストを処理する |\n\nここで大事なのは、**使わないパッケージを import するとコンパイルエラー**になることです。`\"os\"` を import したのに一度も `os.` を書かなければ、`\"os\" imported and not used` と言われてビルドが止まります。Go は無駄を許さない言語です。\n\n### ③ func main()：プログラムの入口\n\n`go run main.go` を実行すると、Go は `func main()` の中を上から順番に実行します。`func main()` の外に別の関数を書いても、それは**呼び出されるまで動きません**。\n\n```go\nfunc hello() {\n    fmt.Println(\"hello\")\n}\n\nfunc main() {\n    fmt.Println(\"start\")\n}\n```\n\nこのプログラムを実行して表示されるのは `start` だけです。`hello()` はどこからも呼ばれていないからです。`package main` と `func main()` の2つが揃って、初めて実行可能なプログラムになります。\n\n```mermaid\nflowchart TD\n    A[\"go run main.go\"] --> B{\"1行目は package main か\"}\n    B -- \"いいえ\" --> X[\"実行できない: not a main package\"]\n    B -- \"はい\" --> C{\"import した道具箱を全部使っているか\"}\n    C -- \"いいえ\" --> Y[\"コンパイルエラー: imported and not used\"]\n    C -- \"はい\" --> D[\"func main の中を上から順に実行\"]\n    D --> E[\"main から呼ばれた関数だけが動く\"]\n```\n\n### ④ fmt.Println()：表示して改行\n\n`Println` は \"Print Line\"(1行表示する)の略です。`fmt` が道具箱の名前、`Println` がその中の道具の名前で、ドットは「〜の中の」と読みます。\n\n```go\nfmt.Println(\"こんにちは\")     // → こんにちは\nfmt.Println(123)              // → 123\nfmt.Println(\"A\", \"B\", \"C\")   // → A B C(スペース区切りで表示)\n```\n\n複数の値を渡すと、間にスペースが入って最後に改行されます。文字列でも数値でもそのまま渡せるのが便利な点です。\n\n### まとめ\n\n- `go mod init` で `go.mod` を作ると、そのディレクトリが独立したプロジェクトになる\n- `package main` と `func main()` が揃って初めて実行できる。処理は `func main()` の中を上から順に進む\n- `import` した道具箱を使わないとコンパイルエラーになる\n- `fmt.Println` は複数の値をスペース区切りで表示し、最後に改行する\n\n### 何も見ずに言えるように\n\n- 「package main は実行できるプログラムの印、func main はその入口。この2つが揃うと go run で動く」\n- 「import は道具箱の宣言で、使わないものを書くとコンパイルエラー。Go は無駄を許さない」\n- 「main の外の関数は、main から呼ばれない限り動かない」\n",
+  "quiz": [
+    {
+      "question": "次のプログラムを `go run main.go` で実行するとどうなりますか。\n\n```go\npackage main\n\nimport (\n    \"fmt\"\n    \"os\"\n)\n\nfunc main() {\n    fmt.Println(\"Hello\")\n}\n```",
+      "choices": [
+        "`os` を import したのに使っていないため、コンパイルエラーになり何も表示されない",
+        "`Hello` と表示される。使わない import は無視される",
+        "`Hello` と表示されたあと、警告として `os is unused` が出る",
+        "`os` パッケージが自動で削除されてから `Hello` と表示される"
+      ],
+      "correct": 0,
+      "explanation": "Go では使わないパッケージを import すると `\"os\" imported and not used` というコンパイルエラーになります。警告ではなくエラーなので、プログラムは1行も実行されません。`os` の行を消せば `Hello` が表示されます。"
+    },
+    {
+      "question": "次のプログラムを実行したときの出力はどれですか(「 / 」は改行を表します)。\n\n```go\npackage main\n\nimport \"fmt\"\n\nfunc hello() {\n    fmt.Println(\"hello\")\n}\n\nfunc main() {\n    fmt.Println(\"start\")\n    fmt.Println(\"end\")\n}\n```",
+      "choices": [
+        "hello / start / end(ファイルの上にある関数から順に動く)",
+        "start / end",
+        "start / hello / end",
+        "コンパイルエラー(呼ばれない関数があるため)"
+      ],
+      "correct": 1,
+      "explanation": "プログラムは `func main()` の中を上から順に実行します。`hello()` は定義されているだけでどこからも呼ばれていないので動きません。なお、使わない import や使わない変数はエラーですが、呼ばれない関数はエラーになりません。"
+    },
+    {
+      "question": "`main.go` の1行目を `package utils` に書き換え、`func main()` はそのままにして `go run main.go` を実行しました。どうなりますか。",
+      "choices": [
+        "`utils` パッケージとして普通に実行される",
+        "`func main()` があるので自動的に `package main` として扱われる",
+        "`package main` ではないため「not a main package」と言われて実行できない",
+        "実行はされるが `fmt.Println` の出力が表示されない"
+      ],
+      "correct": 2,
+      "explanation": "`go run` で実行できるのは `package main` のプログラムだけです。`package main` と `func main()` の2つが揃って初めて実行可能になります。`func main()` があってもパッケージ名が `main` でなければ実行できません。"
+    },
+    {
+      "question": "次の2行を実行したときの出力はどれですか(「 / 」は改行を表します)。\n\n```go\nfmt.Println(\"A\", \"B\", \"C\")\nfmt.Println(1, 2)\n```",
+      "choices": [
+        "ABC12",
+        "ABC / 12",
+        "A,B,C / 1,2",
+        "A B C / 1 2"
+      ],
+      "correct": 3,
+      "explanation": "`fmt.Println` に複数の値を渡すと、間にスペースを入れて表示し、最後に改行します。1行目は `A B C`、2行目は `1 2` です。数値も文字列と同じように渡せます。"
+    },
+    {
+      "question": "学習用に `~/go-practice/day2` で `go mod init day2` を実行しました。このコマンドについて正しい説明はどれですか。",
+      "choices": [
+        "Go 本体をインストールし、`go version` が使えるようにする",
+        "`go.mod` を作り、そのディレクトリを独立したプロジェクトのルートにする。別ディレクトリの業務用プロジェクトとは干渉しない",
+        "`main.go` のひな形を自動生成し、Hello World を出力できるようにする",
+        "パソコン上のすべての Go プロジェクトを1つにまとめて管理するための設定を書く"
+      ],
+      "correct": 1,
+      "explanation": "`go mod init` は「ここがプロジェクトのルート」という宣言で、`go.mod` を作ります。`go.mod` があるディレクトリごとにプロジェクトが独立するので、学習用と業務用のコードはお互いに影響しません。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "Hello World の形を自分で書きます。標準入力から名前(空白を含まない1語)を1つ読み、次の2行を出力するプログラムを書いてください。\n\n- 1行目: `Hello, 名前!`(カンマの後に半角スペース1つ、最後に `!`)\n- 2行目: `bye`\n\n条件: 1行目は `func greet(name string)` という関数の中で `fmt.Println` を使って出力し、`main` から呼ぶこと。2行目は `main` の中で出力すること。\n\n例: 入力 `washi` → 出力\n```\nHello, washi!\nbye\n```",
+      "setup": "package main\n\nimport \"fmt\"\n\n// ここに greet 関数を書く\n\nfunc main() {\n    var name string\n    fmt.Scan(&name) // 標準入力から名前を1つ読む(& は今は流してOK)\n\n    // greet を呼んでから bye を表示する\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\nfunc greet(name string) {\n    fmt.Println(\"Hello, \" + name + \"!\")\n}\n\nfunc main() {\n    var name string\n    fmt.Scan(&name)\n\n    greet(name)\n    fmt.Println(\"bye\")\n}\n",
+      "tests": [
+        {
+          "stdin": "washi\n"
+        },
+        {
+          "stdin": "taro\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`package main` → `import \"fmt\"` → 関数定義 → `func main()` という骨格そのものです。`greet` は定義しただけでは動かないので、`main` から `greet(name)` と呼ぶ必要があります(呼び忘れると bye だけが出ます)。よくある書き間違いは `fmt.Println(\"Hello,\", name, \"!\")` で、Println は値の間にスペースを入れるため `Hello, washi !` になって不正解です。文字列は `+` でつなげます。"
+    },
+    {
+      "kind": "essay",
+      "question": "Hello World の6行(`package main` / `import \"fmt\"` / `func main()` / `fmt.Println`)に入っている4つの要素それぞれの役割を、何も見ずに1分で説明してください。",
+      "answer": "`package main` は、このファイルが main パッケージに属し、実行できるプログラムであることを示す宣言です。`go run` で動かすには必須です。`import \"fmt\"` は fmt という道具箱(標準パッケージ)を使う宣言で、使わないパッケージを import するとコンパイルエラーになります。`func main()` はプログラムの入口で、実行するとこの中が上から順に動きます。main の外の関数は呼ばれない限り動きません。`fmt.Println` は fmt の中の Println という道具で、値を表示して改行します。複数渡すとスペース区切りになります。package main と func main が揃って初めて実行可能なプログラムになります。",
+      "rubric": [
+        "package main が「実行可能なプログラムの印」で go run に必須だと説明している",
+        "import が道具箱(パッケージ)の宣言であり、未使用だとコンパイルエラーになることに触れている",
+        "func main がプログラムの入口で、中が上から順に実行されると説明している",
+        "fmt.Println が表示して改行する道具であり、fmt が道具箱・Println が道具という関係を説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "4要素を「宣言(package)→道具の準備(import)→入口(func main)→実際の処理(Println)」の順で言えると覚えやすくなります。特に「package main と func main の両方が必要」「未使用 import はエラー」は面接でもよく聞かれる点です。"
+    }
+  ]
+}

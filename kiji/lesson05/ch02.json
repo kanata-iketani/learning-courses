@@ -1,0 +1,132 @@
+{
+  "lesson": 5,
+  "chapter": 2,
+  "title": "関数・複数戻り値・map・エラー処理",
+  "priority": "🔴",
+  "text": "この章は Q21〜Q34 と Q50 を土台に、関数・複数戻り値・エラー処理の型・map を手で書けるようにします。とくに Go のエラー処理は「処理 → エラーチェック → 止める or 続ける」という一定のリズムがあり、ここを体に入れると後のサーバー実装がぐっと楽になります。\n\n## 関数の入口と出口\n\n関数は「何を受け取り、何を返すか」を先に決めると書けます。\n\n```go\nfunc add(a int, b int) int {\n    return a + b\n}\n```\n\n`func add(a int, b int) int` は「int を2つ受け取って int を返す」という意味で、最後の `int` が戻り値の型です。戻り値が不要なら型を書きません（表示だけの関数など）。引数 `u User` の `User` は型で、「User 型のデータを受け取り、関数の中では u という名前で扱う」という読み方をします。\n\n## 複数の戻り値\n\nGo の関数は値を複数返せます。和と差を同時に返すならこうです。\n\n```go\nfunc calc(a, b int) (int, int) {\n    return a + b, a - b\n}\nsum, diff := calc(10, 3) // 13 7\n```\n\n戻り値が2つあるときは型を `(int, int)` と並べ、受ける側も `sum, diff :=` と2つで受けます。この仕組みはエラー処理（結果, err）でも使う Go の基本機能です。\n\n## エラーを返す・受ける型\n\n失敗しうる処理は、戻り値の最後に `error` を足すのが Go の慣習です。0 で割ると異常終了するので、先に弾きます。\n\n```go\nfunc divide(a, b int) (int, error) {\n    if b == 0 {\n        return 0, errors.New(\"division by zero\")\n    }\n    return a / b, nil\n}\n```\n\nエラーのときは `errors.New(...)` でエラーを作って返し、正常のときは `nil`（エラー無しを表す値）を返します。呼ぶ側は必ず受けてチェックします。\n\n```go\nresult, err := divide(10, 0)\nif err != nil {\n    // 失敗時の処理\n    return\n}\n// 成功時の処理\n```\n\nここで `return` がないと、エラーを返したあとも処理が続き、エラーなのに正常系まで実行されてしまいます。だから「エラーなら `return` で抜ける」を必ずセットにします。この形は外から来るデータを扱うたびに出てきます。\n\n## map by キーと値の対応表\n\nmap はキーと値の対応表です。`map[キーの型]値の型` で型を書きます。\n\n```go\nscores := map[string]int{\"washi\": 90, \"taro\": 75}\nscores[\"hanako\"] = 88          // 後から追加\ndelete(scores, \"taro\")         // 削除\n```\n\n`m[\"キー\"] = 値` で後から足せ、`delete(m, \"キー\")` で消せます。構造体と違ってキーを自由に増減できるのが map の持ち味です。\n\n存在しないキーに触ってもエラーにはならず、値の型のゼロ値（string なら空文字、int なら 0）が返ります。これだと「値が空なのか、キーが無いのか」を区別できないので、2つ受け取りの形を使います。\n\n```go\nvalue, ok := m[\"nothing\"]\n// ok が false ならキーが存在しない\n```\n\n`ok` が `true` ならキーあり、`false` ならキーなしと判定できます。この comma-ok（2つ目に有無を受け取る書き方）は実務で頻出します。\n\n\n```mermaid\nflowchart TD\n  A[\"result, err := someFunc()\"] --> B{\"err != nil ?\"}\n  B -->|\"はい(失敗)\"| C[\"エラー処理 → return で抜ける\"]\n  B -->|\"いいえ(成功)\"| D[\"正常系の処理を続ける\"]\n```\n\n### まとめ\n関数は入口（引数の型）と出口（戻り値の型）を決めると書けます。Go は複数の値を返せ、失敗しうる処理は最後に error を足します。エラーを返したら必ず return で抜けます。map はキーと値の対応表で、後から増減でき、存在確認は value, ok := の形で行います。\n\n### 何も見ずに言えるように\n・失敗しうる関数は (結果, error) を返す。正常時は nil を返す\n・エラーを受けたら if err != nil { ... return } で止める。return が無いと正常系まで動く\n・map の存在確認は value, ok := m[key]。ok が false ならキー無し",
+  "quiz": [
+    {
+      "question": "`func divide(a, b int) (int, error)` で、b が 0 でない正常なときに返すべき値の組み合わせはどれですか。",
+      "choices": [
+        "a / b と errors.New(\"ok\")",
+        "a / b と nil",
+        "0 と nil",
+        "0 と errors.New(\"division by zero\")"
+      ],
+      "correct": 1,
+      "explanation": "正常時は計算結果 a / b と、エラー無しを表す nil を返します。errors.New を返すのは失敗時（b == 0 のとき）だけです。"
+    },
+    {
+      "question": "次のエラー処理には問題があります。どこが危険ですか。\n```go\nresult, err := divide(10, 0)\nif err != nil {\n    fmt.Println(\"エラー:\", err)\n}\nfmt.Println(result * 2)\n```",
+      "choices": [
+        "err をチェックしているので問題はない",
+        "エラー時に return していないため、エラーなのに下の result を使う処理まで実行される",
+        "divide の引数が間違っている",
+        "fmt.Println は2回呼べない"
+      ],
+      "correct": 1,
+      "explanation": "エラーを表示したあと return で抜けていないので、失敗しているのに `result * 2` まで実行されます。エラー時は return で関数を抜けて、正常系を実行させないのが基本です。"
+    },
+    {
+      "question": "`m := map[string]int{\"washi\": 90}` に対し `fmt.Println(m[\"taro\"])` を実行すると、何が表示されますか。",
+      "choices": [
+        "存在しないキーなのでコンパイルエラー",
+        "nil",
+        "0",
+        "空文字"
+      ],
+      "correct": 2,
+      "explanation": "存在しないキーに触ってもエラーにはならず、値の型のゼロ値が返ります。値の型は int なので 0 です。これだと「値が 0 なのかキーが無いのか」区別できないため、value, ok := の形を使います。"
+    },
+    {
+      "question": "map で「キーが存在するかどうか」を確実に判定したいとき、正しい書き方はどれですか。",
+      "choices": [
+        "if m[key] != 0 { ... }",
+        "if m[key] != nil { ... }",
+        "value, ok := m[key] とし、ok を見る",
+        "len(m[key]) > 0 で判定する"
+      ],
+      "correct": 2,
+      "explanation": "`value, ok := m[key]` の2つ受け取り（comma-ok）で、ok が true ならキーあり、false ならキー無しと判定できます。値だけ見る方法では、値がゼロ値のときに有無を区別できません。"
+    },
+    {
+      "question": "Go で「和と差の両方を返す関数」を書くとき、戻り値の型の書き方として正しいのはどれですか。",
+      "choices": [
+        "func calc(a, b int) int, int",
+        "func calc(a, b int) (int, int)",
+        "func calc(a, b int) [int, int]",
+        "func calc(a, b int) {int; int}"
+      ],
+      "correct": 1,
+      "explanation": "複数の戻り値はカッコで並べて `(int, int)` と書きます。`return a + b, a - b` で2つまとめて返し、受ける側も `sum, diff :=` と2つで受けます。"
+    },
+    {
+      "kind": "essay",
+      "question": "Go のエラー処理の基本パターンを書き、「エラーを返したあとに return が必要な理由」を説明してください。擬似コードと説明あわせて120〜300字で。",
+      "answer": "基本パターンは次の形です。result, err := someFunc() と受け、if err != nil { エラー処理; return } と書き、その下に正常処理を続けます。return が必要な理由は、これが無いとエラーを処理したあとも関数の実行が下へ続いてしまうからです。すると、処理は失敗しているのに、成功した前提の正常系コードまで動いてしまい、空の値や壊れた値を使って誤った結果を返したり、別の異常終了を招いたりします。return でその場で関数を抜ければ、失敗したときは正常系に進ませないことを保証できます。処理、エラーチェック、エラーなら止める、大丈夫なら続ける、というリズムになります。",
+      "rubric": [
+        "result, err := ... と if err != nil { ... return } の形を書いている",
+        "return が無いとエラー処理のあとも処理が続く、と述べている",
+        "その結果、失敗しているのに正常系が実行される問題に触れている",
+        "return で関数を抜けると正常系に進ませない、と結んでいる"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「return が無いと失敗しても正常系まで動く」という一点を具体的に言えるかが要です。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で整数が1つ与えられます。偶数かどうかを返す関数 `isEven` を書き、偶数なら `true`、奇数なら `false` を1行出力してください。入力 `4` なら `true`、入力 `7` なら `false`。",
+      "setup": "package main\n\nimport \"fmt\"\n\n// ここに isEven を定義する\n\nfunc main() {\n\tvar n int\n\tfmt.Scan(&n)\n\t// isEven を使って true/false を出力する\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\nfunc isEven(n int) bool {\n\treturn n%2 == 0\n}\n\nfunc main() {\n\tvar n int\n\tfmt.Scan(&n)\n\tfmt.Println(isEven(n))\n}\n",
+      "tests": [
+        {
+          "stdin": "4"
+        },
+        {
+          "stdin": "7"
+        },
+        {
+          "stdin": "0"
+        },
+        {
+          "stdin": "-3"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`n%2 == 0` の比較結果(true/false)をそのまま返すのが要点です。0 は偶数で true、負の奇数 -3 は false になります。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で整数が2つ、半角スペース区切りで与えられます(例: `10 2`)。割り算する関数 `divide(a, b int) (int, error)` を書き、`b` が 0 のときはエラーを返してください。`main` では、エラーなら `error` を、正常なら商(整数の割り算の結果)を1行出力してください。入力 `10 2` なら `5`、入力 `10 0` なら `error`。",
+      "setup": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\n// ここに divide を定義する\n\nfunc main() {\n\tvar a, b int\n\tfmt.Scan(&a, &b)\n\t// divide を呼び、エラーなら error、正常なら商を出力する\n}\n",
+      "answer": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nfunc divide(a, b int) (int, error) {\n\tif b == 0 {\n\t\treturn 0, errors.New(\"division by zero\")\n\t}\n\treturn a / b, nil\n}\n\nfunc main() {\n\tvar a, b int\n\tfmt.Scan(&a, &b)\n\tresult, err := divide(a, b)\n\tif err != nil {\n\t\tfmt.Println(\"error\")\n\t\treturn\n\t}\n\tfmt.Println(result)\n}\n",
+      "tests": [
+        {
+          "stdin": "10 2"
+        },
+        {
+          "stdin": "7 2"
+        },
+        {
+          "stdin": "10 0"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "先に `b == 0` を弾いてエラーを返すのが肝心です。`main` ではエラーを受けたら `error` を出して return し、正常系に進ませません。return を忘れると商まで出てしまいます。7/2 は整数の割り算なので 3 です。"
+    }
+  ]
+}

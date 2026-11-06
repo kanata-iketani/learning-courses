@@ -1,0 +1,140 @@
+{
+  "lesson": 2,
+  "chapter": 4,
+  "title": "HTTPサーバーでJSONを返す",
+  "priority": "🔴",
+  "text": "## HTTPサーバーでJSONを返す\n\nこの章が記事のメインです。Go は標準ライブラリだけで HTTP サーバーが作れます。JSON を返す API の3ステップは 🔴 形ごと覚える、`w` と `r` の正体は 🟡 理解する、Go が `w` と `r` を渡す仕組みは ⚪ 今は流す、という温度感で読んでください。\n\n### JSONタグ：JSON のキー名を決める\n\n```go\ntype User struct {\n    Name string `json:\"name\"`\n    Age  int    `json:\"age\"`\n}\n```\n\nバッククォート(`` ` ``)で囲まれた `json:\"name\"` がタグで、構造体を JSON に変換するときのキー名を指定します。タグがないと Go のフィールド名がそのまま大文字始まりでキーになり `{\"Name\":\"washi\",\"Age\":30}`、タグがあると `{\"name\":\"washi\",\"age\":30}` と小文字になって API の慣習に合います。シングルクォートとは別物で、日本語キーボードでは Shift + @ で入力します。\n\n補足として、JSON に出せるのは**大文字で始まるフィールドだけ**です。`age int` のように小文字で始めると、そのフィールドは JSON に含まれません。Go では先頭が大文字の名前だけがパッケージの外(ここでは encoding/json)から見えるためです。\n\n### ハンドラー関数と w・r\n\n「この URL にアクセスが来たらこの処理をする」という関数をハンドラー関数と呼びます。\n\n```go\nfunc healthHandler(w http.ResponseWriter, r *http.Request) {\n    // ① レスポンスの封筒に「中身はJSONです」と書く\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    // ② 返すデータ {\"status\": \"ok\"} を作る\n    response := map[string]string{\"status\": \"ok\"}\n    // ③ データをJSONに変換して相手に返す\n    json.NewEncoder(w).Encode(response)\n}\n```\n\nハンドラー関数は必ず `w` と `r` の2つの引数を受け取り、戻り値はありません。これは net/http の決まりなので形ごと覚えます。\n\n- `w http.ResponseWriter`: レスポンス(返事)を書き込む窓口。ここに書いたものがリクエストを送ってきた相手(ブラウザや curl)に返る。w は writer の頭文字\n- `r *http.Request`: 相手から届いたリクエストの全情報(URL、HTTP メソッド、ヘッダー、ボディなど)。先頭の `*` はポインタ(データの置き場所を指す仕組み)ですが、今は「リクエスト情報の箱」と思えば十分です\n\nハンドラーは `r`(届いた手紙)を読んで `w`(返事の紙)に書く仕事をします。`healthHandler` は `r` を読まずに `w` に書くだけです。\n\n### 3ステップを1行ずつ\n\n**① `w.Header().Set(\"Content-Type\", \"application/json\")`**: `w` から `Header()` でヘッダー(封筒の表書き)を取り出し、`Set` で「Content-Type(中身の種類)は application/json」と書きます。HTTP レスポンスはヘッダーとボディ(本文)の2つでできています。`Header()` は取得する関数(正確にはメソッド)なのでカッコが付きます。\n\n**② `response := map[string]string{\"status\": \"ok\"}`**: 第3章の map と `:=` の組み合わせで、返すデータ(ボディ)を作ります。\n\n**③ `json.NewEncoder(w).Encode(response)`**: `json.NewEncoder(w)` で「w に書き込む変換器(エンコーダー)」を作り、`.Encode(response)` で Go のデータを JSON 文字列に変換します。変換器は `w` につながっているので、変換結果がそのまま相手に返ります。Go のデータ → JSON が Encode、逆の JSON → Go のデータが Decode です(後編で登場)。\n\nこの順番には意味があります。補足すると、ヘッダーは本文より先に送られるので、**①は③より前に書く必要があります**。③で本文を書いた時点でヘッダーは送られてしまい、あとから `Set` しても反映されません。その場合 Content-Type は Go が中身から推測した `text/plain; charset=utf-8` になります。\n\n### ルーティングとサーバー起動\n\n```go\nfunc main() {\n    http.HandleFunc(\"/health\", healthHandler)\n    http.HandleFunc(\"/user\", userHandler)\n    fmt.Println(\"Server started on :8080\")\n    http.ListenAndServe(\":8080\", nil)\n}\n```\n\nどの URL にどのハンドラーを割り当てるかを決めるのがルーティング(リクエストの道案内)です。`http.HandleFunc(\"/health\", healthHandler)` は「/health に来たら healthHandler を実行してね」という予約です。\n\n注目点は `healthHandler` に**カッコがない**ことです。カッコを付けると「今すぐ実行」、付けないと「関数そのものを渡す」になります。ここでは登録したいだけなのでカッコなしです。Go では関数も数値や文字列と同じように引数として渡せます。もし `healthHandler()` と書くと、引数 `w` と `r` を渡さずに今すぐ呼ぼうとしたことになり、`not enough arguments` というコンパイルエラーになります。\n\n`http.ListenAndServe(\":8080\", nil)` でサーバーが起動します。`\":8080\"` は待ち受けるポート番号、`nil`(「何もない」を表す値。Python の None に相当)は「ルーティングは HandleFunc で登録したデフォルトのものを使う」という意味で、「nil = おまかせ」と覚えれば十分です。呼ぶとプログラムはそこで止まってリクエストを待ち続けます。ターミナルが固まったように見えるのは正常な待機状態で、止めるときは Ctrl + C です。\n\n### リクエストが返るまでの流れ\n\n`curl http://localhost:8080/health` は「自分の PC(localhost)の 8080 番ポート(1台の PC で複数のサービスを区別する番号)で動くサーバーの /health パスに HTTP リクエストを送る」という意味です。\n\n```mermaid\nsequenceDiagram\n    participant C as curl\n    participant S as Goのサーバー 8080番\n    participant H as healthHandler\n    Note over S: ListenAndServe で待機中\n    C->>S: GET /health\n    S->>S: ルーティング表で /health を探す\n    S->>H: healthHandler(w, r) を呼ぶ\n    Note over H: w と r は Go が用意して渡す\n    H->>H: ヘッダー設定 → map 作成 → Encode\n    H-->>C: {\"status\":\"ok\"}\n```\n\nハンドラーはコードのどこからも自分で呼んでいません。リクエストが来たら Go(net/http)が呼び、そのときに `w` と `r` を詰めて渡してくれます。`add(10, 20)` で `a` に 10 が入るのと同じ仕組みで、呼ぶ側が Go なだけです。\n\n### 手を動かす：/profile を追加する\n\n`{\"name\":\"washi\",\"age\":30,\"job\":\"Infrastructure Engineer\"}` を返す /profile は、①User に ``Job string `json:\"job\"` `` を足す、②既存のパターンを真似して `profileHandler` を作る、③`main` に `http.HandleFunc(\"/profile\", profileHandler)` を足す、の3手で作れます。\n\n```go\nfunc profileHandler(w http.ResponseWriter, r *http.Request) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    profile := User{Name: \"washi\", Age: 30, Job: \"Infrastructure Engineer\"}\n    json.NewEncoder(w).Encode(profile)\n}\n```\n\nJob の追加はソースコードの定義の書き換えで、実行中に項目を足したわけではありません。また `profile` は profileHandler の中だけの変数で、userHandler の `user` とは別物です(スコープ)。\n\n補足として、Job を足したあとの `/user` は `{\"name\":\"washi\",\"age\":30,\"job\":\"\"}` を返します。userHandler は Job を指定していないので、string のゼロ値である空文字が入るからです。もう1つ、map を Encode すると JSON のキーはアルファベット順に並びます。`{\"version\": \"1.0\", \"status\": \"running\"}` と書いても出力は `{\"status\":\"running\",\"version\":\"1.0\"}` です。\n\n### まとめ\n\n- JSON タグでキー名を小文字にできる。JSON に出るのは大文字で始まるフィールドだけ\n- JSON を返す3ステップは「ヘッダー設定 → データ作成 → Encode」。ヘッダーは本文より先\n- `HandleFunc` には関数そのもの(カッコなし)を登録し、リクエストが来たら Go が `w` と `r` を渡して呼ぶ\n- `ListenAndServe(\":8080\", nil)` で 8080 番ポートの待機を始める。nil はデフォルトのルーティング\n\n### 何も見ずに言えるように\n\n- 「w は返事を書く窓口、r は届いたリクエスト。どちらも Go が入れて渡してくれる」\n- 「ヘッダーに application/json と書き、データを作り、NewEncoder(w).Encode で JSON にして返す」\n- 「HandleFunc で URL と関数を結び付け、ListenAndServe でポートを開いて待つ」\n",
+  "quiz": [
+    {
+      "question": "次の構造体を `json.NewEncoder(w).Encode(User{Name: \"washi\", Age: 30})` で返したとき、curl に表示される JSON はどれですか。\n\n```go\ntype User struct {\n    Name string\n    Age  int\n}\n```",
+      "choices": [
+        "{\"name\":\"washi\",\"age\":30}",
+        "{\"Name\":\"washi\",\"Age\":30}",
+        "{Name:washi Age:30}",
+        "{} (タグがないフィールドは JSON に出ない)"
+      ],
+      "correct": 1,
+      "explanation": "JSON タグがないと、Go のフィールド名がそのまま大文字始まりのキーになります。小文字の `name` にしたいときは ``Name string `json:\"name\"` `` のようにタグを付けます。"
+    },
+    {
+      "question": "記事の解答例のように User に ``Job string `json:\"job\"` `` を追加しました。userHandler は変更せず `User{Name: \"washi\", Age: 30}` を返しています。`curl http://localhost:8080/user` の結果はどれですか。",
+      "choices": [
+        "{\"name\":\"washi\",\"age\":30}",
+        "コンパイルエラー(Job を指定していないため)",
+        "{\"name\":\"washi\",\"age\":30,\"job\":null}",
+        "{\"name\":\"washi\",\"age\":30,\"job\":\"\"}"
+      ],
+      "correct": 3,
+      "explanation": "構造体を作るときに指定しなかったフィールドには、その型のゼロ値が入ります。Job は string なので空文字 `\"\"` です。Encode はそのフィールドもタグのキー名で出力するので、`\"job\":\"\"` が付きます。"
+    },
+    {
+      "question": "main の中に `http.HandleFunc(\"/health\", healthHandler())` と書いたところ、ビルドが通りませんでした。理由として正しいものはどれですか。",
+      "choices": [
+        "`/health` の先頭のスラッシュが不要だから",
+        "HandleFunc は main の中では使えず、func の外に書く必要があるから",
+        "カッコを付けたことで「今すぐ実行」になり、必要な引数 w と r を渡していないから。登録するときは関数そのもの `healthHandler` を渡す",
+        "healthHandler が戻り値を返さないので、HandleFunc の前に return が必要だから"
+      ],
+      "correct": 2,
+      "explanation": "`healthHandler()` は「今この関数を実行する」という意味で、引数 `w` と `r` がないので `not enough arguments` になります。HandleFunc には「あとで Go が呼ぶための関数そのもの」をカッコなしで渡します。"
+    },
+    {
+      "question": "次のハンドラーに curl でアクセスすると、レスポンスの Content-Type はどうなりますか。\n\n```go\nfunc healthHandler(w http.ResponseWriter, r *http.Request) {\n    response := map[string]string{\"status\": \"ok\"}\n    json.NewEncoder(w).Encode(response)\n    w.Header().Set(\"Content-Type\", \"application/json\")\n}\n```",
+      "choices": [
+        "`application/json` になる。ハンドラー内ならどこで Set しても同じ",
+        "`application/json` が2回送られる",
+        "ハンドラーの最後に Set があるので実行時エラーになる",
+        "`application/json` にならない。本文を書いた時点でヘッダーは送られており、あとの Set は反映されない(Go が推測した text/plain になる)"
+      ],
+      "correct": 3,
+      "explanation": "HTTP ではヘッダーが本文より先に送られます。`Encode` で本文を書いた瞬間にヘッダーも確定するので、その後の `Set` は効きません。実際には Go が中身から推測した `text/plain; charset=utf-8` になります。3ステップの順番(ヘッダー→データ→Encode)には意味があります。"
+    },
+    {
+      "question": "次の構造体を Encode したときの JSON はどれですか。\n\n```go\ntype Profile struct {\n    Name string `json:\"name\"`\n    age  int    `json:\"age\"`\n    Job  string `json:\"job\"`\n}\n// Profile{Name: \"washi\", age: 30, Job: \"Engineer\"} を Encode\n```",
+      "choices": [
+        "{\"name\":\"washi\",\"job\":\"Engineer\"}",
+        "{\"name\":\"washi\",\"age\":30,\"job\":\"Engineer\"}",
+        "{\"name\":\"washi\",\"age\":0,\"job\":\"Engineer\"}",
+        "コンパイルエラー(小文字のフィールドにタグは付けられない)"
+      ],
+      "correct": 0,
+      "explanation": "JSON に出せるのは大文字で始まるフィールドだけです。小文字の `age` は encoding/json から見えないので、タグがあっても無視されて出力されません(コンパイルエラーにもなりません)。`Age` と大文字にすれば `\"age\":30` が出ます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "JSON を返す3ステップを自分で書きます。`/status` 用のハンドラー `statusHandler` を書いてください。\n\n- レスポンスの Content-Type を `application/json` にする\n- `map[string]string` で `{\"status\": \"running\", \"version\": version}` を作る(`version` は雛形の func の外の変数。標準入力から読み込み済み)\n- `json.NewEncoder(w).Encode` で返す\n\n雛形の `main` はネットワークを使わずにハンドラーを1回呼び、`Content-Type: 値` の行と、返った本文(JSON と改行)を表示します。`main` は書き換えないでください。\n\n例: 入力 `1.0` → 出力\n```\nContent-Type: application/json\n{\"status\":\"running\",\"version\":\"1.0\"}\n```",
+      "setup": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"net/http\"\n    \"net/http/httptest\"\n)\n\nvar version string\n\nfunc statusHandler(w http.ResponseWriter, r *http.Request) {\n    // ここに3ステップを書く\n}\n\n// ---- ここから下は動作確認用(書き換えない)。ネットワークを使わずにハンドラーを1回呼び、結果を表示する ----\nfunc main() {\n    fmt.Scan(&version)\n    rec := httptest.NewRecorder()\n    statusHandler(rec, httptest.NewRequest(\"GET\", \"/status\", nil))\n    res := rec.Result()\n    fmt.Println(\"Content-Type:\", res.Header.Get(\"Content-Type\"))\n    fmt.Print(rec.Body.String())\n}\n",
+      "answer": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"net/http\"\n    \"net/http/httptest\"\n)\n\nvar version string\n\nfunc statusHandler(w http.ResponseWriter, r *http.Request) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    response := map[string]string{\"status\": \"running\", \"version\": version}\n    json.NewEncoder(w).Encode(response)\n}\n\n// ---- ここから下は動作確認用(書き換えない)。ネットワークを使わずにハンドラーを1回呼び、結果を表示する ----\nfunc main() {\n    fmt.Scan(&version)\n    rec := httptest.NewRecorder()\n    statusHandler(rec, httptest.NewRequest(\"GET\", \"/status\", nil))\n    res := rec.Result()\n    fmt.Println(\"Content-Type:\", res.Header.Get(\"Content-Type\"))\n    fmt.Print(rec.Body.String())\n}\n",
+      "tests": [
+        {
+          "stdin": "1.0\n"
+        },
+        {
+          "stdin": "2.5-beta\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "記事の確認テスト Q16 の形です。①`w.Header().Set(\"Content-Type\", \"application/json\")` ②`map[string]string{...}` ③`json.NewEncoder(w).Encode(response)` の順で書きます。①を③の後ろに書くと、本文を書いた時点でヘッダーが確定してしまい、Content-Type が `text/plain; charset=utf-8` になって不正解です。map の JSON はキーがアルファベット順に並ぶので、書いた順に関係なく status → version の順で出ます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "構造体で JSON を返します。`{\"host\":\"ホスト名\",\"port\":ポート番号}` を返す `/server` 用のハンドラー `serverHandler` と、構造体 `Server` を書いてください。\n\n- `Server` は文字列の `Host` と整数の `Port` を持ち、JSON のキーは小文字の `host` / `port` にする\n- port は**数値**として JSON に出す(`\"8080\"` ではなく `8080`)\n- Content-Type は `application/json`\n- ホスト名とポート番号は雛形の func の外の変数 `host` / `port` に標準入力から読み込み済み\n\n雛形の `main` はハンドラーを1回呼び、`Content-Type: 値` の行と本文を表示します。`main` は書き換えないでください。\n\n例: 入力 `tokyo 8080` → 出力\n```\nContent-Type: application/json\n{\"host\":\"tokyo\",\"port\":8080}\n```",
+      "setup": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"net/http\"\n    \"net/http/httptest\"\n)\n\nvar host string\nvar port int\n\n// ここに Server 構造体を定義する\n\nfunc serverHandler(w http.ResponseWriter, r *http.Request) {\n    // ここに処理を書く\n}\n\n// ---- ここから下は動作確認用(書き換えない)。ネットワークを使わずにハンドラーを1回呼び、結果を表示する ----\nfunc main() {\n    fmt.Scan(&host, &port)\n    rec := httptest.NewRecorder()\n    serverHandler(rec, httptest.NewRequest(\"GET\", \"/server\", nil))\n    res := rec.Result()\n    fmt.Println(\"Content-Type:\", res.Header.Get(\"Content-Type\"))\n    fmt.Print(rec.Body.String())\n}\n",
+      "answer": "package main\n\nimport (\n    \"encoding/json\"\n    \"fmt\"\n    \"net/http\"\n    \"net/http/httptest\"\n)\n\nvar host string\nvar port int\n\ntype Server struct {\n    Host string `json:\"host\"`\n    Port int    `json:\"port\"`\n}\n\nfunc serverHandler(w http.ResponseWriter, r *http.Request) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    server := Server{Host: host, Port: port}\n    json.NewEncoder(w).Encode(server)\n}\n\n// ---- ここから下は動作確認用(書き換えない)。ネットワークを使わずにハンドラーを1回呼び、結果を表示する ----\nfunc main() {\n    fmt.Scan(&host, &port)\n    rec := httptest.NewRecorder()\n    serverHandler(rec, httptest.NewRequest(\"GET\", \"/server\", nil))\n    res := rec.Result()\n    fmt.Println(\"Content-Type:\", res.Header.Get(\"Content-Type\"))\n    fmt.Print(rec.Body.String())\n}\n",
+      "tests": [
+        {
+          "stdin": "tokyo 8080\n"
+        },
+        {
+          "stdin": "osaka 0\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "記事の確認テスト Q17 の形です。型が混ざる(host は文字列、port は数値)ので map[string]string ではなく構造体を使います。フィールドは大文字始まり(`Host` / `Port`)にし、JSON タグ ``json:\"host\"`` で小文字のキーにします。タグを忘れると `{\"Host\":...,\"Port\":...}`、フィールドを小文字の `port int` にすると JSON に出ず `{\"host\":\"tokyo\"}` になって不正解です。port が 0 でもゼロ値として `\"port\":0` が出ます。"
+    },
+    {
+      "kind": "essay",
+      "question": "`{\"host\":\"tokyo\",\"port\":8080}` を返す `/server` エンドポイントを追加するコード(構造体の定義・ハンドラー・main に足す1行)を書き、map[string]string ではなく構造体を選ぶ理由を説明してください。",
+      "answer": "```go\ntype Server struct {\n    Host string `json:\"host\"`\n    Port int    `json:\"port\"`\n}\n\nfunc serverHandler(w http.ResponseWriter, r *http.Request) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    server := Server{Host: \"tokyo\", Port: 8080}\n    json.NewEncoder(w).Encode(server)\n}\n\n// main() 内に追加\nhttp.HandleFunc(\"/server\", serverHandler)\n```\n返したい JSON は host が文字列、port が数値で型が混ざっています。map[string]string は値をすべて string にする必要があり、8080 を \"8080\" という文字列で返すことになってデータとして不正確です。構造体ならフィールドごとに型を変えられ、JSON タグで小文字のキー名にもできます。",
+      "rubric": [
+        "Host string と Port int の構造体を定義し、json:\"host\" / json:\"port\" のタグを付けている(フィールドは大文字始まり)",
+        "ハンドラーが ヘッダー設定 → データ作成 → json.NewEncoder(w).Encode の順で書かれている",
+        "main に http.HandleFunc(\"/server\", serverHandler) をカッコなしで登録している",
+        "型が混在する(port が数値)ため map[string]string では 8080 を文字列にするしかなく不正確、という理由を述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "考える順序は「出口(返したい JSON)から逆算」です。値の型が混ざっていれば構造体、全部同じ型で形が柔軟なら map。あとは3ステップに当てはめ、HandleFunc で登録するだけです。"
+    },
+    {
+      "kind": "essay",
+      "question": "`go run main.go` でサーバーを起動し、別のターミナルで `curl http://localhost:8080/health` を実行してから `{\"status\":\"ok\"}` が表示されるまでに何が起きているかを、順番に説明してください。`w` と `r` を誰が渡すのかにも触れてください。",
+      "answer": "まず `go run main.go` で main が動き、`http.HandleFunc(\"/health\", healthHandler)` で「/health に来たら healthHandler を実行する」と関数そのものを登録します。次に `http.ListenAndServe(\":8080\", nil)` で 8080 番ポートの待ち受けを始め、プログラムはそこで止まってリクエストを待ちます。nil なので HandleFunc で登録したデフォルトのルーティングが使われます。curl は自分の PC(localhost)の 8080 番ポートの /health に GET リクエストを送ります。サーバーはルーティングに従い、Go(net/http)が healthHandler(w, r) を呼びます。このとき返事を書く窓口 w と、届いたリクエスト情報 r を Go が用意して渡します。ハンドラーは w のヘッダーに Content-Type: application/json を設定し、map で {\"status\": \"ok\"} を作り、json.NewEncoder(w).Encode で JSON に変換して w に書き込みます。それが curl に返り、画面に表示されます。",
+      "rubric": [
+        "HandleFunc による登録(ルーティング)と ListenAndServe による 8080 番ポートの待機を、リクエストより前の段階として説明している",
+        "localhost:8080/health が「自分の PC の 8080 番ポートの /health パス」であることを説明している",
+        "ハンドラーを呼ぶのは自分ではなく Go(net/http)で、そのとき w と r を Go が渡すことを説明している",
+        "ハンドラー内の3ステップ(ヘッダー設定→データ作成→Encode して w に書く)で JSON が返ることを説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「登録 → 待機 → リクエスト到着 → Go がハンドラーを呼ぶ → 3ステップで返す」の5段で言えれば合格です。特に「ハンドラーは自分で呼ばない。Go が w と r を渡して呼ぶ」が記事の要点です。"
+    }
+  ]
+}

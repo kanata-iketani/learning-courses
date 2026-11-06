@@ -1,0 +1,132 @@
+{
+  "lesson": 3,
+  "chapter": 2,
+  "title": "POSTでJSONを受け取るハンドラー",
+  "priority": "🔴",
+  "text": "## POSTでJSONを受け取るハンドラー\n\nここからはコードです。前編の構造体と `json.NewEncoder` をそのまま使い、POST で届いた JSON を受け取って返すハンドラーを作ります。\n\n### 完成形のハンドラー 🔴\n\n```go\ntype User struct {\n    Name string `json:\"name\"`\n    Age  int    `json:\"age\"`\n}\n\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n    if r.Method != http.MethodPost {\n        http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n        return\n    }\n\n    var user User\n    err := json.NewDecoder(r.Body).Decode(&user)\n    if err != nil {\n        http.Error(w, \"Bad request\", http.StatusBadRequest)\n        return\n    }\n\n    fmt.Printf(\"Received: %s, %d\\n\", user.Name, user.Age)\n\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    w.WriteHeader(http.StatusCreated)\n    json.NewEncoder(w).Encode(user)\n}\n```\n\n`main` で `http.HandleFunc(\"/users\", createUserHandler)` と登録して起動し、`curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"washi\",\"age\":30}' http://localhost:8080/users` を送ると、`{\"name\":\"washi\",\"age\":30}` が 201 で返り、サーバーのターミナルには `Received: washi, 30` と出ます。`User` 構造体は前編と同じですが、今回は「受け取った JSON を入れる箱」としても使います。\n\n処理の流れは3段です。\n\n```mermaid\nflowchart TD\n    A[リクエスト到着] --> B{\"r.Method は POST か\"}\n    B -- いいえ --> E1[\"http.Error で 405 を返して return\"]\n    B -- はい --> C[\"r.Body の JSON を Decode して user に入れる\"]\n    C --> D{\"err != nil か\"}\n    D -- はい --> E2[\"http.Error で 400 を返して return\"]\n    D -- いいえ --> F[\"ログ出力 → 201 と user の JSON を返す\"]\n```\n\n### ① メソッドのチェック 🔴\n\n```go\nif r.Method != http.MethodPost {\n    http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n    return\n}\n```\n\n- `r.Method` … 届いたリクエストの HTTP メソッド。`\"GET\"` や `\"POST\"` という文字列が入っています\n- `!=` … 「等しくない」。つまり「POST ではないなら」という条件です\n- `http.MethodPost` … `net/http` に用意された `\"POST\"` を表す定数\n\n`\"POST\"` と直接書かずに定数を使うのは、**打ち間違いをコンパイラに見つけてもらうため**です。`\"POTS\"` と書いても文字列としては正しいのでビルドが通り、どのリクエストとも一致しないバグになります。`http.MethodPots` と書けば、そんな名前は存在しないのでコンパイルエラーで止まります。\n\n`http.Error(w, メッセージ, ステータスコード)` は、エラー用のレスポンスを一度に返す便利関数です。`http.StatusMethodNotAllowed` は 405 を表す定数です。最後の `return` はとても大事で、次のチャプターで詳しく扱います。\n\n### ② リクエストボディを Decode する 🔴\n\n```go\nvar user User\nerr := json.NewDecoder(r.Body).Decode(&user)\n```\n\n- `var user User` … 中身が空の `User` 型の変数を用意します\n- `json.NewDecoder(r.Body)` … `r.Body`(リクエストの本文。curl の `-d` で送った JSON が入っている)を読むデコーダー(JSON を Go のデータに戻す変換器)を作ります\n- `.Decode(&user)` … 読んだ JSON を Go のデータに変換し、`user` に書き込みます\n\n結果として `{\"name\":\"washi\",\"age\":30}` が `user.Name = \"washi\"`、`user.Age = 30` になります。JSON のキーと構造体のフィールドは、前編で学んだ JSON タグを手がかりに対応づけられます。\n\n`&user` の `&` は「変数の場所(アドレス)を渡す」という意味です。`Decode` は渡された場所に直接書き込むので、「この `user` の場所に書いてください」と教える必要があります。今は「**Decode には & をつける**」と形で覚えれば十分です。ポインタ(変数の場所を指す値)の正確な仕組みは後の回で扱います。\n\nちなみに `&` を付け忘れて `Decode(user)` と書いてもビルドは通ります。`Decode` はどんな型でも受け取れる引数になっているからです。その代わり実行時に「ポインタではない」というエラーが返り、`user` には何も入りません。\n\n### Decode が受け取る JSON の幅 🟡\n\n`Decode` は、構造体とぴったり同じ形の JSON しか受け付けないわけではありません。\n\n- 構造体にないキー(例: `\"extra\":1`)は**無視**され、エラーになりません\n- JSON に含まれないフィールドは**ゼロ値のまま**です(`age` がなければ `Age` は 0)\n- 型が合わない値(例: `\"age\":\"30\"` と文字列で来た)は**エラー**になります\n- ボディが空なら、読むものがないので**エラー**(`EOF`)になります\n\nつまり err を見ると分かるのは「JSON として読めて、型が合っていたか」までです。「名前が空でないか」のような中身のチェックは、必要なら別に書きます。\n\n### Encode と Decode の対比 🟡\n\n| | Encode(前編) | Decode(後編) |\n|---|---|---|\n| 方向 | Go → JSON | JSON → Go |\n| 用途 | レスポンスを返す | リクエストを受け取る |\n| 対象 | `w`(レスポンス) | `r.Body`(リクエスト本文) |\n| 書き方 | `json.NewEncoder(w).Encode(data)` | `json.NewDecoder(r.Body).Decode(&data)` |\n| `&` | 不要 | 必要(書き込む場所を渡す) |\n\nEncode は渡された値を読むだけなので、値そのものを渡せば足ります。Decode は値を**書き換える**ので場所が要ります。`&` の有無はこの違いから来ています。「返すときは Encode、受け取るときは Decode」とセットで覚えてください。\n\n### まとめ\n\n- POST ハンドラーは「メソッドを確認 → Decode → 201 で返す」の3段\n- `r.Method != http.MethodPost` で POST 以外を弾く。定数を使うと打ち間違いがコンパイルエラーになる\n- `json.NewDecoder(r.Body).Decode(&user)` で JSON を構造体に入れる。`&` は書き込み先の場所を渡すため\n- 余分なキーは無視、足りないキーはゼロ値、型違いと空ボディはエラー\n\n### 何も見ずに言えるように\n\n- 「まず `r.Method` で POST 以外を 405 で弾き、次に `r.Body` を Decode します」\n- 「Encode は Go から JSON、Decode は JSON から Go。Decode は書き込むので `&user` を渡します」\n- 「`\"POST\"` でなく `http.MethodPost` を使うのは、打ち間違いをコンパイラに見つけてもらうためです」\n",
+  "quiz": [
+    {
+      "question": "メソッドのチェックを書くとき、次の2通りの打ち間違いをしました。ビルド(`go run`)したときの結果として正しいものはどれですか。\n\n```go\n// A\nif r.Method != \"POTS\" {\n\n// B\nif r.Method != http.MethodPots {\n```",
+      "choices": [
+        "A も B もコンパイルエラーになる",
+        "A はビルドが通ってしまい、B はコンパイルエラーになる",
+        "A はコンパイルエラーになり、B はビルドが通ってしまう",
+        "A も B もビルドが通り、実行時に気づく"
+      ],
+      "correct": 1,
+      "explanation": "`\"POTS\"` は文字列として正しいのでビルドが通り、どのリクエストとも一致しないバグとして残ります(この条件だと POST も含めすべて 405 になります)。`http.MethodPots` は `net/http` に存在しない名前なのでコンパイルエラーになります。記事が定数を使う理由がこれです。"
+    },
+    {
+      "question": "`createUserHandler` の Decode の行を、`&` を付け忘れて次のように書きました。正しい JSON を POST したときどうなりますか。\n\n```go\nvar user User\nerr := json.NewDecoder(r.Body).Decode(user)\nif err != nil {\n    http.Error(w, \"Bad request\", http.StatusBadRequest)\n    return\n}\n```",
+      "choices": [
+        "コンパイルエラーになり、サーバーが起動しない",
+        "`user` に値が入り、201 で `{\"name\":\"washi\",\"age\":30}` が返る",
+        "`user` は空のまま 201 で `{\"name\":\"\",\"age\":0}` が返る",
+        "Decode がエラーを返すので、どんな JSON を送っても 400 Bad request になる"
+      ],
+      "correct": 3,
+      "explanation": "`Decode` はどんな型でも受け取れる引数なのでビルドは通ります。ただし書き込む場所(ポインタ)ではない値を渡されると、`json: Unmarshal(non-pointer main.User)` というエラーを返します。err が nil でないので、毎回 400 を返して return します。"
+    },
+    {
+      "question": "`createUserHandler` に次のリクエストを送りました。返るステータスコードとボディはどれですか。\n\n```\ncurl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"taro\",\"job\":\"SRE\"}' http://localhost:8080/users\n```",
+      "choices": [
+        "400 と `Bad request`(`job` は User にないキーなので)",
+        "400 と `Bad request`(`age` が足りないので)",
+        "201 と `{\"name\":\"taro\",\"age\":0}`",
+        "201 と `{\"name\":\"taro\",\"job\":\"SRE\"}`"
+      ],
+      "correct": 2,
+      "explanation": "構造体にないキー `job` は無視され、JSON に含まれない `age` はゼロ値の 0 のままです。どちらもエラーにはならないので 201 が返ります。返すのは `user`(User 型)を Encode したものなので、`job` は含まれません。"
+    },
+    {
+      "question": "`createUserHandler` に次の JSON を POST しました。結果として正しいものはどれですか。\n\n```json\n{\"name\":\"washi\",\"age\":\"30\"}\n```",
+      "choices": [
+        "400 Bad request が返る",
+        "201 で `{\"name\":\"washi\",\"age\":30}` が返る(文字列が数値に変換される)",
+        "201 で `{\"name\":\"washi\",\"age\":0}` が返る(合わない値は無視される)",
+        "405 Method not allowed が返る"
+      ],
+      "correct": 0,
+      "explanation": "`Age` は int ですが、JSON の `\"30\"` は文字列です。型が合わないので Decode は `cannot unmarshal string into Go struct field User.age of type int` というエラーを返し、ハンドラーは 400 を返して return します。メソッドは POST なので 405 にはなりません。"
+    },
+    {
+      "question": "前編の Encode と後編の Decode を比べた説明として正しいものはどれですか。",
+      "choices": [
+        "Encode は `r.Body` を読み、Decode は `w` に書き込む",
+        "Encode は Go のデータを読むだけなので値を渡し、Decode は変数を書き換えるので `&` で場所を渡す",
+        "Encode も Decode も、渡した変数を書き換えるので `&` が必要",
+        "Decode は JSON を文字列のまま返し、結果は err に入る"
+      ],
+      "correct": 1,
+      "explanation": "Encode は Go → JSON でレスポンス `w` に書き込み、Decode は JSON → Go でリクエスト本文 `r.Body` を読みます。Decode は結果を変数に書き込むので `&user` で場所を渡します。変換結果は `user` に入り、err には成功か失敗かだけが入ります。"
+    },
+    {
+      "kind": "essay",
+      "question": "`json.NewDecoder(r.Body).Decode(&user)` の1行が何をしているかを、`r.Body`・`NewDecoder`・`Decode`・`&` のそれぞれに触れながら、何も見ずに 1 分で説明するつもりで書いてください。Encode との違いにも触れてください。150〜300 字で。",
+      "answer": "`r.Body` はリクエストの本文で、curl の `-d` で送った JSON が入っています。`json.NewDecoder(r.Body)` はその本文を読むデコーダーを作り、`.Decode(&user)` が読んだ JSON を Go のデータに変換して `user` に書き込みます。JSON のキーは構造体の JSON タグを手がかりにフィールドへ入ります。`&` は変数の場所を渡す記号で、Decode は渡された場所に直接書き込むため必要です。前編の Encode は Go のデータを JSON にしてレスポンス `w` に書く逆向きの処理で、値を読むだけなので `&` は要りません。Decode は失敗するとエラーを返すので、直後に err をチェックします。",
+      "rubric": [
+        "r.Body がリクエスト本文(送られてきた JSON)であると述べている",
+        "Decode が JSON を Go のデータに変換して user に書き込むことを説明している",
+        "& が書き込み先の場所(アドレス)を渡すためだと説明している",
+        "Encode は Go→JSON でレスポンスに書く逆向きの処理であることに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "Decode の1行は「どこから読むか(r.Body)」「何に変換するか(Decoder)」「どこに書くか(&user)」の3つに分けると説明しやすくなります。Encode と対で覚えると、& の有無の理由も説明できます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "記事の `createUserHandler` を何も見ずに書いてください。\n\n- POST 以外 → `http.Error` で `Method not allowed`(405)\n- ボディの JSON を `User` に Decode できなければ → `http.Error` で `Bad request`(400)\n- 成功 → `fmt.Printf` で `Received: 名前, 年齢` と改行を表示し、Content-Type を `application/json` にして 201 で user を JSON で返す\n\n動作確認用の main(書き換え不要)は、標準入力の1行を1リクエスト(`メソッド` または `メソッド ボディ`)として `/users` に送り、`ステータスコード \"Content-Type\" \"ボディ\"` を1行で表示します(ボディは改行を `\\n` と表示)。 ハンドラー内の `Received:` の行もそのまま標準出力に出ます。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"strings\"\n)\n\ntype User struct {\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// createUserHandler を書く。\n// - POST 以外: http.Error で \"Method not allowed\"(405)\n// - ボディの JSON を User に Decode できなければ: http.Error で \"Bad request\"(400)\n// - 成功したら: fmt.Printf で \"Received: 名前, 年齢\" と改行を出し、\n//   Content-Type を application/json にして 201 で user を JSON で返す\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n\t// ここを書く\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\nvar _ = json.Marshal // 雛形のままでもビルドできるようにするための行\n\n// 標準入力の1行 = 1リクエスト。「メソッド」または「メソッド ボディ」の形。\n// 各リクエストについて「ステータスコード Content-Type ボディ」を1行で表示する。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tmethod, body, _ := strings.Cut(sc.Text(), \" \")\n\t\treq := httptest.NewRequest(method, \"/users\", strings.NewReader(body))\n\t\trec := httptest.NewRecorder()\n\t\tcreateUserHandler(rec, req)\n\t\tres := rec.Result()\n\t\tfmt.Printf(\"%d %q %q\\n\", res.StatusCode, res.Header.Get(\"Content-Type\"), rec.Body.String())\n\t}\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"strings\"\n)\n\ntype User struct {\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// createUserHandler を書く。\n// - POST 以外: http.Error で \"Method not allowed\"(405)\n// - ボディの JSON を User に Decode できなければ: http.Error で \"Bad request\"(400)\n// - 成功したら: fmt.Printf で \"Received: 名前, 年齢\" と改行を出し、\n//   Content-Type を application/json にして 201 で user を JSON で返す\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n\tif r.Method != http.MethodPost {\n\t\thttp.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n\t\treturn\n\t}\n\n\tvar user User\n\terr := json.NewDecoder(r.Body).Decode(&user)\n\tif err != nil {\n\t\thttp.Error(w, \"Bad request\", http.StatusBadRequest)\n\t\treturn\n\t}\n\n\tfmt.Printf(\"Received: %s, %d\\n\", user.Name, user.Age)\n\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tw.WriteHeader(http.StatusCreated)\n\tjson.NewEncoder(w).Encode(user)\n}\n\n// ---- ここから下は動作確認用(書き換え不要) ----\nvar _ = json.Marshal // 雛形のままでもビルドできるようにするための行\n\n// 標準入力の1行 = 1リクエスト。「メソッド」または「メソッド ボディ」の形。\n// 各リクエストについて「ステータスコード Content-Type ボディ」を1行で表示する。\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tmethod, body, _ := strings.Cut(sc.Text(), \" \")\n\t\treq := httptest.NewRequest(method, \"/users\", strings.NewReader(body))\n\t\trec := httptest.NewRecorder()\n\t\tcreateUserHandler(rec, req)\n\t\tres := rec.Result()\n\t\tfmt.Printf(\"%d %q %q\\n\", res.StatusCode, res.Header.Get(\"Content-Type\"), rec.Body.String())\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "POST {\"name\":\"washi\",\"age\":30}\nGET\n"
+        },
+        {
+          "stdin": "POST {\"name\":}\nPOST\nPOST {\"name\":\"taro\",\"job\":\"SRE\"}\nDELETE\n"
+        },
+        {
+          "stdin": "POST {\"name\":\"washi\",\"age\":\"30\"}\nPUT {\"name\":\"jiro\",\"age\":25}\nPOST {\"name\":\"hanako\",\"age\":28}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "「POST 以外を 405 で弾いて return → Decode(&user) して err なら 400 で return → ログ → ヘッダー・201・Encode」の順です。よくある間違いは、http.Error のあとの return を忘れて 405 のボディに `Bad request` や JSON が混ざること、WriteHeader を Encode の後に書いて 200 になってしまうこと、`Printf` の `\\n` を忘れてログが次の行とつながることです。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力から JSON を1つ読み、`Item` 構造体(`name` は文字列、`price` は整数。JSON のキーは小文字)に Decode するプログラムを書いてください。\n\n- Decode に失敗したら `error` と1行表示して終わる\n- 成功したら `name=名前 price=価格` と1行表示する(例: `name=pen price=120`)\n\nDecode には `json.NewDecoder(os.Stdin)` を使ってください(`r.Body` の代わりに標準入力を読みます)。",
+      "setup": "package main\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n)\n\n// Item 構造体(name は文字列、price は整数。JSON のキーは小文字)を定義し、\n// 標準入力の JSON を json.NewDecoder(os.Stdin) で Decode する。\n// 失敗したら \"error\" を1行表示して終わる。成功したら \"name=名前 price=価格\" を1行表示する。\n\nfunc main() {\n\t// ここを書く\n\t_ = json.NewDecoder\n\t_ = fmt.Println\n\t_ = os.Stdin\n}\n",
+      "answer": "package main\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n)\n\ntype Item struct {\n\tName  string `json:\"name\"`\n\tPrice int    `json:\"price\"`\n}\n\nfunc main() {\n\tvar item Item\n\terr := json.NewDecoder(os.Stdin).Decode(&item)\n\tif err != nil {\n\t\tfmt.Println(\"error\")\n\t\treturn\n\t}\n\tfmt.Printf(\"name=%s price=%d\\n\", item.Name, item.Price)\n}\n",
+      "tests": [
+        {
+          "stdin": "{\"name\":\"pen\",\"price\":120}\n"
+        },
+        {
+          "stdin": "{\"name\":\"note\",\"price\":\"300\"}\n"
+        },
+        {
+          "stdin": ""
+        },
+        {
+          "stdin": "{\"name\":\"eraser\",\"color\":\"white\"}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "構造体に JSON タグ `json:\"name\"` / `json:\"price\"` をつけ、`json.NewDecoder(os.Stdin).Decode(&item)` の err を確かめます。`price` が文字列 `\"300\"` だと型が合わずエラー、空の入力は EOF でエラー、構造体にないキー(`color`)は無視されて price は 0 です。`&` を忘れると毎回 error になり、err を確かめないと失敗しても `name= price=0` のように表示してしまいます。"
+    }
+  ]
+}

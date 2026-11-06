@@ -1,0 +1,91 @@
+{
+  "lesson": 3,
+  "chapter": 1,
+  "title": "HTTPメソッドとステータスコード",
+  "priority": "🔴",
+  "text": "## HTTPメソッドとステータスコード\n\n前編で作った API は、どれも「データをください」というリクエストに答えるだけでした。後編では、相手から**データを受け取る**処理を作ります。その前に、リクエストとレスポンスに必ずついてくる2つの情報を押さえます。リクエスト側の **HTTP メソッド**と、レスポンス側の**ステータスコード**です。\n\n### HTTPメソッドは「何をしたいか」を表す動詞 🔴\n\nブラウザや curl がサーバーにリクエストを送るとき、URL と一緒に「何をしたいのか」を表す動詞を送っています。これが HTTP メソッドです。主なものは4つです。\n\n| メソッド | 意味 | 例 |\n|---|---|---|\n| GET | データを取得する | Web ページを表示する |\n| POST | 新しいデータを作る | ログインフォームの送信ボタンを押す |\n| PUT | データを更新する | プロフィールを編集して保存する |\n| DELETE | データを消す | アカウントを削除する |\n\nメソッドを分けておくと、**同じ URL でもサーバーが「何をするか」を判断できます**。\n\n```\nGET  /users  → ユーザー一覧をください(取得)\nPOST /users  → 新しいユーザーを作ってください(作成)\n```\n\nURL は「何に対して」、メソッドは「何をするか」を表します。この役割分担が REST API(URL とメソッドで操作を表す API の設計スタイル)の基本です。`/createUser` のように URL に動詞を入れるのではなく、`POST /users` と書くのがこの考え方です。\n\n### GET と POST の決定的な違い 🔴\n\nいちばん大事なのはここです。\n\n- **GET** はデータを「もらう」だけ。何度送ってもサーバーの中身は変わりません\n- **POST** はデータを「送る」。サーバーの中身が変わります(新しいデータが追加される)\n\n```mermaid\nsequenceDiagram\n    participant C as クライアント(curl)\n    participant S as サーバー\n    C->>S: GET /users\n    S-->>C: 200 OK + ユーザー一覧(サーバーの中身は変わらない)\n    C->>S: POST /users + ボディ {\"name\":\"washi\"}\n    Note over S: 新しいユーザーを追加(中身が変わる)\n    S-->>C: 201 Created + 作ったユーザー\n```\n\nGET はボディ(リクエストの本文)を持たず、URL だけで「何が欲しいか」を伝えます。POST はボディに作りたいデータを入れて送ります。\n\n### curl でメソッドとボディを指定する 🔴\n\n```\ncurl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"washi\",\"age\":30}' http://localhost:8080/users\n```\n\n- `-X POST` … HTTP メソッドを指定する。何も指定しなければ curl は GET を送ります。前編の `curl http://localhost:8080/health` は GET リクエストだったわけです\n- `-d '...'` … 送るデータ(リクエストボディ)。data の略です\n- `-H '...'` … HTTP ヘッダーを追加する。Header の略です。`Content-Type: application/json` で「今から送るのは JSON です」とサーバーに伝えます\n\n補足すると、curl は `-d` をつけると `-X` がなくても POST を送り、`-H` を省くと `Content-Type: application/x-www-form-urlencoded`(HTML フォーム送信の形式)をつけます。意図をはっきりさせるため、POST で JSON を送るときは `-X POST` と `-H \"Content-Type: application/json\"` を両方書いておくのが確実です。\n\n### ステータスコードは「処理がどうなったか」の3桁 🔴\n\nサーバーはレスポンスを返すとき、処理の結果を3桁の数字で伝えます。これがステータスコードです。\n\n| コード | 名前 | 使う場面 |\n|---|---|---|\n| 200 | OK | GET で正常にデータを返した |\n| 201 | Created | POST でデータを作成した |\n| 400 | Bad Request | リクエストの形式がおかしい(壊れた JSON など) |\n| 404 | Not Found | 存在しない URL にアクセスされた |\n| 405 | Method Not Allowed | その URL で許可していないメソッドが来た |\n| 500 | Internal Server Error | サーバー内部でエラーが起きた |\n\n百の位で大きく3つに分かれます。\n\n```mermaid\nflowchart LR\n    R[レスポンス] --> A[\"2xx 成功\"]\n    R --> B[\"4xx クライアントのせい\"]\n    R --> C[\"5xx サーバーのせい\"]\n    A --> A1[\"200 OK / 201 Created\"]\n    B --> B1[\"400 形式がおかしい / 404 URLがない / 405 メソッド違い\"]\n    C --> C1[\"500 サーバー内部のエラー\"]\n```\n\n4xx と 5xx の分かれ目は「誰が直すべきか」です。壊れた JSON を送った、許可していないメソッドで叩いた、というのはリクエストした側(クライアント)が直す問題なので 4xx です。サーバーのコードのバグや内部の障害は、サーバー側が直す問題なので 5xx です。\n\n前編ではステータスコードを何も指定しませんでしたが、その場合 Go は自動で **200 OK** を返していました。POST でデータを作ったときに 201 を返すには、自分で指定する必要があります。書き方は次のチャプターから見ていきます。\n\n### まとめ\n\n- HTTP メソッドは「何をするか」、URL は「何に対して」を表す。GET=取得、POST=作成、PUT=更新、DELETE=削除\n- GET はサーバーの中身を変えず、POST はボディでデータを送ってサーバーの中身を変える\n- curl は `-X` でメソッド、`-d` でボディ、`-H` でヘッダーを指定する\n- ステータスコードは 2xx 成功・4xx クライアントのせい・5xx サーバーのせい。指定しなければ Go は 200 を返す\n\n### 何も見ずに言えるように\n\n- 「URL は対象、メソッドは操作。だから `GET /users` は一覧、`POST /users` は作成です」\n- 「GET はもらうだけで中身は変わらない。POST はボディを送って中身を変えます」\n- 「2xx は成功、4xx は送った側の問題、5xx はサーバーの問題。作成成功は 201 です」\n",
+  "quiz": [
+    {
+      "question": "ユーザーを1人削除する API を、記事の REST の考え方(URL は「何に対して」、メソッドは「何をするか」)に沿って設計します。いちばん適切なものはどれですか。",
+      "choices": [
+        "`GET /users/delete?id=3`",
+        "`POST /deleteUser` にボディ `{\"id\":3}` をつける",
+        "`DELETE /users/3`",
+        "`GET /users/3` にヘッダー `-H \"Action: delete\"` をつける"
+      ],
+      "correct": 2,
+      "explanation": "URL は対象(users の 3 番)、メソッドは操作(DELETE)で表すのが記事の考え方です。URL に delete などの動詞を入れる設計は、メソッドで操作を表すという役割分担から外れます。GET は「もらうだけでサーバーの中身を変えない」メソッドなので、削除に使うのは誤りです。"
+    },
+    {
+      "question": "POST だけを受け付ける `/users` に対して、次の4つのリクエストが届きました。サーバーの中身(ユーザーの一覧)が変わる可能性があるのはどれですか。\n\n```\n(ア) curl http://localhost:8080/users\n(イ) curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"washi\",\"age\":30}' http://localhost:8080/users\n(ウ) curl http://localhost:8080/health\n(エ) curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":}' http://localhost:8080/users\n```",
+      "choices": [
+        "(ア)と(イ)",
+        "(イ)だけ",
+        "(イ)と(エ)",
+        "4つすべて"
+      ],
+      "correct": 1,
+      "explanation": "(ア)(ウ)は `-X` も `-d` もないので GET で、データをもらうだけです。(エ)は POST ですが JSON が壊れているので、正しく作られたハンドラーは 400 Bad Request を返して何も作りません。サーバーの中身が変わりうるのは、正しい JSON を POST した(イ)だけです。"
+    },
+    {
+      "question": "次の状況で返すステータスコードの組み合わせとして正しいものはどれですか。\n\n1. POST `/users` で正しい JSON を受け取り、ユーザーを作成できた\n2. POST `/users` に `{\"name\":}` という壊れた JSON が届いた\n3. POST しか受け付けない `/users` に GET が届いた",
+      "choices": [
+        "1=200、2=500、3=404",
+        "1=201、2=500、3=405",
+        "1=200、2=400、3=404",
+        "1=201、2=400、3=405"
+      ],
+      "correct": 3,
+      "explanation": "作成成功は 201 Created、リクエストの形式がおかしいのは 400 Bad Request、URL はあるが許可していないメソッドで来たのは 405 Method Not Allowed です。壊れた JSON は送った側が直すべき問題なので 5xx ではなく 4xx、URL 自体は存在するので 404 ではありません。"
+    },
+    {
+      "question": "API のログを見たら、次の2種類のエラーが記録されていました。説明として正しいものはどれですか。\n\n- A: `400 Bad Request` が大量に出ている\n- B: `500 Internal Server Error` がときどき出ている",
+      "choices": [
+        "A はクライアントが送るリクエストに問題があり、B はサーバー側の処理に問題がある可能性が高い",
+        "A も B もサーバーのコードのバグなので、どちらもサーバー側で直す必要がある",
+        "A はサーバー内部のエラー、B はクライアントが存在しない URL にアクセスしたことを表す",
+        "A も B も通信が成功しているので、問題は起きていない"
+      ],
+      "correct": 0,
+      "explanation": "4xx はクライアント(リクエストした側)のせい、5xx はサーバーのせい、と百の位で分類できます。400 はリクエストの形式がおかしいとき、500 はサーバー内部でエラーが起きたときに返します。存在しない URL は 404 です。2xx 以外は成功ではありません。"
+    },
+    {
+      "kind": "essay",
+      "question": "GET と POST の違い、そしてステータスコードの 2xx・4xx・5xx の意味を、何も見ずに 1 分で説明するつもりで書いてください。POST で作成に成功したときに返すコードにも触れてください。150〜300 字で。",
+      "answer": "HTTP メソッドは「何をするか」を表し、URL は「何に対して」を表します。GET はデータをもらうだけのメソッドで、何度送ってもサーバーの中身は変わりません。POST はリクエストボディにデータを入れて送り、サーバーに新しいデータを作らせるので、サーバーの中身が変わります。ステータスコードは処理結果を表す3桁の数字で、2xx は成功、4xx はクライアント側の問題(壊れた JSON の 400、許可していないメソッドの 405 など)、5xx はサーバー内部の問題(500)です。何も指定しないと Go は 200 OK を返しますが、POST でデータを作成できたときは 201 Created を明示して返すのが REST の慣習です。",
+      "rubric": [
+        "GET はデータを取得するだけでサーバーの中身を変えず、POST はデータを送ってサーバーの中身を変える、という違いを述べている",
+        "2xx=成功、4xx=クライアント側の問題、5xx=サーバー側の問題、を正しく説明している",
+        "POST の作成成功は 201 Created を返すと述べている",
+        "400 や 405 など 4xx の具体例を1つ以上挙げている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "メソッド(何をするか)とステータスコード(どうなったか)は、リクエストとレスポンスの対になる情報です。GET/POST の違いは「サーバーの中身が変わるか」、ステータスコードは「誰が直すべき問題か」で区別すると説明しやすくなります。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "ステータスコードを百の位で分類する関数 `classify(code int) string` を書いてください。\n\n- 200〜299 → `成功`\n- 400〜499 → `クライアントのせい`\n- 500〜599 → `サーバーのせい`\n- それ以外(199、300〜399、600 など)→ `その他`\n\n標準入力には1行に1つずつ整数が来ます。main(雛形にあり)が各行について `コード 分類` を1行ずつ表示します。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n)\n\n// classify はステータスコードを分類して返す。\n// 2xx → \"成功\"、4xx → \"クライアントのせい\"、5xx → \"サーバーのせい\"、それ以外 → \"その他\"\nfunc classify(code int) string {\n\t// ここを書く\n\treturn \"\"\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tcode, err := strconv.Atoi(sc.Text())\n\t\tif err != nil {\n\t\t\tfmt.Println(\"NG\")\n\t\t\tcontinue\n\t\t}\n\t\tfmt.Printf(\"%d %s\\n\", code, classify(code))\n\t}\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n)\n\n// classify はステータスコードを分類して返す。\n// 2xx → \"成功\"、4xx → \"クライアントのせい\"、5xx → \"サーバーのせい\"、それ以外 → \"その他\"\nfunc classify(code int) string {\n\tswitch {\n\tcase code >= 200 && code <= 299:\n\t\treturn \"成功\"\n\tcase code >= 400 && code <= 499:\n\t\treturn \"クライアントのせい\"\n\tcase code >= 500 && code <= 599:\n\t\treturn \"サーバーのせい\"\n\tdefault:\n\t\treturn \"その他\"\n\t}\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tcode, err := strconv.Atoi(sc.Text())\n\t\tif err != nil {\n\t\t\tfmt.Println(\"NG\")\n\t\t\tcontinue\n\t\t}\n\t\tfmt.Printf(\"%d %s\\n\", code, classify(code))\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "200\n201\n404\n500\n"
+        },
+        {
+          "stdin": "199\n299\n300\n399\n400\n499\n599\n600\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`switch { case 条件: ... }` で範囲ごとに分けると読みやすくなります。2xx は `code >= 200 && code <= 299`(または `code/100 == 2`)。よくある間違いは `code >= 500` のように上限を書き忘れて 600 も「サーバーのせい」にしてしまうことと、3xx を書き忘れて「その他」以外に入れてしまうことです。"
+    }
+  ]
+}

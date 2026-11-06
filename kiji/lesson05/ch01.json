@@ -1,0 +1,143 @@
+{
+  "lesson": 5,
+  "chapter": 1,
+  "title": "Go基礎を手で書く(変数・型・構造体)",
+  "priority": "🔴",
+  "text": "この章は「バックエンド100本ノック」前半 Q1〜Q20 を土台に、Go の最小構成と構造体（複数の値をまとめた自作の型）を手で書けるようにします。読むだけでは定着しないので、各コードはターミナルで `go run main.go` して出力を確かめてください。\n\n## Go プログラムの3点セット\n\nGo の実行ファイルは、必ず次の3つが揃って初めて動きます。\n\n```go\npackage main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, Go!\")\n}\n```\n\n`package main`（実行可能パッケージの宣言）、`import \"fmt\"`（表示機能の読み込み）、`func main()`（プログラムの入口）の3点セットです。`fmt.Println` は値を表示して改行します。どれが欠けても動かないので、まずこの形を手が覚えるまで書きます。\n\n## 変数の2つの書き方と型\n\n変数には `var name string = \"washi\"` という完全形と、`name := \"washi\"` という短縮形があります。`:=` は右辺から型を自動推測する書き方で、`func` の中だけで使えます。関数の外では `var` を使います。\n\n型は値の見た目で自動的に決まります。`30` は `int`（整数）、`99.9` は `float64`（小数）、`true` は `bool`（真偽値）です。`30` をクォートで囲むと `string`（文字列）になってしまうので、数値はクォートで囲みません。この違いは後で JSON を返すときや計算のときに効いてきます。\n\n## 構造体  by 複数の値をひとまとめにする\n\n関連する値をまとめて1つの型にするのが構造体です。定義は型の宣言なので `func` の外に書きます。\n\n```go\ntype Person struct {\n    Name string\n    Age  int\n}\n\nfunc main() {\n    p := Person{Name: \"washi\", Age: 30}\n    fmt.Println(p.Name) // washi\n}\n```\n\n`type 名前 struct { ... }` で新しい型を作り、`Person{Name: \"washi\", Age: 30}` で値を入れて組み立てます（インスタンス化）。中の値は `p.Name` のようにドットで取り出します。構造体は定義時のフィールドしか持てません。定義にない `p.Hobby` に触るとコンパイルエラー（文法違反で動かない状態）になります。フィールドを増やしたいなら定義そのものを書き換えます。\n\n構造体は違う型のフィールドを混ぜて持てるのが特徴です。`Book` なら `Title string` と `Price int` を同居させられます。同じ型のデータを複数まとめるときはスライス（可変長の配列）と組み合わせ、`[]Person` を `for _, p := range people` で回します。\n\n## JSON タグ\n\nAPI で構造体を JSON に変換するとき、フィールド名をそのまま出すと大文字始まり（`Name`）になります。小文字の `name` にしたいときはフィールドの後ろにタグを付けます。\n\n```go\ntype Person struct {\n    Name string `json:\"name\"`\n    Age  int    `json:\"age\"`\n}\n// json.Marshal(p) → {\"name\":\"washi\",\"age\":30}\n```\n\n`json.Marshal` は構造体を JSON（バイト列）に変換する関数で、結果は `string()` で文字列に直して表示します。タグを付けると API の慣習に合うキー名で出せます。この章の HTTP サーバーや POST 受信でそのまま使う土台です。\n\n\n```mermaid\nflowchart LR\n  A[\"package main<br/>実行可能の宣言\"] --> B[\"import fmt<br/>機能の読み込み\"]\n  B --> C[\"func main<br/>プログラムの入口\"]\n  C --> D[\"fmt.Println で表示\"]\n```\n\n### まとめ\nGo の実行ファイルは `package main`・`import`・`func main()` の3点セットで動きます。変数は `var` と `:=` の2通り、型は値の見た目で自動決定されます。構造体は関連する値をまとめた自作の型で、フィールドは定義で固定、ドットで取り出します。JSON タグでキー名を指定できます。\n\n### 何も見ずに言えるように\n・Go は package main・import・func main の3点セットで動く\n・`:=` は関数の中だけ、型は値から自動で決まる（30 は int、\"30\" は string）\n・構造体は違う型をまとめた型。定義にないフィールドは持てない",
+  "quiz": [
+    {
+      "question": "次のうち、`go run` するとコンパイルエラーで止まるのはどれですか。",
+      "choices": [
+        "func の中で `name := \"washi\"` と書き、`fmt.Println(name)` で使う",
+        "関数の外で `name := \"washi\"` と書く",
+        "`var age int = 30` と書いて表示する",
+        "`price := 99.9` と書いて表示する"
+      ],
+      "correct": 1,
+      "explanation": "`:=` は func の中でしか使えません。関数の外（パッケージレベル）で変数を宣言するときは `var` を使います。他の3つは正しい書き方です。"
+    },
+    {
+      "question": "`p := Person{Name: \"washi\", Age: 30}` のあと `fmt.Println(p.Hobby)` を足して実行すると、どうなりますか（Person に Hobby フィールドは無い）。",
+      "choices": [
+        "空文字が表示される",
+        "nil が表示される",
+        "コンパイルエラーになり実行されない",
+        "Hobby フィールドが自動で追加される"
+      ],
+      "correct": 2,
+      "explanation": "構造体は定義したフィールドしか持てません。定義にない Hobby に触ると「type Person has no field or method Hobby」というコンパイルエラーになります。後からキーを自由に足したいなら map を使います。"
+    },
+    {
+      "question": "`price := 99.9` と `count := 30` では型が違います。理由として正しいものはどれですか。",
+      "choices": [
+        "小数点を含む 99.9 は float64、整数の 30 は int と、値の見た目から型が自動推測されるため",
+        "変数名が price か count かで型が決まるため",
+        "どちらも同じ int 型になるため",
+        ":= を使うと必ず float64 になるため"
+      ],
+      "correct": 0,
+      "explanation": "`:=` は右辺の値から型を推測します。小数点を含む 99.9 は float64、小数点の無い 30 は int です。int と float64 は別の型なので、そのまま足し算はできません。"
+    },
+    {
+      "question": "構造体 Person に JSON タグ `json:\"name\"` を付ける目的として最も適切なのはどれですか。",
+      "choices": [
+        "フィールドを private にして外から読めなくするため",
+        "JSON に変換したときのキー名を name のように指定するため",
+        "Name フィールドを必須入力にするため",
+        "構造体のサイズを小さくするため"
+      ],
+      "correct": 1,
+      "explanation": "JSON タグは構造体を JSON へ変換するときのキー名を決めます。タグが無いとフィールド名そのまま（大文字始まりの Name）で出ますが、タグを付けると API の慣習に合う小文字の name で出せます。"
+    },
+    {
+      "question": "次のコードの出力はどうなりますか。\n```go\npeople := []Person{{Name: \"washi\"}, {Name: \"taro\"}}\nfor _, p := range people {\n    fmt.Println(p.Name)\n}\n```",
+      "choices": [
+        "washi taro が1行で表示される",
+        "washi と taro が2行に分かれて表示される",
+        "インデックスの 0 と 1 が表示される",
+        "コンパイルエラーになる"
+      ],
+      "correct": 1,
+      "explanation": "`range` は要素を1つずつ返し、`_` は使わないインデックスを捨てる記法です。`fmt.Println` は毎回改行するので、washi と taro が別々の行に出ます。"
+    },
+    {
+      "kind": "essay",
+      "question": "Go の実行ファイルに最低限必要な「3点セット」とは何か、それぞれが何のためにあるのかを、何も見ずに1分で説明するつもりで書いてください。120〜300字で。",
+      "answer": "Go の実行ファイルには、package main と import と func main の3つが必ず要ります。package main は、このファイルが実行可能なプログラムであるという宣言です。ライブラリ用のパッケージと区別するためのもので、これが無いと実行ファイルになりません。import は、使う機能を外から読み込む部分です。たとえば表示に使う fmt を import fmt という形で読み込みます。func main は、プログラムが最初に実行される入口の関数です。実行するとまず main が呼ばれ、ここに書いた処理が上から順に動きます。この3つが揃って初めて go run で動かせます。",
+      "rubric": [
+        "package main・import・func main の3つを挙げている",
+        "package main が実行可能プログラムの宣言である点に触れている",
+        "import が外部の機能を読み込む部分だと説明している",
+        "func main がプログラムの入口（最初に実行される）だと説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「何を宣言し、何を読み込み、どこから始まるか」の順で言うと短くても筋が通ります。"
+    },
+    {
+      "kind": "essay",
+      "question": "構造体と map はどちらも値をまとめて持てますが、性質が違います。両者の違いを2つ挙げ、「後からキーを足したいとき」はどちらを選ぶか、理由とともに説明してください。120〜300字で。",
+      "answer": "違いの1つめは、持てる項目の柔軟さです。構造体は定義時に決めたフィールドしか持てず、定義にない項目に触るとコンパイルエラーになります。map はキーを後から自由に追加・削除できます。2つめは、値の型です。構造体はフィールドごとに違う型を持てます（Name は文字列、Age は整数など）。map は値の型がすべて同じでなければなりません。後からキーを足したいときは map を選びます。構造体はフィールドが定義で固定されるため、項目を増やすには定義そのものを書き換える必要があり、実行中に増やせないからです。",
+      "rubric": [
+        "構造体はフィールドが固定、map はキーを後から足せる、という違いを述べている",
+        "構造体はフィールドごとに違う型、map は値の型が統一、という違いを述べている",
+        "後から足したいときは map を選ぶと答えている",
+        "その理由（構造体は定義で固定されるため）を説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「項目の柔軟さ」と「型の揃え方」の2軸で対比すると説明しやすいです。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で整数が2つ、半角スペース区切りで与えられます(例: `10 3`)。和と差をこの順に、半角スペース区切りで1行に出力してください(例: `13 7`)。末尾は改行。",
+      "setup": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tvar a, b int\n\tfmt.Scan(&a, &b)\n\t// ここで和と差をスペース区切りで出力する\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tvar a, b int\n\tfmt.Scan(&a, &b)\n\tfmt.Println(a+b, a-b)\n}\n",
+      "tests": [
+        {
+          "stdin": "10 3"
+        },
+        {
+          "stdin": "5 5"
+        },
+        {
+          "stdin": "-2 4"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`fmt.Println(a+b, a-b)` は2つの値を半角スペースでつないで1行に出し、末尾に改行を付けます。和と差の順番を逆にすると不正解になります。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で名前(空白を含まない文字列)が与えられます。フィールド `Name string` を持つ `Person` 構造体を定義し、`Person` を受け取って文字列 `\"Hello, 名前!\"` を返す関数 `greet` を書き、その結果を1行出力してください。入力 `washi` なら出力は `Hello, washi!`。",
+      "setup": "package main\n\nimport \"fmt\"\n\n// ここに Person 構造体と greet 関数を定義する\n\nfunc main() {\n\tvar name string\n\tfmt.Scan(&name)\n\t// Person を作り、greet の結果を出力する\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\ntype Person struct {\n\tName string\n}\n\nfunc greet(p Person) string {\n\treturn \"Hello, \" + p.Name + \"!\"\n}\n\nfunc main() {\n\tvar name string\n\tfmt.Scan(&name)\n\tp := Person{Name: name}\n\tfmt.Println(greet(p))\n}\n",
+      "tests": [
+        {
+          "stdin": "washi"
+        },
+        {
+          "stdin": "taro"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`greet` は入口が `Person`、出口が `string` です。`\"Hello, \" + p.Name + \"!\"` で名前を挟んで連結します。感嘆符を付け忘れると出力が変わり不正解になります。"
+    }
+  ]
+}

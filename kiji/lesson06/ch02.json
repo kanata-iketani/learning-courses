@@ -1,0 +1,94 @@
+{
+  "lesson": 6,
+  "chapter": 2,
+  "title": "SELECTとWHEREで取り出す",
+  "priority": "🔴",
+  "text": "### この章で学ぶこと\n\nCRUD のうち、いちばん多く書くのが Read、つまり SELECT です。この章では SELECT の基本形と、WHERE による絞り込み、比較演算子と LIKE を扱います。SELECT と WHERE は形ごと手に覚えさせる対象です。\n\n### SELECT の基本形\n\nまずは全件・全カラムの取得です。\n\n```sql\nSELECT * FROM users;\n```\n\n`*`(アスタリスク)は「全カラム」の意味です。`FROM users` で対象のテーブルを指定しています。特定のカラムだけがほしいときは、カラム名をカンマで並べます。\n\n```sql\nSELECT name, age FROM users;\n```\n\n基本の形は `SELECT 取得したいカラム FROM テーブル名;` です。出力される列の並びは、SELECT に書いた順になります。`SELECT age, name` と書けば age が先に出ます。文の終わりには `;`(セミコロン)を付けます。psql では `;` を打つまで文が続いているとみなされるので、付け忘れるとプロンプトが `testdb-#` のまま待ち続けます。\n\n### WHERE で条件を付けて絞り込む\n\n全件ではなく、条件に合うレコードだけがほしいときは WHERE を付けます。\n\n```sql\nSELECT * FROM users WHERE age >= 28;\n```\n\nage が 28 以上のレコードだけを返します。users が washi(30)・taro(25)・hanako(28)なら、返るのは washi と hanako です。28 ちょうどの hanako も「以上」なので含まれます。\n\n```sql\nSELECT * FROM users WHERE name = 'washi';\n```\n\nこちらは名前が washi のレコードを返します。文字列はシングルクォート(`'`)で囲みます。ダブルクォート(`\"`)は標準 SQL ではカラム名やテーブル名を表す記号で、PostgreSQL で `WHERE name = \"washi\"` と書くと「washi というカラムはない」というエラーになります。なお SQLite は、同じ名前のカラムがないとダブルクォートを文字列として扱ってしまうことがあり、通ってしまう場合があります。DB によって挙動が変わる書き方なので、文字列は常にシングルクォートと決めておくのが安全です。\n\nDB は SELECT 文を書いた順ではなく、おおむね次の順で処理します。\n\n```mermaid\nflowchart LR\n    F[\"FROM どの表から\"] --> W[\"WHERE どの行を残すか\"]\n    W --> S[\"SELECT どの列を出すか\"]\n    S --> R[\"結果\"]\n```\n\n表を決め、条件に合う行だけを残し、最後に必要な列を取り出す、という流れです。「WHERE は行を絞る、SELECT は列を絞る」と分けて覚えると混乱しません。\n\n### 比較演算子\n\nWHERE の中で使う主な比較演算子は次のとおりです。\n\n| 演算子 | 意味 |\n|---|---|\n| `=` | 等しい |\n| `>=` `<=` | 以上・以下(その値を含む) |\n| `>` `<` | より大きい・より小さい(その値を含まない) |\n| `!=` または `<>` | 等しくない |\n| `LIKE` | パターンに一致する |\n\n注意したいのは「以上」と「より大きい」の違いです。「1000 円以上」なら `>= 1000` で 1000 円ちょうどの商品も含み、`> 1000` だと 1000 円ちょうどは外れます。日本語の条件を SQL に置き換えるときは、境目の値を含むかどうかを必ず確かめます。\n\n「等しい」は `=` を 1 つだけ書きます。Go のように `==` と書くのは SQL では誤りです。「等しくない」は `!=` と `<>` のどちらでも書けます。\n\n### LIKE であいまいに探す\n\nLIKE は文字列のパターン検索です。`%` は「任意の文字が 0 文字以上続く」ことを表すワイルドカード(何にでも当てはまる記号)です。\n\n```sql\nSELECT * FROM users WHERE name LIKE 'wa%';\n```\n\nこれは name が wa で始まるレコード(前方一致)を返します。`%` の位置で意味が変わります。\n\n```mermaid\nflowchart TB\n    A[\"LIKE 'wa%'\"] --> A2[\"wa で始まる 例 washi wataru\"]\n    B[\"LIKE '%shi'\"] --> B2[\"shi で終わる 例 washi\"]\n    C[\"LIKE '%as%'\"] --> C2[\"as を含む 例 washi\"]\n```\n\n`%` を付けずに `LIKE 'wa'` と書くと、name がちょうど wa のものだけに一致し、`= 'wa'` と同じ意味になります。また、大文字と小文字の扱いは DB で異なり、PostgreSQL の LIKE は区別し、SQLite の LIKE は英字の大小を区別しません。\n\n### 日本語の条件を SQL に置き換える\n\n記事の実技問題「products テーブルから価格が 1000 円以上の商品を全カラム取得する」は、次の順で考えます。\n\n1. 取得なので SELECT、全カラムなので `*`\n2. 対象は products テーブルなので `FROM products`\n3. 1000 円以上なので `WHERE price >= 1000`\n\n```sql\nSELECT * FROM products WHERE price >= 1000;\n```\n\n日本語の部品を 1 つずつ SQL の部品に置き換えると、迷わず書けます。\n\n### まとめ\n\n- SELECT の基本形は `SELECT カラム FROM テーブル;`。`*` は全カラムで、列は書いた順に出る\n- WHERE は行を絞り込む。DB は FROM → WHERE → SELECT の順に処理する\n- 文字列はシングルクォートで囲む。ダブルクォートは標準 SQL ではカラム名の記号\n- `>=` は境目を含み、`>` は含まない。等しいは `=` 1 つ、等しくないは `!=` か `<>`\n- LIKE の `%` は 0 文字以上の任意の文字。位置で前方一致・後方一致・部分一致が変わる\n\n### 何も見ずに言えるように\n\n- SELECT は列を選び、FROM で表を決め、WHERE で行を絞る。`SELECT * FROM users WHERE age >= 28;` で 28 歳以上を全カラム取得\n- 文字列は `'washi'` のようにシングルクォート。ダブルクォートは列名の意味になる\n- `LIKE 'wa%'` は wa で始まる、`'%shi'` は shi で終わる、`'%as%'` は as を含む\n",
+  "quiz": [
+    {
+      "question": "users が washi(30)・taro(25)・hanako(28)の 3 件のとき、`SELECT * FROM users WHERE age > 28;` が返すのはどれか。",
+      "choices": [
+        "washi のみ",
+        "washi と hanako",
+        "hanako のみ",
+        "3 件すべて"
+      ],
+      "correct": 0,
+      "explanation": "`>` は「より大きい」で、28 ちょうどは含みません。`>= 28` なら washi と hanako の 2 件になります。境目を含むかどうかが結果を変えます。"
+    },
+    {
+      "question": "PostgreSQL で `SELECT * FROM users WHERE name = \"washi\";` を実行するとどうなるか。",
+      "choices": [
+        "washi のレコードが 1 件返る",
+        "0 件の結果が返る",
+        "washi というカラムを探しにいき、存在しないのでエラーになる",
+        "name が washi で始まるレコードが返る"
+      ],
+      "correct": 2,
+      "explanation": "ダブルクォートはカラム名などの識別子を表す記号なので、\"washi\" は washi というカラムとして解釈され、エラーになります。文字列はシングルクォートで 'washi' と書きます。"
+    },
+    {
+      "question": "`WHERE name LIKE '%ta%'` に一致する name をすべて選んだものはどれか(候補: taro, wataru, hanako, iwata)。",
+      "choices": [
+        "taro のみ",
+        "taro, wataru, iwata",
+        "taro, wataru",
+        "hanako 以外すべてと hanako"
+      ],
+      "correct": 1,
+      "explanation": "前後に % があるので「ta を含む」部分一致です。taro(先頭)、wataru(途中)、iwata(途中)が一致し、hanako は ta を含みません。"
+    },
+    {
+      "question": "「age が 30 ではないユーザー」を取得する WHERE として、正しいものはどれか。",
+      "choices": [
+        "WHERE age == 30",
+        "WHERE age = !30",
+        "WHERE NOT age LIKE 30%",
+        "WHERE age <> 30"
+      ],
+      "correct": 3,
+      "explanation": "等しくないは `<>` または `!=` です。SQL の等号は `=` 1 つで、`==` は使いません。"
+    },
+    {
+      "kind": "essay",
+      "question": "次の SQL の問題点(3 か所)を挙げ、正しく直した SQL と理由を書いてください。条件は「name が wa で始まり、age が 20 以上のユーザーを全カラム取得」です。 `SELECT * FROM users WHERE name LIKE \"wa\" AND age > 20;` (150〜300 字)",
+      "answer": "問題は 3 か所あります。1 つ目は文字列をダブルクォートで囲んでいる点です。標準 SQL や PostgreSQL ではダブルクォートはカラム名の意味になるので、シングルクォートで囲みます。2 つ目は LIKE に % がない点です。'wa' だけでは name がちょうど wa のものにしか一致しないので、前方一致にするには 'wa%' と書きます。3 つ目に、「20 以上」は 20 ちょうどを含むので、> ではなく >= を使います。直した SQL は SELECT * FROM users WHERE name LIKE 'wa%' AND age >= 20; です。",
+      "rubric": [
+        "ダブルクォートをシングルクォートに直す必要があり、ダブルクォートはカラム名の意味になると説明している",
+        "LIKE に % がないと前方一致にならないことを指摘し 'wa%' に直している",
+        "「20 以上」は >= であり、> では 20 ちょうどが外れると指摘している",
+        "最終的な SQL が正しい"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "クォートの種類、% の有無、境目を含むかどうかの 3 点は、SELECT で最も間違えやすいところです。1 つずつ日本語の条件と照らし合わせると見つけられます。"
+    },
+    {
+      "kind": "sql",
+      "question": "products テーブルから、価格(price)が 1000 円以上の商品を全カラム取得してください。出力列は id, name, price(全カラム)、並びは id の小さい順(ORDER BY id)。",
+      "setup": "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price INTEGER);\nINSERT INTO products (name, price) VALUES ('Tea', 300);\nINSERT INTO products (name, price) VALUES ('Cake', 1000);\nINSERT INTO products (name, price) VALUES ('Mug', 1500);\nINSERT INTO products (name, price) VALUES ('Cookie', 450);\nINSERT INTO products (name, price) VALUES ('Teapot', 3200);",
+      "answer": "SELECT * FROM products WHERE price >= 1000 ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "「以上」は >= です。Cake がちょうど 1000 円なので、> 1000 と書くと Cake が抜けて不正解になります。"
+    },
+    {
+      "kind": "sql",
+      "question": "users テーブルから、name が wa で始まるユーザーの name と age を取得してください。出力列は name, age、並びは id の小さい順(ORDER BY id)。",
+      "setup": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER);\nINSERT INTO users (name, age) VALUES ('washi', 30);\nINSERT INTO users (name, age) VALUES ('taro', 25);\nINSERT INTO users (name, age) VALUES ('hanako', 28);\nINSERT INTO users (name, age) VALUES ('jiro', 22);\nINSERT INTO users (name, age) VALUES ('iwata', 35);\nINSERT INTO users (name, age) VALUES ('wataru', 19);",
+      "answer": "SELECT name, age FROM users WHERE name LIKE 'wa%' ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "前方一致は 'wa%' です。'%wa%' にすると途中に wa を含む iwata まで入り、'wa' だけだと 0 件になります。"
+    }
+  ]
+}

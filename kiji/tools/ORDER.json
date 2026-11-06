@@ -1,0 +1,410 @@
+[
+ {
+  "lesson": 1,
+  "slug": "3e3b95ddbdbb2f",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #1 - JWT編",
+  "date": "2026-04-06"
+ },
+ {
+  "lesson": 2,
+  "slug": "0ae390a24538d1",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #2 - Go基礎編（前編）",
+  "date": "2026-04-06"
+ },
+ {
+  "lesson": 3,
+  "slug": "12bdf045e9d8ea",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #3 - Go基礎編（後編）",
+  "date": "2026-06-15"
+ },
+ {
+  "lesson": 4,
+  "slug": "56afd34c5c838a",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #4 - GoからDBに接続する",
+  "date": "2026-06-15"
+ },
+ {
+  "lesson": 5,
+  "slug": "50f40de5099c50",
+  "title": "【演習ノック編】バックエンド100本ノック - 手を動かして定着させる",
+  "date": "2026-06-16"
+ },
+ {
+  "lesson": 6,
+  "slug": "2356e87c95157d",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #5 - SQL基礎（CRUD）",
+  "date": "2026-06-17"
+ },
+ {
+  "lesson": 7,
+  "slug": "dde0466235efe9",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #6 - テーブル設計と正規化",
+  "date": "2026-06-20"
+ },
+ {
+  "lesson": 8,
+  "slug": "6dbd0a0b47b269",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #7 - JOINとテーブル結合",
+  "date": "2026-06-21"
+ },
+ {
+  "lesson": 9,
+  "slug": "b42-go-08-index",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #8 - インデックスと検索高速化",
+  "date": "2026-08-15"
+ },
+ {
+  "lesson": 10,
+  "slug": "b42-go-09-transaction",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #9 - トランザクションとACID",
+  "date": "2026-08-18"
+ },
+ {
+  "lesson": 11,
+  "slug": "b42-go-10-update-delete-2",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #10 - GoでUPDATE/DELETEを実装する",
+  "date": "2026-08-19"
+ },
+ {
+  "lesson": 12,
+  "slug": "b42-go-11-tx-error-handling",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #11 - Goでトランザクションとエラーハンドリング",
+  "date": "2026-08-20"
+ },
+ {
+  "lesson": 13,
+  "slug": "b42-go-12-nplus1-pool",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #12 - N+1問題とコネクションプール",
+  "date": "2026-08-21"
+ },
+ {
+  "lesson": 14,
+  "slug": "b42-go-13-migration",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #13 - マイグレーションとDB運用",
+  "date": "2026-08-23"
+ },
+ {
+  "lesson": 15,
+  "slug": "b42-go-14-layered-why",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #14 - レイヤードアーキテクチャ① なぜ層を分けるか",
+  "date": "2026-08-24"
+ },
+ {
+  "lesson": 16,
+  "slug": "b42-go-15-layered-repository",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #15 - レイヤードアーキテクチャ② repository層",
+  "date": "2026-08-25"
+ },
+ {
+  "lesson": 17,
+  "slug": "b42-go-16-layered-usecase-di",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #16 - レイヤードアーキテクチャ③ usecase / handler層とDI",
+  "date": "2026-08-26"
+ },
+ {
+  "lesson": 18,
+  "slug": "b42-go-17-context",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #17 - context（タイムアウト・キャンセル）",
+  "date": "2026-08-27"
+ },
+ {
+  "lesson": 19,
+  "slug": "b42-go-18-goroutine",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #18 - 並行処理① goroutine",
+  "date": "2026-08-28"
+ },
+ {
+  "lesson": 20,
+  "slug": "b42-go-19-channel",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #19 - 並行処理② channel",
+  "date": "2026-08-29"
+ },
+ {
+  "lesson": 21,
+  "slug": "b42-go-20-container-basics",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #20 - コンテナの本質（namespace / cgroup）",
+  "date": "2026-08-30"
+ },
+ {
+  "lesson": 22,
+  "slug": "b42-go-21-dockerfile",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #21 - Dockerfileを書く",
+  "date": "2026-08-31"
+ },
+ {
+  "lesson": 23,
+  "slug": "b42-go-22-multistage-build",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #22 - マルチステージビルド",
+  "date": "2026-09-01"
+ },
+ {
+  "lesson": 24,
+  "slug": "b42-go-23-docker-compose",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #23 - docker-composeで複数サービスを動かす",
+  "date": "2026-09-02"
+ },
+ {
+  "lesson": 25,
+  "slug": "b42-go-24-container-debugging",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #24 - コンテナの調査テクニック",
+  "date": "2026-09-03"
+ },
+ {
+  "lesson": 26,
+  "slug": "b42-go-25-authn-authz",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #25 - 認証と認可の違い",
+  "date": "2026-09-05"
+ },
+ {
+  "lesson": 27,
+  "slug": "b42-go-26-jwt-implementation",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #26 - GoでJWTを発行・検証する",
+  "date": "2026-09-06"
+ },
+ {
+  "lesson": 28,
+  "slug": "b42-go-27-auth-middleware",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #27 - 認証ミドルウェア",
+  "date": "2026-09-07"
+ },
+ {
+  "lesson": 29,
+  "slug": "b42-go-28-rbac",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #28 - RBAC（ロールベースアクセス制御）",
+  "date": "2026-09-08"
+ },
+ {
+  "lesson": 30,
+  "slug": "b42-go-29-jwt-vulnerabilities",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #29 - JWT脆弱性の実践",
+  "date": "2026-09-09"
+ },
+ {
+  "lesson": 31,
+  "slug": "b42-go-30-oauth-oidc",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #30 - OAuth2 / OIDC",
+  "date": "2026-09-10"
+ },
+ {
+  "lesson": 32,
+  "slug": "b42-go-31-csrf-xss",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #31 - CSRF / XSS対策",
+  "date": "2026-09-11"
+ },
+ {
+  "lesson": 33,
+  "slug": "b42-go-32-three-tier",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #32 - Webアプリの3層アーキテクチャ",
+  "date": "2026-09-13"
+ },
+ {
+  "lesson": 34,
+  "slug": "b42-go-33-rest-api-design",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #33 - REST API設計の原則",
+  "date": "2026-09-14"
+ },
+ {
+  "lesson": 35,
+  "slug": "b42-go-34-aws-vpc-network",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #34 - AWS① VPCとネットワーク設計",
+  "date": "2026-09-15"
+ },
+ {
+  "lesson": 36,
+  "slug": "b42-go-35-ecs-fargate",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #35 - AWS② ECS / Fargate",
+  "date": "2026-09-16"
+ },
+ {
+  "lesson": 37,
+  "slug": "b42-go-36-aurora-rds",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #36 - AWS③ Aurora / RDS",
+  "date": "2026-09-17"
+ },
+ {
+  "lesson": 38,
+  "slug": "b42-go-36x-terraform",
+  "title": "【付録】Terraformでインフラをコードにする - 42日でバックエンドエンジニアの基礎を完全に理解する",
+  "date": "2026-09-18"
+ },
+ {
+  "lesson": 39,
+  "slug": "b42-go-36x1-sql-knock",
+  "title": "【演習ノック編】SQL50本ノック - 手を動かして定着させる",
+  "date": "2026-09-20"
+ },
+ {
+  "lesson": 40,
+  "slug": "b42-go-36x2-go-knock",
+  "title": "【演習ノック編】Go50本ノック - インターフェース・context・並行処理",
+  "date": "2026-09-21"
+ },
+ {
+  "lesson": 41,
+  "slug": "b42-go-37-iam-least-privilege",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #37 - AWS④ IAMと最小権限",
+  "date": "2026-09-22"
+ },
+ {
+  "lesson": 42,
+  "slug": "b42-go-37x-aws-security",
+  "title": "【付録】AWSセキュリティベストプラクティス総まとめ - 42日でバックエンドエンジニアの基礎を完全に理解する",
+  "date": "2026-09-23"
+ },
+ {
+  "lesson": 43,
+  "slug": "b42-go-38-monitoring-logging",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #38 - AWS⑤ 監視とログ設計",
+  "date": "2026-09-24"
+ },
+ {
+  "lesson": 44,
+  "slug": "b42-go-39-design-api-db",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #39 - 設計演習① API設計とDB設計",
+  "date": "2026-09-25"
+ },
+ {
+  "lesson": 45,
+  "slug": "b42-go-40-design-infra",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #40 - 設計演習② インフラ構成設計",
+  "date": "2026-09-26"
+ },
+ {
+  "lesson": 46,
+  "slug": "b42-go-40x-ctf-knock",
+  "title": "【演習ノック編】Webセキュリティ CTF - JWT・認可・CSRF/XSS・クラウドを破る",
+  "date": "2026-09-27"
+ },
+ {
+  "lesson": 47,
+  "slug": "b42-go-41-comprehensive",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #41 - 総合演習",
+  "date": "2026-09-29"
+ },
+ {
+  "lesson": 48,
+  "slug": "b42-go-42-summary",
+  "title": "42日でバックエンドエンジニアの基礎を完全に理解する #42 - 総まとめ・知識の総点検",
+  "date": "2026-09-30"
+ },
+ {
+  "lesson": 49,
+  "slug": "b42-go-42x-github-actions",
+  "title": "【付録】GitHub Actions完全入門 - 42日でバックエンドエンジニアの基礎を完全に理解する",
+  "date": "2026-10-02"
+ },
+ {
+  "lesson": 101,
+  "slug": "f35-vue-01-browser-rendering",
+  "title": "35日でフロントエンドの基礎を完全に理解する #1 - ブラウザはどう画面を作るか",
+  "date": "2026-10-03"
+ },
+ {
+  "lesson": 102,
+  "slug": "f35-vue-02-javascript-basics",
+  "title": "35日でフロントエンドの基礎を完全に理解する #2 - モダンJavaScript基礎",
+  "date": "2026-10-04"
+ },
+ {
+  "lesson": 103,
+  "slug": "f35-vue-03-async",
+  "title": "35日でフロントエンドの基礎を完全に理解する #3 - 非同期処理（Promise・async/await・fetch）",
+  "date": "2026-10-05"
+ },
+ {
+  "lesson": 104,
+  "slug": "f35-vue-04-typescript-basics",
+  "title": "35日でフロントエンドの基礎を完全に理解する #4 - TypeScript基礎（型・推論・interface）",
+  "date": "2026-10-06"
+ },
+ {
+  "lesson": 105,
+  "slug": "f35-vue-05-typescript-practice",
+  "title": "35日でフロントエンドの基礎を完全に理解する #5 - TypeScript実戦（ユニオン・型ガード・ジェネリクス・zod）",
+  "date": "2026-10-07"
+ },
+ {
+  "lesson": 106,
+  "slug": "f35-vue-06-getting-started",
+  "title": "35日でフロントエンドの基礎を完全に理解する #6 - Vueを始める（なぜフレームワークか・SFC・Vite）",
+  "date": "2026-10-08"
+ },
+ {
+  "lesson": 107,
+  "slug": "f35-vue-07-reactivity",
+  "title": "35日でフロントエンドの基礎を完全に理解する #7 - リアクティビティ（ref・computed・watch）",
+  "date": "2026-10-09"
+ },
+ {
+  "lesson": 108,
+  "slug": "f35-vue-08-directives",
+  "title": "35日でフロントエンドの基礎を完全に理解する #8 - ディレクティブとレンダリング（v-if・v-for・バインディング）",
+  "date": "2026-10-11"
+ },
+ {
+  "lesson": 109,
+  "slug": "f35-vue-09-components",
+  "title": "35日でフロントエンドの基礎を完全に理解する #9 - コンポーネント分割（props・emit・slots）",
+  "date": "2026-10-14"
+ },
+ {
+  "lesson": 110,
+  "slug": "f35-vue-10-forms",
+  "title": "35日でフロントエンドの基礎を完全に理解する #10 - フォームとv-model",
+  "date": "2026-10-15"
+ },
+ {
+  "lesson": 111,
+  "slug": "f35-vue-11-composables",
+  "title": "35日でフロントエンドの基礎を完全に理解する #11 - composablesで整理する",
+  "date": "2026-10-16"
+ },
+ {
+  "lesson": 112,
+  "slug": "f35-vue-12-reading-legacy",
+  "title": "35日でフロントエンドの基礎を完全に理解する #12 - 既存コードを読む",
+  "date": "2026-10-18"
+ },
+ {
+  "lesson": 113,
+  "slug": "f35-vue-13-router",
+  "title": "35日でフロントエンドの基礎を完全に理解する #13 - Vue Router（SPA遷移・ナビゲーションガード）",
+  "date": "2026-10-19"
+ },
+ {
+  "lesson": 114,
+  "slug": "f35-vue-14-state-management",
+  "title": "35日でフロントエンドの基礎を完全に理解する #14 - 状態管理（Pinia）",
+  "date": "2026-10-20"
+ },
+ {
+  "lesson": 115,
+  "slug": "f35-vue-15-api-client",
+  "title": "35日でフロントエンドの基礎を完全に理解する #15 - API連携設計（型付きクライアント・エラーハンドリング）",
+  "date": "2026-10-21"
+ },
+ {
+  "lesson": 116,
+  "slug": "f35-vue-16-css-layout",
+  "title": "35日でフロントエンドの基礎を完全に理解する #16 - CSSレイアウト基礎（Flexbox・Grid・レスポンシブ）",
+  "date": "2026-10-22"
+ },
+ {
+  "lesson": 117,
+  "slug": "f35-vue-17-tailwind",
+  "title": "35日でフロントエンドの基礎を完全に理解する #17 - Tailwind CSS（ユーティリティファーストの思想）",
+  "date": "2026-10-23"
+ },
+ {
+  "lesson": 118,
+  "slug": "f35-vue-18-design-system",
+  "title": "35日でフロントエンドの基礎を完全に理解する #18 - コンポーネント設計とデザインシステム（共通部品の切り方）",
+  "date": "2026-10-24"
+ },
+ {
+  "lesson": 201,
+  "slug": "c1c6be6f56ec85",
+  "title": "Go初心者がSonarQube品質ゲートを通すためにやったこと",
+  "date": "2026-03-16"
+ }
+]

@@ -1,0 +1,129 @@
+{
+  "lesson": 103,
+  "chapter": 1,
+  "title": "同期と非同期、Promiseという箱",
+  "priority": "🔴",
+  "text": "### なぜ非同期が必要か\n\n#1 で見たとおり、JavaScript は基本的に 1 本の流れで順番に処理します(シングルスレッド。同時に動く処理の流れが 1 本だけ)。一方、Web アプリはサーバーからデータをもらって画面に出します。その通信は速くても数十ミリ秒、遅ければ数秒かかります。通信が終わるまで流れを止めてしまうと、その間はクリックもスクロールも受け付けず、画面が固まります。\n\nそこで使うのが**非同期処理**です。時間のかかる処理を投げておき、終わるのを待つ間も流れを止めない書き方です。\n\n### 同期と非同期の違い\n\n- **同期**: 処理が終わるまで、その場で待つ。次の行は、前の行が終わってから実行される\n- **非同期**: 時間のかかる処理を投げたら、結果を待たずに次へ進む。結果は後で受け取る\n\n流れが 1 本しかない JavaScript で、通信のような待ち時間を同期で待つと、その間ほかの仕事(画面の操作への反応)を一切さばけません。だから待ち時間のある処理は非同期で扱います。\n\n一番小さな非同期の例が `setTimeout`(指定ミリ秒後に関数を実行するよう予約する関数)です。\n\n```js\nconsole.log(\"A\");\nsetTimeout(() => console.log(\"B\"), 0);\nconsole.log(\"C\");\n```\n\n出力は `A` → `C` → `B` です。待ち時間を 0 にしても、`setTimeout` に渡した関数は「今の流れが一段落してから」実行されます。予約だけして先へ進むので、下の `console.log(\"C\")` が先に出ます。非同期の処理は、**今実行中のコードを最後まで走らせてから**呼ばれる、というのが実行順を読む出発点です。\n\n### Promise は「あとで結果が入る箱」\n\n非同期の結果は「今はまだ無いが、あとで入る」ものです。これを表すオブジェクトが **Promise** です。Promise には 3 つの状態があります。\n\n- **待機中(pending)**: まだ結果が出ていない\n- **成功(fulfilled)**: 結果が入った\n- **失敗(rejected)**: エラーになった\n\n通信のような非同期処理は、呼ぶと**結果そのものではなく Promise を返します**。箱は最初は待機中で、後から成功か失敗のどちらか一方に決まり、一度決まったら変わりません。\n\n```mermaid\nflowchart LR\n  P[\"待機中 pending\"] -->|\"resolve(値)\"| F[\"成功 fulfilled<br/>結果が入った\"]\n  P -->|\"reject(エラー)\"| R[\"失敗 rejected<br/>エラーになった\"]\n```\n\n### Promise を自分で作る:wait 関数\n\n記事では、時間のかかる処理の代わりに次の `wait` 関数を使います。\n\n```js\nfunction wait(ms, label) {\n  return new Promise((resolve) => setTimeout(() => resolve(label), ms));\n}\n```\n\n`new Promise(...)` で箱を作ります。渡す関数は `resolve`(箱に結果を入れて成功にする関数)を受け取ります。ここでは `setTimeout` で `ms` ミリ秒後に `resolve(label)` を呼ぶので、「`ms` ミリ秒後に `label` が入る箱」がすぐに返ります。\n\n箱が返るだけで、中身はまだ入っていない点が大事です。\n\n```js\nconst a = wait(100, \"データA\");\nconsole.log(a); // Promise { <pending> }\n```\n\n`a` は `\"データA\"` ではなく、待機中の Promise です。中身を取り出すには、次章の `await`(または `.then()`)を使います。「非同期の関数を呼んだら、返ってくるのは箱」と覚えておくと、`await` を付け忘れたときの不具合にすぐ気づけます。\n\n### 実行順を予想する\n\n記事の【手を動かす①】は、非同期の流れを体感するためのコードです。\n\n```js\nasync function main() {\n  console.log(\"1番目\");\n  const r = await wait(500, \"通信の結果\");\n  console.log(\"3番目:\", r);\n}\nmain();\nconsole.log(\"2番目\");\n```\n\n出力は `1番目` → `2番目` → `3番目: 通信の結果` です。`main()` は `await` で 500 ミリ秒待ちに入りますが、その間に呼び出し元へ戻り、下の `console.log(\"2番目\")` が実行されます。待っている間も流れが止まらず先へ進んでいることが、この順番から分かります。\n\n```mermaid\nsequenceDiagram\n  participant T as 呼び出し元\n  participant M as main\n  participant W as タイマー\n  T->>M: main() を呼ぶ\n  M->>M: 1番目 を出力\n  M->>W: wait(500) を予約\n  M-->>T: await で一旦戻る\n  T->>T: 2番目 を出力\n  W-->>M: 500ms後に結果が入る\n  M->>M: 3番目 を出力\n```\n\n### まとめ\n\n- JavaScript は流れが 1 本なので、待ち時間を同期で待つと画面が固まる。だから非同期で扱う\n- 非同期の処理は予約だけして先へ進み、今のコードを走らせ終えてから呼ばれる\n- Promise は「あとで結果が入る箱」。待機中 → 成功 / 失敗 のどちらかに一度だけ決まる\n- 非同期の関数は結果ではなく Promise を返す。中身は await や .then() で取り出す\n\n### 何も見ずに言えるように\n\n- 同期はその場で待つ、非同期は投げて先へ進み結果を後で受け取る。流れが 1 本の JS では待ち時間を非同期にしないと画面が固まる\n- Promise は待機中・成功・失敗の 3 状態を持つ「あとで結果が入る箱」\n- 非同期関数を呼ぶと返るのは箱なので、そのまま console.log すると Promise { <pending> } が出る\n",
+  "quiz": [
+    {
+      "question": "次のコードの出力順として正しいものはどれか。\n\n```js\nconsole.log(\"A\");\nsetTimeout(() => console.log(\"B\"), 0);\nconsole.log(\"C\");\n```",
+      "choices": [
+        "A → B → C",
+        "A → C → B",
+        "B → A → C",
+        "C → A → B"
+      ],
+      "correct": 1,
+      "explanation": "setTimeout は関数の実行を予約するだけで、すぐに次の行へ進みます。待ち時間が 0 でも、予約した関数は今のコードを最後まで走らせた後に呼ばれるので A → C → B です。"
+    },
+    {
+      "question": "記事の wait 関数を使った次のコードで、console.log に出るものはどれか。\n\n```js\nconst a = wait(100, \"データA\");\nconsole.log(a);\n```",
+      "choices": [
+        "データA",
+        "undefined",
+        "100 ミリ秒止まったあとに データA",
+        "Promise { <pending> }"
+      ],
+      "correct": 3,
+      "explanation": "wait は結果そのものではなく「あとで結果が入る箱」(Promise)をすぐに返します。この時点では中身が入っていないので待機中の Promise が表示されます。中身は await か .then() で取り出します。"
+    },
+    {
+      "question": "記事の【手を動かす①】のコード(main の中で await wait(500) し、main() の呼び出しの後に console.log(\"2番目\") がある)で、「2番目」が「3番目」より先に出る理由として正しいものはどれか。",
+      "choices": [
+        "main() が await で待ちに入っている間に、呼び出し元の次の行が実行されるから",
+        "console.log は非同期なので、書いた順番どおりに出るとは限らないから",
+        "await は 500 ミリ秒のあいだ JavaScript 全体を止めるが、console.log だけは止まらないから",
+        "main() は async 関数なので、中身が丸ごと最後に実行されるから"
+      ],
+      "correct": 0,
+      "explanation": "main は「1番目」を出した後 await で待ちに入り、呼び出し元へ一旦戻ります。そこで console.log(\"2番目\") が動き、500 ミリ秒後に main の続きが再開します。async 関数も最初の await までは呼んだその場で実行されるので、「中身が丸ごと最後」ではありません。"
+    },
+    {
+      "question": "Promise の状態について正しい説明はどれか。",
+      "choices": [
+        "成功(fulfilled)になった後でも、reject を呼べば失敗(rejected)に変えられる",
+        "Promise は作った瞬間に必ず成功(fulfilled)の状態になる",
+        "最初は待機中(pending)で、後から成功か失敗のどちらか一方に決まる",
+        "Promise には成功と失敗の 2 状態しかなく、待機中という状態はない"
+      ],
+      "correct": 2,
+      "explanation": "Promise は待機中・成功・失敗の 3 状態を持ちます。最初は待機中で、resolve されれば成功、reject されれば失敗に一度だけ決まり、その後は変わりません。"
+    },
+    {
+      "question": "Web アプリで、サーバーとの通信を同期処理(終わるまでその場で待つ)で書いた場合に起きることとして、記事の説明に合うものはどれか。",
+      "choices": [
+        "通信が速くなるので、画面の表示も速くなる",
+        "JavaScript は流れが 1 本なので、通信の間は画面の操作に反応できず固まる",
+        "ブラウザが自動で別の流れを作るので、特に問題は起きない",
+        "通信結果が Promise ではなく文字列で返るので、扱いが楽になる"
+      ],
+      "correct": 1,
+      "explanation": "JavaScript は 1 本の流れで順番に処理するので、通信を同期で待つとその間ほかの仕事(クリックなどへの反応)をさばけません。だから待ち時間のある処理は非同期で扱います。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "記事の `wait(ms, label)`(ms ミリ秒後に label が入る Promise を返す関数)を自分で書き、それを使って次のプログラムを作ってください。\n\n- 標準入力の各行は `ミリ秒 ラベル`(半角スペース区切り。ミリ秒は 0〜100 の整数)\n- すべての行の wait を**同時に**始め、結果が入った順に、ラベルを 1 行に 1 つずつ出力する\n- 全部出し終えたら最後に `全部終わった` を 1 行出力する(ヒント: `Promise.all(Promiseの配列)` は、全部が成功したときに成功する Promise を返す)\n\n例: 入力 `30 A` / `10 B` なら出力は `B` → `A` → `全部終わった` の 3 行。",
+      "setup": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").map((s) => s.trim()).filter((s) => s !== \"\");\n\n// wait(ms, label) を書く\n\n// 各行の wait を同時に始め、終わった順にラベルを出す\n// 全部終わったら「全部終わった」を出す\n",
+      "answer": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").map((s) => s.trim()).filter((s) => s !== \"\");\n\nfunction wait(ms, label) {\n  return new Promise((resolve) => setTimeout(() => resolve(label), ms));\n}\n\nconst jobs = lines.map((line) => {\n  const [ms, label] = line.split(\" \");\n  return wait(Number(ms), label).then((v) => console.log(v));\n});\nPromise.all(jobs).then(() => console.log(\"全部終わった\"));\n",
+      "tests": [
+        {
+          "stdin": "30 A\n10 B\n20 C\n"
+        },
+        {
+          "stdin": "0 X\n"
+        },
+        {
+          "stdin": "50 P\n0 Q\n50 R\n25 S\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "wait は `new Promise((resolve) => setTimeout(() => resolve(label), ms))` で「ms ミリ秒後に label が入る箱」を返します。全部を同時に始めて、それぞれの `.then()` で出力すると、結果が入った順(待ち時間の短い順)に出ます。最後の一行は `Promise.all`(全部の箱が成功したら成功する Promise)で待ちます。よくある間違いは、for 文の中で 1 行ずつ `await` してしまうことです。これだと入力の順番どおりに出てしまい、同時に始めたことになりません。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "Promise を自分で作る練習です。関数 `checkAge(n)` を書いてください。\n\n- 10 ミリ秒後に結果が決まる Promise を返す\n- n が 0 以上なら成功(fulfilled)にし、中身は `n歳` という文字列(例: `20歳`)\n- n が負なら失敗(rejected)にし、`new Error(\"年齢が負です\")` を入れる\n\nプログラムは標準入力の各行の整数を**上から順に 1 つずつ**チェックし、成功なら `OK 20歳`、失敗なら `NG 年齢が負です` のように 1 行ずつ出力してください(失敗しても止めずに次の行へ進む)。",
+      "setup": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").map((s) => s.trim()).filter((s) => s !== \"\");\n\nfunction checkAge(n) {\n  // 10ミリ秒後に成功(`${n}歳`)か失敗(Error)に決まる Promise を返す\n}\n\nasync function main() {\n  // 各行を順に checkAge し、OK ... / NG ... を出力する\n}\nmain();\n",
+      "answer": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").map((s) => s.trim()).filter((s) => s !== \"\");\n\nfunction checkAge(n) {\n  return new Promise((resolve, reject) => {\n    setTimeout(() => {\n      if (n >= 0) resolve(`${n}歳`);\n      else reject(new Error(\"年齢が負です\"));\n    }, 10);\n  });\n}\n\nasync function main() {\n  for (const line of lines) {\n    try {\n      const v = await checkAge(Number(line));\n      console.log(\"OK\", v);\n    } catch (e) {\n      console.log(\"NG\", e.message);\n    }\n  }\n}\nmain();\n",
+      "tests": [
+        {
+          "stdin": "20\n-1\n0\n"
+        },
+        {
+          "stdin": "-5\n"
+        },
+        {
+          "stdin": "35\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`new Promise((resolve, reject) => …)` の resolve を呼べば成功、reject を呼べば失敗に決まります。受け取る側は await を try / catch で囲み、失敗を catch で拾ってから次の行へ進みます。よくある間違いは、0 を負として扱う(`n > 0`)こと、try / catch を for 文の外に置いて最初の失敗で止まってしまうことです。"
+    },
+    {
+      "kind": "essay",
+      "question": "「同期」と「非同期」の違いを、JavaScript が 1 本の流れで順番に処理すること(シングルスレッド)と結びつけて、何も見ずに 1 分で説明してください。Promise が何かにも触れてください。",
+      "answer": "同期は、処理が終わるまでその場で待ち、前の行が終わるまで次の行に進まない書き方です。非同期は、時間のかかる処理を投げたら結果を待たずに次へ進み、結果は後で受け取る書き方です。JavaScript は基本的に 1 本の流れで順番に処理するので、通信のような待ち時間を同期で待つと、その間クリックなど画面の操作に一切反応できず、画面が固まります。そのため待ち時間のある処理は非同期にして、待つ間も他の処理を進められるようにします。非同期処理を呼ぶと、結果そのものではなく Promise という「あとで結果が入る箱」が返ります。箱は最初は待機中で、後から成功か失敗に決まり、中身は await や .then() で取り出します。",
+      "rubric": [
+        "同期=その場で待つ、非同期=待たずに先へ進み結果を後で受け取る、という違いを書いている",
+        "流れが 1 本なので同期で待つと画面が固まる、という理由を書いている",
+        "Promise を「あとで結果が入る箱」(非同期処理が返すもの)として説明している",
+        "(加点)待機中・成功・失敗の状態や、await / .then() で中身を取り出すことに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「違い」「固まる理由」「Promise=箱」の 3 点がそろえば合格です。"
+    }
+  ]
+}

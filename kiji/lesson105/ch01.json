@@ -1,0 +1,129 @@
+{
+  "lesson": 105,
+  "chapter": 1,
+  "title": "ユニオン型と型ガードで絞り込む",
+  "priority": "🔴",
+  "text": "### この回で越える 2 つの壁\n\n#4 では、型があると実行する前に間違いを見つけられることを学びました。ただ、その知識だけで実務のコードに向かうと 2 つの壁にぶつかります。\n\n- 値が 1 種類の型に収まらない場面(成功か失敗か、文字列か数値か)\n- 型は実行時には消えている、という TypeScript の構造上の弱点\n\nこの章では 1 つ目の壁を越える道具、**ユニオン型**と**型ガード**を扱います。2 つ目の壁は第 3・4 章で扱います。\n\n### ユニオン型:「A か B のどちらか」\n\n「商品 ID は数値でも文字列でも受け付けたい」のように、現実の値は 1 種類の型に収まらないことがあります。このときは `|` でつないでユニオン型(複数の型のどれか 1 つを表す型)にします。\n\n```ts\nfunction format(value: string | number): string {\n  // ...\n}\n```\n\n`string | number` は「string または number」と読みます。\n\n### 具体的な文字列をつなぐと真価が出る\n\nユニオン型が本領を発揮するのは、具体的な文字列をつないだときです。#3 の通信には「読み込み中」「成功」「失敗」の 3 状態がありました。これをそのまま型にできます。\n\n```ts\ntype Status = \"loading\" | \"success\" | \"error\";\n\nlet state: Status = \"loading\";\nstate = \"succes\"; // 書き間違い\n```\n\n`type 名前 = 型` は型に名前を付ける書き方(型エイリアス)です。`Status` 型には 3 つの文字列のどれかしか入りません。書き間違えると次のエラーになります。\n\n```\nstatus.ts(4,1): error TS2820: Type '\"succes\"' is not assignable to type 'Status'. Did you mean '\"success\"'?\n```\n\n修正候補まで出してくれます。ただの `string` 型だと `\"succes\"` も正当な文字列として通ってしまい、「success のときに出るはずの画面が出ない」というバグが実行するまで分かりません。画面の状態をユニオン型で縛る書き方は、#7 以降の Vue で毎回使います。\n\nなお、比較は大文字小文字も区別します。`\"Success\"` も `Status` には入りません。\n\n### ユニオン型の制約:両方で安全な操作しかできない\n\n`string | number` の値に、いきなり `toFixed()`(数値を小数点以下の桁数で丸めて文字列にするメソッド)は呼べません。\n\n```ts\nfunction format(value: string | number): string {\n  return value.toFixed(1);\n}\n```\n\n```\nnoguard.ts(2,16): error TS2339: Property 'toFixed' does not exist on type 'string | number'.\n  Property 'toFixed' does not exist on type 'string'.\n```\n\n「string だったら toFixed は無い」という指摘です。TypeScript はユニオン型の値に対して、**どちらの型でも安全な操作**しか許しません。逆に言えば `toString()` のように string にも number にもあるメソッドなら、絞り込まなくても呼べます。\n\n### 型ガード:使う前に if で絞り込む\n\n使う前に、どちらの型なのかを `if` で確かめます。これを型ガード(条件分岐で値の型を確定させる書き方)と呼びます。\n\n```ts\nfunction format(value: string | number): string {\n  if (typeof value === \"number\") {\n    return value.toFixed(1);    // この行では value は number 扱い\n  }\n  return value.toUpperCase();   // ここに来たということは string 扱い\n}\n\nconsole.log(format(3.14159)); // 3.1\nconsole.log(format(\"hello\")); // HELLO\n```\n\n`typeof value === \"number\"` が真なら、そのブロック内では `value` を number として扱います。`return` で抜けているので、`if` の後ろに来た時点で「number ではなかった」ことが確定し、残りの `string` 扱いになります。特別な構文はなく、普通の `if` 文を書くだけで型が絞り込まれていきます(この働きを narrowing、絞り込みと呼びます)。\n\n```mermaid\nflowchart TD\n    A[\"value: string | number\"] --> B{\"typeof value === 'number' ?\"}\n    B -- 真 --> C[\"ブロック内: value は number<br/>toFixed が使える\"]\n    B -- 偽 --> D[\"if の後: value は string<br/>toUpperCase が使える\"]\n```\n\n型を読むときは「今この行で、この変数の型の候補は何が残っているか」を追うのがコツです。`if` を 1 つ通るたびに候補が減っていきます。\n\n### まとめ\n\n- 「A か B のどちらか」は `|` でつなぐユニオン型で表す\n- 画面の状態は `\"loading\" | \"success\" | \"error\"` のような具体的な文字列のユニオンで縛ると、書き間違いがコンパイル時に見つかる\n- ユニオン型の値には、全部の候補で安全な操作しかできない\n- `typeof` を使った普通の `if` 文が型ガードになり、ブロックの中と後ろで型が絞り込まれる\n\n### 何も見ずに言えるように\n\n- ユニオン型は `|` で「どれか 1 つ」を表す。状態を文字列のユニオンにすると存在しない状態を入れられない\n- ユニオン型のままだと両方に共通の操作しかできないので、使う前に絞り込む\n- `if (typeof x === \"number\")` と書けば、TypeScript がブロック内で x を number として扱ってくれる\n",
+  "quiz": [
+    {
+      "question": "次のコードをコンパイルするとどうなるか。\n\n```ts\ntype Status = \"loading\" | \"success\" | \"error\";\nlet s: Status = \"loading\";\ns = \"Success\";\n```",
+      "choices": [
+        "3 行目がコンパイルエラーになる。\"Success\" は 3 つの値のどれとも一致しない",
+        "コンパイルは通る。大文字小文字は型チェックでは区別されない",
+        "コンパイルは通るが、実行時に TypeError が投げられる",
+        "1 行目がエラーになる。type で文字列を並べることはできない"
+      ],
+      "correct": 0,
+      "explanation": "文字列リテラルの比較は大文字小文字も区別します。\"Success\" は \"success\" と別の値なので Status には入らず、TS2820 のエラーと「Did you mean \"success\"?」の候補が出ます。"
+    },
+    {
+      "question": "次の関数のうち、コンパイルエラーに**ならない**ものはどれか(value の型はすべて `string | number`)。",
+      "choices": [
+        "`return value.toFixed(1);`",
+        "`return value.toUpperCase();`",
+        "`return value.toString();`",
+        "`return value.length;`"
+      ],
+      "correct": 2,
+      "explanation": "ユニオン型の値には、すべての候補で安全な操作だけが許されます。toString は string にも number にもあるので絞り込まなくても呼べます。toFixed は string に無く、toUpperCase と length は number に無いのでエラーです。"
+    },
+    {
+      "question": "次のコードの `/* ここ */` の位置で、`v` の型は何として扱われるか。\n\n```ts\nfunction g(v: string | number | boolean) {\n  if (typeof v === \"string\") {\n    return v.length;\n  }\n  if (typeof v === \"number\") {\n    return v.toFixed(1);\n  }\n  /* ここ */\n}\n```",
+      "choices": [
+        "string | number | boolean のまま",
+        "number",
+        "string | boolean",
+        "boolean"
+      ],
+      "correct": 3,
+      "explanation": "1 つ目の if で string が、2 つ目の if で number が return により除かれます。残る候補は boolean だけです。if を通るたびに候補が減っていく、という読み方をします。"
+    },
+    {
+      "question": "次のコードで、エラーの原因と直し方の組み合わせとして正しいものはどれか。\n\n```ts\nfunction format(value: string | number): string {\n  if (typeof value === \"number\") {\n    return value.toUpperCase();\n  }\n  return value.toFixed(1);\n}\n```",
+      "choices": [
+        "ユニオン型には typeof が使えない。as number と書いて型を指定する",
+        "if の中では value は number なので toUpperCase が無く、外では string なので toFixed が無い。2 つの呼び出しを入れ替える",
+        "戻り値の型 string が合っていない。戻り値を string | number にする",
+        "typeof の比較は \"Number\" と大文字で書く必要がある"
+      ],
+      "correct": 1,
+      "explanation": "typeof value === \"number\" のブロック内では value は number、if の後ろでは string に絞り込まれています。数値用の toFixed と文字列用の toUpperCase の置き場所が逆なので、入れ替えれば通ります。"
+    },
+    {
+      "question": "`type Status = \"loading\" | \"success\" | \"error\"` を使う代わりに、状態を `let state: string` で持った場合に起きやすい問題はどれか。",
+      "choices": [
+        "\"loading\" を代入した時点でコンパイルエラーになる",
+        "state を console.log で表示できなくなる",
+        "実行速度が遅くなる",
+        "\"succes\" のような書き間違いも正当な文字列として通り、該当する画面が出ないバグに実行するまで気づけない"
+      ],
+      "correct": 3,
+      "explanation": "string 型はどんな文字列も受け付けるので、存在しない状態が静かに紛れ込みます。ユニオン型なら代入の時点でコンパイルエラーになり、修正候補まで出ます。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "記事の `format` 関数を自分で書いてください。`format(value: string | number): string` は、value が number なら `toFixed(1)` で小数点以下 1 桁の文字列に、string なら `toUpperCase()` で大文字にして返します。型ガード(`typeof`)で絞り込んでから呼ぶこと(絞り込まずに呼ぶと tsc がエラーにします)。\n\n入出力は雛形の main が担当します。標準入力の各行のうち、`#` で始まる行は `#` を除いた部分を数値として、それ以外は文字列として format に渡し、結果を 1 行ずつ出力します。\n\n例: 入力 `#3.14159` と `hello` の 2 行 → 出力 `3.1` と `HELLO` の 2 行",
+      "setup": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\n// value が number なら小数点以下 1 桁の文字列に、string なら大文字にして返す\nfunction format(value: string | number): string {\n  // ここを書く\n  return \"\";\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const value: string | number = line.startsWith(\"#\") ? Number(line.slice(1)) : line;\n  console.log(format(value));\n}\n",
+      "answer": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\nfunction format(value: string | number): string {\n  if (typeof value === \"number\") {\n    return value.toFixed(1);\n  }\n  return value.toUpperCase();\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  const value: string | number = line.startsWith(\"#\") ? Number(line.slice(1)) : line;\n  console.log(format(value));\n}\n",
+      "tests": [
+        {
+          "stdin": "#3.14159\nhello\n"
+        },
+        {
+          "stdin": "#10\nVue\n#-7.5\n"
+        },
+        {
+          "stdin": "typescript\n#2.25\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`if (typeof value === \"number\")` のブロック内では value が number なので toFixed が使え、return で抜けた後ろでは string なので toUpperCase が使えます。2 つの呼び出しを逆に書くと tsc がエラーにします。`toFixed(2)` と桁を間違える、文字列を大文字にし忘れる、もよくある誤りです。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "画面の状態を表すユニオン型 `type Status = \"loading\" | \"success\" | \"error\"` を使ったプログラムを書いてください。\n\n- `label(s: Status): string` は `loading` → `読み込み中`、`success` → `成功`、`error` → `失敗` を返す\n- 標準入力の各行(string 型)について、3 つの値のどれかに一致すれば `label` の結果を、一致しなければ `不明な状態: 行の内容` を 1 行ずつ出力する\n- 比較は大文字小文字を区別する(`Success` は不明な状態)\n\n`line` は string 型なので、そのまま `label(line)` とは書けません。`===` の比較で絞り込んでから渡してください(`as Status` は使わないこと)。",
+      "setup": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\ntype Status = \"loading\" | \"success\" | \"error\";\n\n// Status ごとの表示名を返す\nfunction label(s: Status): string {\n  // ここを書く\n  return \"\";\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  // line は string 型。そのままでは label に渡せない(tsc がエラーにする)\n  // 3 つの値のどれかなら label の結果を、そうでなければ「不明な状態: 〇〇」を出力する\n}\n",
+      "answer": "declare function require(name: string): any;\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\n\ntype Status = \"loading\" | \"success\" | \"error\";\n\nfunction label(s: Status): string {\n  if (s === \"loading\") return \"読み込み中\";\n  if (s === \"success\") return \"成功\";\n  return \"失敗\";\n}\n\nconst lines = input.split(\"\\n\").filter((l) => l !== \"\");\nfor (const line of lines) {\n  if (line === \"loading\" || line === \"success\" || line === \"error\") {\n    console.log(label(line));\n  } else {\n    console.log(\"不明な状態: \" + line);\n  }\n}\n",
+      "tests": [
+        {
+          "stdin": "loading\nsuccess\nerror\n"
+        },
+        {
+          "stdin": "succes\nSuccess\nerror\n"
+        },
+        {
+          "stdin": "loading\n\nidle\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`line === \"loading\" || line === \"success\" || line === \"error\"` が真のブロックでは、TypeScript が line を Status に絞り込むので label に渡せます。typeof だけでなく `===` での比較も型ガードになります。`as Status` で無理に渡すと、\"succes\" も通ってしまい label が「失敗」を返すなど、存在しない状態が紛れ込みます。"
+    },
+    {
+      "kind": "essay",
+      "question": "ユニオン型と型ガードを何も見ずに 1 分で説明してください。`string | number` の値に `toFixed()` を呼ぶとエラーになる理由と、それを解決する書き方を必ず含めてください。",
+      "answer": "ユニオン型は `string | number` のように `|` で型をつなぎ、「どれか 1 つ」を表す型です。`\"loading\" | \"success\" | \"error\"` のように具体的な文字列をつなぐと、それ以外の値を入れた時点でコンパイルエラーになり、書き間違いによる存在しない状態を防げます。ただしユニオン型の値には、すべての候補で安全な操作しか許されません。`toFixed()` は number のメソッドで string には無いので、`string | number` のままでは呼べません。そこで `if (typeof value === \"number\")` と書いて型を確かめます。これが型ガードで、TypeScript は if の中では value を number として扱い、return で抜けた後ろでは残りの string として扱います。特別な構文ではなく、普通の if 文で型が絞り込まれるのがポイントです。",
+      "rubric": [
+        "ユニオン型を「| でつないだ、どれか 1 つの型」と説明している",
+        "toFixed が string に存在しないため、全候補で安全でない操作として拒否されることを説明している",
+        "typeof を使った if で絞り込む型ガードの書き方を示している",
+        "if の中と後ろで型がそれぞれ number / string に絞り込まれることに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「全候補で安全な操作しか許されない」→「if で候補を減らす」という順に話せれば合格です。文字列リテラルのユニオンで状態を縛る利点にも触れられると、より実務的な説明になります。"
+    }
+  ]
+}

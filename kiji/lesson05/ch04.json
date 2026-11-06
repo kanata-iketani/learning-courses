@@ -1,0 +1,161 @@
+{
+  "lesson": 5,
+  "chapter": 4,
+  "title": "実戦ノックで総合力を試す",
+  "priority": "🟡",
+  "text": "この章は後半 Q51〜Q100 を土台に、学んだ知識を「問題を解く」形で総合的に確かめます。後半は CTF 形式（問題を解くと合言葉の文字列が手に入る演習形式）で、暗記ではなく調査力と、仕組みを守る側として理解しているかを試します。ここでは代表的な論点を、守る視点でまとめます。\n\n## Base64 は暗号化ではない\n\nBase64 はデータを英数字などの文字だけで表す変換（エンコード）で、鍵は要りません。だから `base64 -d` に通せば誰でも元に戻せます。暗号化（鍵がないと戻せない変換）とは別物です。この性質は JWT にも効きます。\n\n## JWT の構造と守り方\n\nJWT（署名付きの通行証）は「ヘッダー.ペイロード.署名」をドットで繋いだ形です。ヘッダーには署名アルゴリズム（`alg`）、ペイロードにはユーザー名・権限・有効期限などが入ります。ヘッダーとペイロードは Base64 しただけなので、受け取った人は中身を読めます。だからペイロードにパスワードなどの秘密情報を入れてはいけません。署名は中身を隠す機能ではなく、改ざんを検知するための値です。\n\n実装が正しければ、トークンが漏れても攻撃者が「中身を書き換えた有効なトークン」を作れません。署名はサーバーだけが持つ秘密鍵で計算されるため、秘密鍵を知らない第三者は、中身を変えても正しい署名を作り直せず検証で弾かれるからです。守る側が気をつける点は2つあります。1つめは、サーバー側で許可する `alg` を固定することです。`alg` に `none`（署名なし）を指定された検証スキップや、公開鍵方式から共通鍵方式へ `alg` をすり替えるアルゴリズム混同を防げます。2つめは、ペイロードに有効期限 `exp` を必ず持たせ、サーバーで期限切れを検証することです。\n\n```go\nfunc validateExp(exp int64) error {\n    if time.Now().Unix() > exp {\n        return errors.New(\"token expired\")\n    }\n    return nil\n}\n```\n\n`time.Now().Unix()`（1970年からの経過秒数）と `exp` を比べ、現在が過ぎていれば拒否します。`exp` が無いとトークンが永久に有効になり、一度漏れると無効化できず使われ続けます。署名が正しくても期限は別に確認します。\n\n## SQL は値をデータとして渡す\n\nユーザー入力を文字列連結で SQL に埋め込むと、入力が命令として解釈され、認証をすり抜けられる恐れがあります（SQL インジェクション）。防ぐにはプレースホルダー（値を入れる穴）を使い、入力を命令ではなくデータとして渡します。\n\n```go\nrow := db.QueryRow(\"SELECT * FROM users WHERE name = $1 AND password = $2\", name, password)\n```\n\n`$1 $2`（SQLite では `?`）に渡した値は、たとえ SQL に見える文字列でも、ただのデータとして扱われます。文字列連結で SQL を組み立てるのは避けます。あわせて、`UPDATE` や `DELETE` では `WHERE` を書き忘れると全行が対象になる重大事故になるので、必ず対象を絞ります。送金のように複数の更新がセットの処理は、トランザクション（まとめて全部成功か全部取り消すかにする仕組み）にして、片方だけ成功する状態を防ぎます。\n\n## 認証と認可、そして調査\n\n「ログインは通ったが管理者ページは見られない」は、認証（本人確認、誰か）は通り、認可（権限確認、何をしてよいか）で弾かれた状態です。この2つは別物として扱います。調査のときは `curl -i`（ヘッダーも表示）、`curl | jq`（JSON を整形）といった道具で、レスポンスの中身を丁寧に読み解きます。\n\n\n```mermaid\nflowchart TD\n  A[\"JWT を受け取る\"] --> B[\"許可する alg か確認(固定)\"]\n  B --> C[\"署名を秘密鍵で検証\"]\n  C --> D{\"exp を過ぎていないか\"}\n  D -->|\"期限内\"| E[\"リクエストを許可\"]\n  D -->|\"期限切れ\"| F[\"拒否する\"]\n```\n\n### まとめ\nBase64 は鍵のない変換で暗号化ではありません。JWT は署名付きの通行証で、中身は読まれる前提にし、守る側は alg を固定し exp を必ず検証します。SQL はプレースホルダーで入力をデータとして渡し、UPDATE/DELETE は WHERE を必須、複数更新はトランザクションにまとめます。認証（誰か）と認可（何をしてよいか）は別物です。\n\n### 何も見ずに言えるように\n・Base64 は暗号化ではない。JWT のペイロードは読まれる前提、秘密情報を入れない\n・守る側は alg を固定し、exp を必ず検証する。署名は改ざん検知で中身は隠さない\n・SQL はプレースホルダーで値をデータとして渡す。認証=誰か、認可=何をしてよいか",
+  "quiz": [
+    {
+      "question": "レスポンスに `{\"data\":\"U0VMRUNUICogRlJPTSB1c2Vycw==\"}` が含まれていました。この data について正しい説明はどれですか。",
+      "choices": [
+        "暗号化されているので鍵が無ければ中身は分からない",
+        "Base64 エンコードされているだけなので、base64 -d で誰でも元に戻せる",
+        "ハッシュ化されているので元には戻せない",
+        "壊れたデータなので読めない"
+      ],
+      "correct": 1,
+      "explanation": "末尾が == で英数字という見た目から Base64 と判断できます。Base64 は鍵のいらない変換なので `base64 -d` で誰でも復元でき、中身は SQL 文です。Base64 は暗号化ではありません。"
+    },
+    {
+      "question": "JWT のペイロードにパスワードなどの秘密情報を入れてはいけない理由として正しいのはどれですか。",
+      "choices": [
+        "ペイロードはサーバーしか読めないが、サイズが大きくなるから",
+        "ペイロードは Base64 しただけで、受け取った人が誰でもデコードして読めるから",
+        "署名の計算が遅くなるから",
+        "有効期限が短くなってしまうから"
+      ],
+      "correct": 1,
+      "explanation": "ヘッダーとペイロードは Base64 変換されているだけで、暗号化されていません。受け取った人はデコードして中身を読めます。署名は改ざん検知用で中身を隠しません。だから秘密情報は入れません。"
+    },
+    {
+      "question": "実装が正しい前提で、JWT が漏れても攻撃者が「中身を書き換えた有効なトークン」を作れないのはなぜですか。",
+      "choices": [
+        "ペイロードが暗号化されていて書き換えられないから",
+        "署名はサーバーだけが持つ秘密鍵で作られ、鍵を知らない第三者は書き換えた中身の正しい署名を作り直せないから",
+        "JWT はコピーできない仕組みだから",
+        "有効期限が1秒しかないから"
+      ],
+      "correct": 1,
+      "explanation": "署名はサーバーの秘密鍵で計算されます。中身を書き換えても、秘密鍵を知らない第三者は対応する正しい署名を再生成できず、サーバーの検証で弾かれます。"
+    },
+    {
+      "question": "JWT を検証するサーバーを守る側として、設定すべき対策の組み合わせとして最も適切なのはどれですか。",
+      "choices": [
+        "許可する alg は制限せず、exp も見ない",
+        "サーバー側で許可する alg を固定し、ペイロードの exp（有効期限）を必ず検証する",
+        "署名さえ検証すれば exp は見なくてよい",
+        "ペイロードを Base64 で二重にエンコードする"
+      ],
+      "correct": 1,
+      "explanation": "alg を固定すると alg:none による検証スキップやアルゴリズム混同を防げます。さらに exp を検証しないとトークンが永久に有効になり、漏れた際に無効化できません。署名が正しくても期限は別に確認します。"
+    },
+    {
+      "question": "ユーザー入力を SQL に文字列連結で埋め込む代わりにプレースホルダー（$1 や ?）を使うと、SQL インジェクションを防げます。その理由はどれですか。",
+      "choices": [
+        "プレースホルダーが入力を暗号化するから",
+        "渡した値が SQL 命令ではなく、ただのデータとして扱われるから",
+        "プレースホルダーが WHERE 句を自動で付けるから",
+        "SQL の実行速度が上がるから"
+      ],
+      "correct": 1,
+      "explanation": "プレースホルダーに渡した値は、SQL に見える文字列であってもデータとして扱われ、命令として解釈されません。だから入力で条件を書き換えられなくなります。文字列連結での組み立ては避けます。"
+    },
+    {
+      "question": "「ログインは成功したが、管理者ページだけ 403 で見られない」。この状態の説明として正しいのはどれですか。",
+      "choices": [
+        "認証で弾かれ、認可は通っている",
+        "認証（本人確認）は通り、認可（権限確認）で弾かれている",
+        "認証も認可も両方弾かれている",
+        "認証も認可も区別はなく、単なる通信エラー"
+      ],
+      "correct": 1,
+      "explanation": "ログインが通った=認証（誰か、の確認）は成功。管理者ページで弾かれた=認可（何をしてよいか、の権限確認）で止められた状態です。認証と認可は別物として扱います。"
+    },
+    {
+      "kind": "essay",
+      "question": "「Base64 は暗号化ではない」と言われます。これはどういう意味か、そしてこの事実が JWT の扱い方（ペイロードに何を入れてよいか）にどう関わるかを説明してください。120〜350字で。",
+      "answer": "Base64 は、データを英数字などの決まった文字だけで表すための変換で、鍵を必要としません。そのため base64 のデコードコマンドに通せば、誰でも元のデータに戻せます。鍵がないと戻せない暗号化とは違い、中身を隠す働きはありません。JWT のヘッダーとペイロードは、この Base64 で変換されているだけです。つまり受け取った人は、デコードすればユーザー名や権限といった中身をそのまま読めます。だからペイロードにパスワードなどの秘密情報を入れてはいけません。JWT の署名は中身を隠すためではなく、改ざんを検知するための値です。中身は読まれる前提で、見られて困る情報は載せない、という扱い方になります。",
+      "rubric": [
+        "Base64 は鍵のいらない変換で、誰でもデコードで元に戻せると説明している",
+        "暗号化（鍵がないと戻せない・中身を隠す）との違いに触れている",
+        "JWT のヘッダー/ペイロードは Base64 なので中身を読まれる、と結びつけている",
+        "だからペイロードに秘密情報を入れない、と結論している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「鍵がいらない=誰でも戻せる」→「だから読まれる前提」という因果でつなげると筋が通ります。"
+    },
+    {
+      "kind": "sql",
+      "question": "users テーブル（id, name, role）から、role が 'admin' のユーザーだけを id の昇順で全カラム取得する SQL を書いてください。出力列は id, name, role、並び順は id の昇順。",
+      "setup": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, role TEXT);\nINSERT INTO users (id, name, role) VALUES (1,'washi','admin'),(2,'taro','viewer'),(3,'hanako','admin'),(4,'jiro','viewer');",
+      "answer": "SELECT * FROM users WHERE role = 'admin' ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "WHERE role = 'admin' で admin の行に絞り、ORDER BY id で昇順に並べます。文字列はシングルクォートで囲みます。結果は id=1 washi と id=3 hanako の2行です。"
+    },
+    {
+      "kind": "sql",
+      "question": "users（id, name）と orders（id, user_id, price）があります。各ユーザー名と、その注文件数を取得する SQL を書いてください。注文が0件のユーザーも件数0で含めること。出力列は name と注文件数、name の昇順。",
+      "setup": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);\nCREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER, price INTEGER);\nINSERT INTO users (id, name) VALUES (1,'washi'),(2,'taro'),(3,'hanako');\nINSERT INTO orders (id, user_id, price) VALUES (1,1,1000),(2,1,2000),(3,3,500);",
+      "answer": "SELECT users.name, COUNT(orders.id) FROM users LEFT JOIN orders ON users.id = orders.user_id GROUP BY users.name ORDER BY users.name;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "注文0件のユーザーも残すため LEFT JOIN を使います（INNER JOIN だと注文ゼロの taro が消えます）。GROUP BY でユーザーごとにまとめ、COUNT(orders.id) で件数を数えます。結果は hanako=1, taro=0, washi=2 です。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で Base64 エンコードされた文字列が与えられます。これをデコードした元の文字列を1行出力してください(`encoding/base64` の標準エンコーディングを使う)。入力 `RkxBR3tnb30=` なら出力は `FLAG{go}`。",
+      "setup": "package main\n\nimport (\n\t\"encoding/base64\"\n\t\"fmt\"\n)\n\nfunc main() {\n\tvar s string\n\tfmt.Scan(&s)\n\t// s を Base64 デコードして、元の文字列を出力する\n\t_ = base64.StdEncoding\n}\n",
+      "answer": "package main\n\nimport (\n\t\"encoding/base64\"\n\t\"fmt\"\n)\n\nfunc main() {\n\tvar s string\n\tfmt.Scan(&s)\n\tdata, err := base64.StdEncoding.DecodeString(s)\n\tif err != nil {\n\t\tfmt.Println(\"decode error\")\n\t\treturn\n\t}\n\tfmt.Println(string(data))\n}\n",
+      "tests": [
+        {
+          "stdin": "RkxBR3tnb30="
+        },
+        {
+          "stdin": "aGVsbG8="
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`base64.StdEncoding.DecodeString` でバイト列に戻し、`string()` で文字列化します。Base64 は鍵のいらない変換なので、誰でもこうして元に戻せます(暗号化ではありません)。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "標準入力の1行で整数が2つ、半角スペース区切りで与えられます。1つめは現在時刻、2つめはトークンの有効期限 `exp`(どちらも UNIX 秒)です。現在時刻が `exp` を過ぎていれば `token expired`、まだ有効なら `valid` を1行出力してください(現在時刻 = exp はまだ有効とする)。入力 `100 50` なら `token expired`、入力 `50 100` なら `valid`。",
+      "setup": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tvar now, exp int64\n\tfmt.Scan(&now, &exp)\n\t// now が exp を過ぎていれば token expired、そうでなければ valid を出力する\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tvar now, exp int64\n\tfmt.Scan(&now, &exp)\n\tif now > exp {\n\t\tfmt.Println(\"token expired\")\n\t\treturn\n\t}\n\tfmt.Println(\"valid\")\n}\n",
+      "tests": [
+        {
+          "stdin": "100 50"
+        },
+        {
+          "stdin": "50 100"
+        },
+        {
+          "stdin": "100 100"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "JWT は署名検証だけでなく有効期限の確認も必須です。`now > exp` なら期限切れとして拒否します。等しいときはまだ有効とするので、比較に `>=` を使うと境界(100 100)で出力が変わり不正解になります。"
+    }
+  ]
+}

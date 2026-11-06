@@ -1,0 +1,94 @@
+{
+  "lesson": 6,
+  "chapter": 3,
+  "title": "INSERT・UPDATE・DELETEとWHERE忘れ",
+  "priority": "🔴",
+  "text": "### この章で学ぶこと\n\nCRUD の残り 3 つ、INSERT(追加)・UPDATE(更新)・DELETE(削除)を扱います。どれも形は短く、すぐ書けるようになります。そのぶん大事なのが、この章でいちばん強調する「WHERE 忘れの事故」です。最後に、操作のたびに SELECT で確かめる基本のリズムを身につけます。\n\n### INSERT でレコードを追加する\n\n```sql\nINSERT INTO users (name, age) VALUES ('jiro', 22);\n```\n\n基本の形は `INSERT INTO テーブル名 (カラム) VALUES (値);` です。カラムの並びと値の並びは 1 対 1 で対応し、name に 'jiro'、age に 22 が入ります。文字列はシングルクォートで囲み、数値はそのまま書きます。\n\nid を指定していないのは、users の id が `SERIAL`(自動採番の型。1, 2, 3…と DB が番号を振る)だからです。id を自分で入れなくても、DB が次の番号を付けてくれます。カラムの指定を省いて `VALUES` だけを書くこともできますが、その場合は全カラムを定義順に並べる必要があり、表に列が増えると壊れます。カラムを明示する書き方を基本にしましょう。\n\n### UPDATE でレコードを更新する\n\n```sql\nUPDATE users SET age = 31 WHERE name = 'washi';\n```\n\nwashi の年齢を 31 に更新します。`SET` で「何をどの値にするか」、`WHERE` で「どのレコードを対象にするか」を指定します。形は `UPDATE テーブル名 SET カラム = 値 WHERE 条件;` です。\n\n### WHERE を忘れると全件が対象になる\n\nこの章でいちばん大事な注意です。UPDATE で WHERE を書き忘れると、テーブルの全レコードが更新されます。\n\n```sql\nUPDATE users SET age = 0;\n-- WHEREがないので全員のageが0になる！絶対やってはいけない\n```\n\nエラーにはなりません。DB は「条件がない=全員が対象」と解釈して、言われたとおりに全員の age を 0 にします。現場でも起きがちな事故で、元に戻すにはバックアップからの復旧が必要になることもあります。\n\n### DELETE でレコードを削除する\n\n```sql\nDELETE FROM users WHERE name = 'jiro';\n```\n\njiro のレコードを削除します。形は `DELETE FROM テーブル名 WHERE 条件;` です。こちらも WHERE を忘れて `DELETE FROM users;` と打つと、全レコードが消えます。テーブルの器(定義)は残りますが、中身は空です。\n\nUPDATE と DELETE を打つ前は、必ず WHERE があるかを確かめる癖をつけてください。\n\n```mermaid\nflowchart TB\n    A[\"UPDATE か DELETE を書いた\"] --> B{\"WHERE はあるか\"}\n    B -- \"ない\" --> C[\"全レコードが対象になる 実行しない\"]\n    B -- \"ある\" --> D[\"同じ WHERE で SELECT して対象を確認\"]\n    D --> E{\"対象は想定どおりか\"}\n    E -- \"はい\" --> F[\"実行する\"]\n    E -- \"いいえ\" --> G[\"条件を直す\"]\n    G --> D\n```\n\n記事が勧めるのは「WHERE があるかを確認する」ことです。実務ではさらに、実行前に同じ WHERE で SELECT を打ち、対象のレコードが想定どおりかを見てから実行すると安全です。\n\n### CRUD を一通り試す基本のリズム\n\n記事の手を動かすパートでは、psql で次の順に実行します。\n\n```sql\n-- 新規追加\nINSERT INTO users (name, age) VALUES ('saburo', 40);\n-- 追加されたか確認\nSELECT * FROM users WHERE name = 'saburo';\n-- 更新\nUPDATE users SET age = 41 WHERE name = 'saburo';\n-- 更新されたか確認\nSELECT * FROM users WHERE name = 'saburo';\n-- 削除\nDELETE FROM users WHERE name = 'saburo';\n-- 削除されたか確認(0件になる)\nSELECT * FROM users WHERE name = 'saburo';\n```\n\n追加・更新・削除のたびに SELECT で結果を確かめています。INSERT・UPDATE・DELETE は成功しても `INSERT 0 1` や `UPDATE 1` のような件数しか表示しないので、中身が本当に変わったかは SELECT で見るしかありません。表示される件数も手がかりになり、1 件だけ更新したつもりで `UPDATE 4` と出たら、条件が広すぎたとわかります。\n\n```mermaid\nsequenceDiagram\n    participant Me as 自分\n    participant DB as PostgreSQL\n    Me->>DB: INSERT saburo 40\n    DB-->>Me: INSERT 0 1\n    Me->>DB: SELECT で確認\n    DB-->>Me: saburo 40 が 1 件\n    Me->>DB: UPDATE age 41 WHERE saburo\n    DB-->>Me: UPDATE 1\n    Me->>DB: SELECT で確認\n    DB-->>Me: saburo 41\n    Me->>DB: DELETE WHERE saburo\n    DB-->>Me: DELETE 1\n    Me->>DB: SELECT で確認\n    DB-->>Me: 0 件\n```\n\n「追加 → 確認 → 更新 → 確認 → 削除 → 確認」が、DB をさわるときの基本のリズムです。\n\n### まとめ\n\n- INSERT は `INSERT INTO テーブル (カラム) VALUES (値);`。自動採番の id は指定しない\n- UPDATE は `UPDATE テーブル SET カラム = 値 WHERE 条件;`、DELETE は `DELETE FROM テーブル WHERE 条件;`\n- UPDATE と DELETE で WHERE を忘れると、エラーにならず全レコードが対象になる\n- 操作のたびに SELECT で結果を確かめる。表示される件数も確認の手がかりになる\n\n### 何も見ずに言えるように\n\n- 追加は INSERT INTO〜VALUES、更新は UPDATE〜SET〜WHERE、削除は DELETE FROM〜WHERE\n- UPDATE と DELETE は WHERE がないと全件が対象。打つ前に WHERE を指差し確認する\n- 変更したら SELECT で確かめる。追加 → 確認 → 更新 → 確認 → 削除 → 確認のリズム\n",
+  "quiz": [
+    {
+      "question": "users に 5 人いる状態で `UPDATE users SET age = 0;` を実行した。どうなるか。",
+      "choices": [
+        "WHERE がないのでエラーになり、何も変わらない",
+        "先頭の 1 人だけ age が 0 になる",
+        "確認のメッセージが出て、実行が止まる",
+        "5 人全員の age が 0 になる"
+      ],
+      "correct": 3,
+      "explanation": "WHERE がない UPDATE は「全レコードが対象」と解釈され、エラーにもならずに全員が更新されます。だから打つ前に WHERE があるかを必ず確かめます。"
+    },
+    {
+      "question": "id が SERIAL(自動採番)の users に 1 件追加したい。いちばん適切な SQL はどれか。",
+      "choices": [
+        "INSERT INTO users (name, age) VALUES ('jiro', 22);",
+        "INSERT INTO users VALUES ('jiro', 22);",
+        "INSERT users SET name = 'jiro', age = 22;",
+        "UPDATE users SET name = 'jiro', age = 22;"
+      ],
+      "correct": 0,
+      "explanation": "カラムを明示し、自動採番の id は省きます。カラムを省くと全カラム(id を含む)を定義順に並べる必要があり、2 つの値では足りません。UPDATE は既存レコードの更新で、追加にはなりません。"
+    },
+    {
+      "question": "`DELETE FROM users;` を実行したあとの users テーブルの状態として正しいものはどれか。",
+      "choices": [
+        "テーブルそのものが消え、SELECT するとエラーになる",
+        "テーブルは残るが、レコードは 0 件になる",
+        "最後に追加した 1 件だけが消える",
+        "WHERE がないので何も起きない"
+      ],
+      "correct": 1,
+      "explanation": "DELETE はレコードを消す操作です。WHERE がないと全レコードが消えますが、テーブルの定義は残るので SELECT すると 0 件が返ります。"
+    },
+    {
+      "question": "name = 'saburo' の 1 人だけを更新するつもりで UPDATE を打ったら、psql に `UPDATE 4` と表示された。まず考えるべきことはどれか。",
+      "choices": [
+        "正常に終わったので次の作業に進む",
+        "psql の表示が壊れているので再起動する",
+        "WHERE の条件が想定より広く、4 件が更新された可能性が高いので SELECT で確かめる",
+        "INSERT が 4 回実行されたので DELETE する"
+      ],
+      "correct": 2,
+      "explanation": "UPDATE のあとの数字は更新した件数です。1 件のつもりで 4 と出たら条件が広すぎます。SELECT で中身を確かめるのが基本のリズムです。"
+    },
+    {
+      "kind": "essay",
+      "question": "UPDATE と DELETE で WHERE を忘れると何が起きるか、なぜ危険か、事故を防ぐために打つ前と打った後に何をするかを、何も見ずに 1 分で説明するつもりで書いてください。150〜300 字で。",
+      "answer": "UPDATE や DELETE で WHERE を書き忘れると、条件がないので全レコードが対象になります。UPDATE users SET age = 0; なら全員の age が 0 になり、DELETE FROM users; なら全件が消えます。エラーにはならず DB は言われたとおりに実行するので、気づいたときには手遅れで、バックアップからの復旧が必要になることもあります。防ぐには、打つ前に WHERE があるかを必ず確認し、できれば同じ WHERE で SELECT して対象が想定どおりかを見ます。打った後は表示される件数を確かめ、SELECT で中身が意図どおりに変わったかを確認します。",
+      "rubric": [
+        "WHERE がないと全レコードが更新・削除されることを説明している",
+        "エラーにならずに実行されてしまう点、または元に戻しにくい点に触れている",
+        "打つ前に WHERE の有無を確認する(できれば同じ条件で SELECT する)対策を挙げている",
+        "実行後に件数や SELECT で結果を確かめることに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「何が起きるか → なぜ危ないか → 前後で何をするか」の順に話すと、短くても抜けがなくなります。"
+    },
+    {
+      "kind": "sql",
+      "question": "users テーブルで、washi の age を 31 に更新してください。そのあと `SELECT id, name, age FROM users ORDER BY id;` で全員を表示するところまで書きます(出力列は id, name, age、並びは id の小さい順)。",
+      "setup": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER);\nINSERT INTO users (name, age) VALUES ('washi', 30);\nINSERT INTO users (name, age) VALUES ('taro', 25);\nINSERT INTO users (name, age) VALUES ('hanako', 28);\nINSERT INTO users (name, age) VALUES ('jiro', 22);\nINSERT INTO users (name, age) VALUES ('iwata', 35);\nINSERT INTO users (name, age) VALUES ('wataru', 19);",
+      "answer": "UPDATE users SET age = 31 WHERE name = 'washi';\nSELECT id, name, age FROM users ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "WHERE name = 'washi' で対象を 1 人に絞ります。WHERE を忘れると全員が 31 になり、最後の SELECT の結果が変わるので不正解になります。なお SQLite は \"washi\" とダブルクォートで書いても通ることがありますが、PostgreSQL ではエラーになるのでシングルクォートで書きます。"
+    },
+    {
+      "kind": "sql",
+      "question": "users テーブルに name = 'saburo'、age = 40 のユーザーを追加し、続けて jiro を削除してください。最後に `SELECT id, name, age FROM users ORDER BY id;` で全員を表示します(出力列は id, name, age、並びは id の小さい順。id は自動採番に任せる)。",
+      "setup": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER);\nINSERT INTO users (name, age) VALUES ('washi', 30);\nINSERT INTO users (name, age) VALUES ('taro', 25);\nINSERT INTO users (name, age) VALUES ('hanako', 28);\nINSERT INTO users (name, age) VALUES ('jiro', 22);\nINSERT INTO users (name, age) VALUES ('iwata', 35);\nINSERT INTO users (name, age) VALUES ('wataru', 19);",
+      "answer": "INSERT INTO users (name, age) VALUES ('saburo', 40);\nDELETE FROM users WHERE name = 'jiro';\nSELECT id, name, age FROM users ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "INSERT ではカラムを明示し、id は自動採番に任せます(saburo には 7 が振られます)。DELETE で WHERE を忘れると saburo まで含めて全件が消え、0 件になります。VALUES の順番を (40, 'saburo') と逆にすると name と age が入れ替わります。"
+    }
+  ]
+}

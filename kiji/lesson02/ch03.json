@@ -1,0 +1,132 @@
+{
+  "lesson": 2,
+  "chapter": 3,
+  "title": "構造体・関数・map",
+  "priority": "🔴",
+  "text": "## 構造体・関数・map\n\nこの章では、データをまとめる構造体(struct)、処理をまとめる関数(func)、キーと値の箱である map を学びます。3つとも 🔴 覚える対象で、第4章の JSON API の材料になります。\n\n### なぜ構造体が必要か\n\nユーザー情報を変数だけで管理すると、どの name とどの age が対応するのか分からなくなります。\n\n```go\nnameA := \"washi\"\nageA := 30\nnameB := \"taro\"\nageB := 25\n// これが100人分あったら...？\n```\n\n構造体を使えば、違う型のデータをひとまとめにできます。\n\n```go\ntype User struct {\n    Name string\n    Age  int\n}\n\nuserA := User{Name: \"washi\", Age: 30}\nuserB := User{Name: \"taro\", Age: 25}\nfmt.Println(userA.Name)   // → washi\nfmt.Println(userB.Age)    // → 25\n```\n\n`type User struct { ... }` は「User 型という新しい型を作る」という宣言です。string や int が最初から用意された型なのに対し、User は自分で作った型で、一度定義すれば `var u User` のように変数の型にも、関数の引数の型にも使えます。データを作るときは `User{Name: ..., Age: ...}`、取り出すときは `user.Name` のようにドットでつなぎます。\n\n### 「定義を変える」と「実行中に足す」は違う\n\nフィールド(構造体の中の項目)を増やしたいときは、**ソースコードの定義自体を書き換えます**。プロフィールカードの印刷をやり直して欄を増やすイメージです。\n\n```go\ntype User struct {\n    Name string\n    Age  int\n    Job  string   // ← ソースコードを書き換えて追加\n}\n```\n\n一方、プログラムの実行中に定義にないフィールドを足すことはできません。\n\n```go\nuser := User{Name: \"washi\", Age: 30}\nuser.Hobby = \"Golf\"  // ← エラー！User型の定義にHobbyは存在しない\n```\n\nこれは実行してから止まるのではなく、コンパイルの時点で `u.Hobby undefined` と言われて弾かれます。後から自由にキーを足したいなら map を使います。\n\n### 関数の書き方\n\n関数は処理をまとめて名前をつけたものです。書式は次のとおりです。\n\n```go\nfunc 関数名(引数名 引数の型) 戻り値の型 {\n    処理\n    return 戻り値\n}\n\nfunc greet(u User) string {\n    return \"Hello, \" + u.Name + \"!\"\n}\n\nfunc add(a int, b int) int {\n    return a + b\n}\n```\n\n`greet(u User) string` は「User 型のデータを受け取り、関数の中では `u` と呼び、string を返す」という意味です。`u` はただの名前なので何でもよいのですが、Go の慣習では型名の頭文字を小文字にしたもの(User → u)を使います。`return` は呼び出し元に値を返します。`result := add(10, 20)` なら `result` に `30` が入ります。\n\n構造体と関数を組み合わせた処理の流れを図にすると次のとおりです。\n\n```mermaid\nsequenceDiagram\n    participant M as main\n    participant G as greet\n    M->>M: user := User{Name: washi, Age: 30}\n    M->>G: greet(user) を呼ぶ\n    Note over G: 中では u という名前で使う\n    G->>G: Hello, + u.Name + !\n    G-->>M: return Hello, washi!\n    M->>M: message に入れて Println\n```\n\n`greet(user)` で渡したデータは、関数の中では `u` という名前になります。`u.Name` は `\"washi\"` なので、`\"Hello, \" + \"washi\" + \"!\"` が組み立てられ、`return` で `message` に返ってきます。\n\n### map：キーと値の箱\n\nmap はキーと値のペアを入れる箱です。\n\n```go\n// map[キーの型]値の型{キー: 値}\ndata := map[string]string{\n    \"status\":  \"ok\",\n    \"message\": \"hello\",\n}\nfmt.Println(data[\"status\"])   // → ok\ndata[\"version\"] = \"1.0\"       // 後からキーを追加できる\ndelete(data, \"message\")       // キーの削除もできる\n```\n\n`map[string]string` は「キーも値も string の map」で、この全体がそのまま型名です。補足として、存在しないキーを読むとエラーにはならず、値の型のゼロ値(string なら `\"\"`)が返ります。上のコードで `delete` のあとに `data[\"message\"]` を読むと空文字です。また、`len(data)` でキーの数が分かります。\n\n### 構造体と map の違い\n\n| | 構造体 | map |\n|---|---|---|\n| フィールド | 定義時に固定。後から追加できない | いつでも追加・削除できる |\n| 型の混在 | フィールドごとに違う型OK | 値の型は全部同じ(キーの型も全部同じ) |\n| 型名 | 自分で定義(例: User) | `map[string]string` がそのまま型名 |\n| アクセス | `user.Name`(ドット) | `data[\"name\"]`(ブラケット) |\n| たとえ | 欄が印刷済みのプロフィールカード | 白紙のメモ帳 |\n\n`map[string]string` は値がすべて string でなければいけないので、`m[\"port\"] = 8080` のように数値を入れるとコンパイルエラーです。\n\n```mermaid\nflowchart TD\n    A[\"まとめたいデータがある\"] --> B{\"項目が最初から決まっているか\"}\n    B -- \"決まっている: ユーザー情報や商品情報\" --> S[\"構造体: 型の違う項目もまとめられる\"]\n    B -- \"柔軟: 設定値や一時的なレスポンス\" --> C{\"値の型は全部同じか\"}\n    C -- \"同じ\" --> M[\"map: キーを自由に追加・削除\"]\n    C -- \"混ざる\" --> S\n```\n\n### まとめ\n\n- 構造体は違う型のデータをまとめた自作の型。項目を増やすときは定義そのものを書き換える\n- 定義にないフィールドへの代入はコンパイルエラー。実行中に項目を足したいなら map\n- 関数は `func 名前(引数名 型) 戻り値の型`。引数は関数の中で付けた名前で使う\n- map は `map[キーの型]値の型`。追加・削除が自由だが値の型は1種類\n\n### 何も見ずに言えるように\n\n- 「構造体は欄が印刷済みのカード、map は白紙のメモ帳」\n- 「構造体は型の違う項目をまとめられるが後から増やせない。map は増やせるが値の型が1つ」\n- 「形が決まっているデータは構造体、柔軟なデータは map」\n",
+  "quiz": [
+    {
+      "question": "次のプログラムの出力はどれですか。\n\n```go\ntype User struct {\n    Name string\n    Age  int\n}\n\nfunc greet(u User) string {\n    return \"Hi, \" + u.Name + \"!\"\n}\n\nfunc main() {\n    user := User{Name: \"taro\", Age: 25}\n    message := greet(user)\n    fmt.Println(message)\n}\n```",
+      "choices": [
+        "Hi, u.Name!",
+        "Hi, user!",
+        "Hi, taro!",
+        "コンパイルエラー(main では user、greet では u と名前が違うため)"
+      ],
+      "correct": 2,
+      "explanation": "`greet(user)` で渡した User のデータは、関数の中では `u` という名前で使われます。名前が違っても中身は同じなので、`u.Name` は `\"taro\"` です。`\"Hi, \" + \"taro\" + \"!\"` が返り、`Hi, taro!` と表示されます。"
+    },
+    {
+      "question": "次のコードはどうなりますか。\n\n```go\ntype User struct {\n    Name string\n    Age  int\n}\n\nfunc main() {\n    user := User{Name: \"washi\", Age: 30}\n    user.Hobby = \"Golf\"\n    fmt.Println(user.Name)\n}\n```",
+      "choices": [
+        "`washi` と表示される。Hobby は自動で追加される",
+        "コンパイルエラーになる。User の定義に Hobby がないので、増やすなら定義を書き換えるか map を使う",
+        "`washi` と表示されたあと、Hobby の行で実行時エラーになる",
+        "Hobby が空文字として扱われ、`washi` が表示される"
+      ],
+      "correct": 1,
+      "explanation": "構造体のフィールドは定義時に固定です。定義にない `Hobby` への代入は、実行前のコンパイルの段階で `user.Hobby undefined` として弾かれます。Hobby が必要ならソースコードの定義に `Hobby string` を足すか、自由にキーを足せる map を使います。"
+    },
+    {
+      "question": "次のコードの出力はどれですか。\n\n```go\ndata := map[string]string{\n    \"status\":  \"ok\",\n    \"message\": \"hello\",\n}\ndata[\"version\"] = \"1.0\"\ndelete(data, \"message\")\nfmt.Println(len(data), \"[\" + data[\"message\"] + \"]\")\n```",
+      "choices": [
+        "2 []",
+        "3 [hello]",
+        "2 [hello]",
+        "実行時エラー(削除したキーを読んだため)"
+      ],
+      "correct": 0,
+      "explanation": "最初に2つ、`version` を足して3つ、`message` を消して2つになるので `len(data)` は2です。map で存在しないキーを読んでもエラーにはならず、値の型のゼロ値(string なら空文字)が返ります。そのため `[]` と表示されます。"
+    },
+    {
+      "question": "`m := map[string]string{}` のあとに `m[\"port\"] = 8080` と書いたところコンパイルエラーになりました。理由として正しいものはどれですか。",
+      "choices": [
+        "map は作成したあとにキーを追加できないから",
+        "`{}` で作った map は空なので、書き込む前に `delete` が必要だから",
+        "キーの `\"port\"` が予約語だから",
+        "`map[string]string` は値の型が string と決まっており、int の 8080 は入れられないから"
+      ],
+      "correct": 3,
+      "explanation": "map はキーをいつでも追加できますが、値の型は宣言した1種類に揃える必要があります。`map[string]string` の値に int は入りません。`\"8080\"` と文字列にするか、型の違う項目を持てる構造体を使います。"
+    },
+    {
+      "question": "`func describe(u User) string { ... }` という関数の宣言を読み取った説明として正しいものはどれですか。",
+      "choices": [
+        "`describe` という名前で、User 型の値を受け取って中では `u` と呼び、string を返す",
+        "`u` という名前の関数で、`describe` 型の値を返す",
+        "User 型の値を返し、引数として string を受け取る",
+        "引数名は必ず型名の頭文字でなければならないので、`u` 以外の名前にするとエラーになる"
+      ],
+      "correct": 0,
+      "explanation": "書式は `func 関数名(引数名 引数の型) 戻り値の型` です。`describe` が関数名、`u User` が「User 型を受け取り中では u と呼ぶ」、最後の `string` が戻り値の型です。`u` という名前は慣習であって、`person` などにしても動きます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "構造体と関数を組み合わせます。標準入力から「名前 年齢」(半角スペース区切り)を読み、次の2行を出力するプログラムを書いてください。\n\n- `Name string` と `Age int` を持つ構造体 `User` を定義する\n- `func greet(u User) string` … `Hello, 名前!` という文字列を返す\n- `func isAdult(u User) bool` … 年齢が 20 以上なら true を返す\n- 出力1行目: `greet` の戻り値\n- 出力2行目: `adult: true` または `adult: false`\n\n例: 入力 `washi 30` → 出力\n```\nHello, washi!\nadult: true\n```",
+      "setup": "package main\n\nimport \"fmt\"\n\n// ここに User 構造体を定義する\n\n// ここに greet と isAdult を書く\n\nfunc main() {\n    var name string\n    var age int\n    fmt.Scan(&name, &age)\n\n    // User を作って greet と isAdult を使う\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\ntype User struct {\n    Name string\n    Age  int\n}\n\nfunc greet(u User) string {\n    return \"Hello, \" + u.Name + \"!\"\n}\n\nfunc isAdult(u User) bool {\n    return u.Age >= 20\n}\n\nfunc main() {\n    var name string\n    var age int\n    fmt.Scan(&name, &age)\n\n    user := User{Name: name, Age: age}\n    fmt.Println(greet(user))\n    fmt.Println(\"adult:\", isAdult(user))\n}\n",
+      "tests": [
+        {
+          "stdin": "washi 30\n"
+        },
+        {
+          "stdin": "taro 20\n"
+        },
+        {
+          "stdin": "jiro 19\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "記事の【手を動かす③】を自分で組み立てる問題です。`type User struct { ... }` で型を作り、`User{Name: name, Age: age}` でデータを作って関数に渡します。関数の中では引数名 `u` で `u.Name` / `u.Age` を読みます。境界の 20 歳を true にするには `>=` が必要で、`>` と書くと `taro 20` のテストで false になります。bool も Println にそのまま渡せば `true` / `false` と表示されます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "map の操作です。標準入力の1行目に件数 N、続く N 行に「キー 値」(どちらも空白を含まない1語)が来ます。これを `map[string]string` に順に入れたあと、キー `message` を削除し、次の2行を出力してください。\n\n- 1行目: `count: 削除後のキーの数`\n- 2行目: `status: [status の値]`(status が無ければ `status: []`)\n\n同じキーが2回出てきたら、後の値で上書きします。\n\n例: 入力\n```\n3\nstatus ok\nmessage hello\nversion 1.0\n```\n→ 出力\n```\ncount: 2\nstatus: [ok]\n```",
+      "setup": "package main\n\nimport \"fmt\"\n\nfunc main() {\n    var n int\n    fmt.Scan(&n)\n\n    // ここで map を作る\n\n    for i := 0; i < n; i++ {\n        var key, value string\n        fmt.Scan(&key, &value)\n        // map に入れる\n    }\n\n    // message を削除して、2行出力する\n}\n",
+      "answer": "package main\n\nimport \"fmt\"\n\nfunc main() {\n    var n int\n    fmt.Scan(&n)\n\n    data := map[string]string{}\n\n    for i := 0; i < n; i++ {\n        var key, value string\n        fmt.Scan(&key, &value)\n        data[key] = value\n    }\n\n    delete(data, \"message\")\n    fmt.Println(\"count:\", len(data))\n    fmt.Println(\"status: [\" + data[\"status\"] + \"]\")\n}\n",
+      "tests": [
+        {
+          "stdin": "3\nstatus ok\nmessage hello\nversion 1.0\n"
+        },
+        {
+          "stdin": "2\nstatus ok\nstatus ng\n"
+        },
+        {
+          "stdin": "1\nmessage hi\n"
+        },
+        {
+          "stdin": "0\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`data := map[string]string{}` で空の map を作り、`data[key] = value` で追加します。同じキーへの代入は追加ではなく上書きなので、キーの数は増えません。`delete` は存在しないキーを指定してもエラーにならず、存在しないキーを読むとゼロ値(空文字)が返るので、`status` が無い入力でも `status: []` と出せます。`len` を `delete` の前に出力すると件数が1つ多くなる間違いに注意してください。"
+    },
+    {
+      "kind": "essay",
+      "question": "構造体と map の違いを2つ以上挙げ、どんなデータにどちらを使うかを、何も見ずに1分で説明してください。",
+      "answer": "1つ目の違いは項目の固さです。構造体はフィールドが定義時に固定され、実行中に定義にない項目を足すとコンパイルエラーになります。増やすならソースコードの定義を書き換えます。map はキーをいつでも追加・削除できます。2つ目は型の混在です。構造体は Name string と Age int のようにフィールドごとに違う型を持てますが、map[string]string は値がすべて string でなければなりません。さらに、構造体は User のように自分で型名を付けて user.Name とドットで読み、map は map[string]string がそのまま型名で data[\"name\"] とブラケットで読みます。使い分けは、ユーザー情報や商品情報のように形が決まっているデータは構造体、設定値や一時的なレスポンスのように形が柔軟なデータは map です。",
+      "rubric": [
+        "構造体はフィールドが固定で後から追加できず、map はキーを自由に追加・削除できることを説明している",
+        "構造体は型の違う項目を混ぜられるが、map は値の型が1種類に揃うことを説明している",
+        "形が決まったデータは構造体、柔軟なデータは map という使い分けを具体例つきで述べている",
+        "アクセス方法(ドットとブラケット)や型名の違いなど、3つ目の違いにも触れていれば加点"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「欄が印刷済みのプロフィールカード(構造体)」と「白紙のメモ帳(map)」の対比で覚えると、固定/自由・型の混在の2点がすぐ出てきます。第4章の `{\"host\":\"tokyo\",\"port\":8080}` のように型が混ざる JSON を構造体で作る理由もここにあります。"
+    }
+  ]
+}
