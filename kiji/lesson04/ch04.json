@@ -1,0 +1,118 @@
+{
+  "lesson": 4,
+  "chapter": 4,
+  "title": "SELECTと3メソッドの使い分け",
+  "priority": "🔴",
+  "text": "### getUsersHandler の全体\n\n部品③の `getUsersHandler()` は、DB から全ユーザーを取り出し、配列にして返します。INSERT(1 件)と違って SELECT は複数件を扱うので、受け取り方が変わります。\n\n```go\nfunc getUsersHandler(w http.ResponseWriter, r *http.Request) {\n    rows, err := db.Query(\"SELECT id, name, age FROM users\")\n    if err != nil {\n        http.Error(w, \"Internal server error\", http.StatusInternalServerError)\n        return\n    }\n    defer rows.Close()\n\n    var users []User\n    for rows.Next() {\n        var u User\n        err := rows.Scan(&u.ID, &u.Name, &u.Age)\n        if err != nil {\n            http.Error(w, \"Internal server error\", http.StatusInternalServerError)\n            return\n        }\n        users = append(users, u)\n    }\n\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    json.NewEncoder(w).Encode(users)\n}\n```\n\n### `db.Query` は結果への入り口を返す\n\n`db.Query(...)` は SQL を実行して**複数行の結果**を受け取るメソッドです。返ってくる `rows` は、この時点ではまだ「結果への入り口」です。中身はこのあと 1 行ずつ取り出します。\n\n### `defer rows.Close()` で閉じ忘れを防ぐ\n\n`defer` は「この関数が終わる直前に実行する」という予約です。`rows` は使い終わったら閉じる必要があります。閉じないと DB との接続が解放されず、占有されたままになります(リソースリーク。使い終わった資源が返されず溜まること)。\n\n最後の行に普通に `rows.Close()` と書くと、途中のエラーで `return` したときに実行されません。`defer` で予約しておけば、関数がどこで終わっても必ず実行されます。「開けたら閉じる」を確実にする書き方です。`defer` は `db.Query` のエラーチェックの**後**に置きます。失敗したときの `rows` は使えないからです。\n\n### `for rows.Next()` で 1 行ずつ読む\n\n`rows.Next()` は次の行へ進み、行があれば `true`、もう行がなければ `false` を返します。`for` と組み合わせると「行がある限り繰り返す」になります。結果に読み取り位置(カーソル)があり、`Next()` のたびに 1 行ずつ進む、と考えると分かりやすいです。\n\n```mermaid\nflowchart TD\n    Q[\"db.Query で SELECT を実行\"] --> E{\"err は nil か\"}\n    E -->|\"いいえ\"| R1[\"500 を返して return\"]\n    E -->|\"はい\"| D[\"defer rows.Close を予約\"]\n    D --> N{\"rows.Next で次の行があるか\"}\n    N -->|\"ある\"| S[\"rows.Scan で u に読み込む\"]\n    S --> AP[\"append で users に追加\"]\n    AP --> N\n    N -->|\"もうない\"| J[\"users を JSON にして返す\"]\n    J --> C[\"関数の終わりに rows.Close が実行される\"]\n```\n\nループの中では、毎回新しい空の `User`(`var u User`)を用意し、`rows.Scan(&u.ID, &u.Name, &u.Age)` で今の行の値を書き込みます。**SELECT で並べた列の順番(id, name, age)と、Scan の引数の順番を一致させる**必要があります。最後に `append(users, u)` でスライスの末尾に追加し、結果を `users` に入れ直します。`[]User` は User が複数並んだリスト(スライス)の型です。\n\n補足として、ループが途中の読み込みエラーで終わった場合に備え、本番のコードではループの後に `rows.Err()` も確かめます。記事のコードでは省略されています。\n\n### 返し方と 0 件のとき\n\n`users` を `json.NewEncoder(w).Encode(users)` で返すと、JSON の配列 `[{...},{...}]` になります。`WriteHeader` を呼んでいないので、ステータスは自動で 200(OK)です。\n\nデータが 0 件のとき、`var users []User` は nil のままなので、JSON は `[]` ではなく `null` になります。空配列を返したいなら `users := []User{}` と初期化しておきます。\n\n### 3 つのメソッドの使い分け\n\n| メソッド | 用途 | 戻り値 | 例 |\n|---|---|---|---|\n| `db.Exec` | 結果の行が要らない SQL | 実行結果(影響行数など) | CREATE / INSERT / UPDATE / DELETE |\n| `db.Query` | 複数行を取得する | 複数行(rows) | `SELECT id, name, age FROM users` |\n| `db.QueryRow` | 1 行だけ取得する | 1 行 | `SELECT ... WHERE id = $1` / `INSERT ... RETURNING id` |\n\n```mermaid\nflowchart TD\n    S[\"実行したい SQL\"] --> G{\"データを取ってくるか\"}\n    G -->|\"取ってこない 作る 変える 消すだけ\"| EX[\"db.Exec\"]\n    G -->|\"取ってくる\"| K{\"何行返るか\"}\n    K -->|\"複数かもしれない\"| QU[\"db.Query と rows.Next\"]\n    K -->|\"必ず 1 行\"| QR[\"db.QueryRow と Scan\"]\n```\n\n判断は「データを取ってくるか」「何行か」の 2 段です。INSERT でも `RETURNING id` で 1 行返してもらうなら `QueryRow` を使います。\n\n### main で組み立てる\n\n```go\nfunc main() {\n    initDB()\n\n    http.HandleFunc(\"/users\", func(w http.ResponseWriter, r *http.Request) {\n        if r.Method == http.MethodGet {\n            getUsersHandler(w, r)\n        } else if r.Method == http.MethodPost {\n            createUserHandler(w, r)\n        } else {\n            http.Error(w, \"Method not allowed\", http.StatusMethodNotAllowed)\n        }\n    })\n\n    http.ListenAndServe(\":8080\", nil)\n}\n```\n\n最初に `initDB()` で接続とテーブル作成を済ませます。`http.HandleFunc` の第 2 引数は、その場で書いた名前のない関数(無名関数)です。同じ `/users` で GET と POST を振り分けるために使い、それ以外のメソッドには 405 を返します。`ListenAndServe` はリクエストを待ち続けるので、main の最後に書きます。8080 番が他のアプリで使われているときは `:8081` などに変えます。\n\n### まとめ\n\n- 複数行は `db.Query` で受け取り、`for rows.Next()` で 1 行ずつ `Scan` する\n- `defer rows.Close()` で、途中で return しても必ず閉じる\n- SELECT の列の順番と Scan の引数の順番をそろえる\n- 取ってこない SQL は Exec、複数行は Query、1 行は QueryRow\n\n### 何も見ずに言えるように\n\n- 一覧取得は「Query → defer Close → for Next で Scan して append → JSON で返す」\n- defer は関数の終わりに必ず実行される予約なので、閉じ忘れを防げる\n- Exec・Query・QueryRow は「取ってくるか」「何行か」で選ぶ\n",
+  "quiz": [
+    {
+      "question": "getUsersHandler で `rows.Close()` を defer ではなく関数の最後の行に書きました。どんな問題があるか。",
+      "choices": [
+        "ループ内の Scan でエラーが起きて途中で return すると、Close が実行されずに接続が解放されない",
+        "最後の行に書くとコンパイルエラーになる",
+        "Close が 2 回呼ばれてエラーになる",
+        "最後の行に書いても defer と同じで、どこで return しても必ず実行される"
+      ],
+      "correct": 0,
+      "explanation": "途中の return では、その後ろの行は実行されません。defer で予約しておけば、関数がどこで終わっても必ず実行されるので、閉じ忘れ(リソースリーク)を防げます。"
+    },
+    {
+      "question": "`SELECT id, name, age FROM users` に対して `rows.Scan(&u.Name, &u.ID, &u.Age)` と書きました。何が起きるか。",
+      "choices": [
+        "Scan はフィールド名を見て自動で正しい場所に入れる",
+        "rows.Next が false を返し、ループが 1 回も回らない",
+        "Scan は SELECT の列の順に値を書き込むので、1 列目の id(整数)が Name に、2 列目の name(文字列)が ID に入ろうとして、意図どおりにならない",
+        "JSON タグがあるので、JSON に変換するときに正しく並べ直される"
+      ],
+      "correct": 2,
+      "explanation": "Scan は SELECT で並べた列の順番どおりに、引数の場所へ書き込みます。列名とフィールド名の対応は見ません。name の文字列を int の ID に入れることはできないので、多くはエラーになります。"
+    },
+    {
+      "question": "users テーブルが空のときに GET /users を呼ぶと、記事のコードは何を返すか。",
+      "choices": [
+        "[](空の配列)",
+        "404 Not Found",
+        "500 Internal Server Error",
+        "null(var users []User が nil のまま Encode されるため)"
+      ],
+      "correct": 3,
+      "explanation": "1 行もなければ append が一度も呼ばれず、users は nil のままです。nil のスライスは JSON で null になります。[] を返したいなら users := []User{} と初期化します。"
+    },
+    {
+      "question": "次の SQL を実行したい。Exec / Query / QueryRow の選び方として正しい組み合わせはどれか。\n(a) DELETE FROM users WHERE id = $1\n(b) SELECT name FROM users WHERE age >= $1\n(c) SELECT name, age FROM users WHERE id = $1",
+      "choices": [
+        "(a) Query (b) QueryRow (c) Exec",
+        "(a) Exec (b) Query (c) QueryRow",
+        "(a) QueryRow (b) Exec (c) Query",
+        "(a) Exec (b) QueryRow (c) Query"
+      ],
+      "correct": 1,
+      "explanation": "(a) は消すだけで行を取ってこないので Exec。(b) は条件に合う人が複数いるかもしれないので Query。(c) は主キーで絞るので必ず 1 行で、QueryRow です。"
+    },
+    {
+      "kind": "essay",
+      "question": "getUsersHandler が DB から全ユーザーを取り出して JSON で返すまでの流れを、db.Query・defer rows.Close()・rows.Next()・rows.Scan の役割に触れながら、何も見ずに 1 分で説明するつもりで書いてください。150〜350 字で。",
+      "answer": "まず db.Query で SELECT id, name, age FROM users を実行し、複数行の結果への入り口 rows を受け取ります。失敗したら 500 を返して return します。成功したら defer rows.Close() で、関数の終わりに必ず rows を閉じるよう予約します。途中で return しても実行されるので、接続の閉じ忘れを防げます。次に for rows.Next() で、行がある限り 1 行ずつ進みます。各行では空の User を用意し、rows.Scan(&u.ID, &u.Name, &u.Age) で今の行の値を書き込みます。Scan の引数は SELECT の列と同じ順番にします。読み込んだ u を append で users スライスに追加し、ループが終わったら users を JSON の配列にして返します。",
+      "rubric": [
+        "db.Query で複数行の結果(rows)を受け取ることを説明している",
+        "defer rows.Close() が途中で return しても必ず閉じるための予約だと説明している",
+        "rows.Next() で行がある限り 1 行ずつ進むループになることを説明している",
+        "rows.Scan で各行を変数に書き込み、append で溜めて JSON で返す流れがある"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「Query → defer Close → for Next で Scan して append → JSON」の順が言えれば合格です。Scan の列順に触れられるとなお良いです。"
+    },
+    {
+      "kind": "sql",
+      "question": "部品①〜③の発展として、db.Exec で送る UPDATE を試します。taro の age を 26 に更新してから、全ユーザーの id, name, age を id の昇順で表示してください(出力列: id, name, age の 3 列)。",
+      "setup": "CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  age INTEGER NOT NULL\n);\nINSERT INTO users (name, age) VALUES ('washi', 30);\nINSERT INTO users (name, age) VALUES ('taro', 25);\nINSERT INTO users (name, age) VALUES ('hanako', 22);\nINSERT INTO users (name, age) VALUES ('jiro', 41);\nINSERT INTO users (name, age) VALUES ('yuki', 25);\n",
+      "answer": "UPDATE users SET age = 26 WHERE name = 'taro';\nSELECT id, name, age FROM users ORDER BY id;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "taro(id 2)だけが 26 になり、他の 4 人は元のままです。`WHERE` を付け忘れると全員の age が 26 になります。UPDATE は行を返さないので、Go では db.Exec で送ります。\n\n```sql\nUPDATE users SET age = 26 WHERE name = 'taro';\nSELECT id, name, age FROM users ORDER BY id;\n```"
+    },
+    {
+      "kind": "sql",
+      "question": "QueryRow で 1 行だけ取り出す場面です。id が 4 のユーザーの name と age を表示してください(出力列: name, age の 2 列)。",
+      "setup": "CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  age INTEGER NOT NULL\n);\nINSERT INTO users (name, age) VALUES ('washi', 30);\nINSERT INTO users (name, age) VALUES ('taro', 25);\nINSERT INTO users (name, age) VALUES ('hanako', 22);\nINSERT INTO users (name, age) VALUES ('jiro', 41);\nINSERT INTO users (name, age) VALUES ('yuki', 25);\n",
+      "answer": "SELECT name, age FROM users WHERE id = 4;",
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "結果は jiro 41 の 1 行です。WHERE を付け忘れると 5 行返ります。主キーで絞るので結果は必ず 1 行以下になり、Go では `db.QueryRow(\"SELECT name, age FROM users WHERE id = $1\", id).Scan(&u.Name, &u.Age)` のように受け取ります。\n\n```sql\nSELECT name, age FROM users WHERE id = 4;\n```"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "getUsersHandler の心臓部を自分で書きます。`*sql.Rows` の代わりの Rows(Next・Scan・Close を持つ。中身は SELECT id, name, age FROM users の結果)を受け取り、`[]User` を返す `listUsers(rows *Rows) ([]User, error)` を完成させてください。\n\n- `for rows.Next()` で 1 行ずつ進み、`rows.Scan` で id, name, age を User に読み込んで溜める\n- Scan がエラーを返したら、そこで `nil` とそのエラーを返す\n- 途中でエラーになっても、正常に終わっても、関数を抜けるときに必ず `rows.Close()` が呼ばれるようにする\n- 0 行なら空のスライスを返す(main が JSON にしたとき `[]` になるように)\n\nmain は標準入力の各行「id,name,age」を Rows にしてから listUsers を呼び、結果の JSON(エラーなら `500 エラー`)と、最後に `closed: true/false` を出力します。",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n\t\"strings\"\n)\n\ntype User struct {\n\tID   int    `json:\"id\"`\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// ---- ここから下は「*sql.Rows の代わり」。変えなくてよい ----\n\ntype Rows struct {\n\tdata   [][]string\n\ti      int\n\tClosed bool\n}\n\nfunc (r *Rows) Next() bool {\n\tif r.Closed || r.i >= len(r.data) {\n\t\treturn false\n\t}\n\tr.i++\n\treturn true\n}\n\nfunc (r *Rows) Scan(dest ...any) error {\n\trow := r.data[r.i-1]\n\tif len(dest) != len(row) {\n\t\treturn fmt.Errorf(\"sql: expected %d destination arguments in Scan, not %d\", len(row), len(dest))\n\t}\n\tfor k, d := range dest {\n\t\tswitch p := d.(type) {\n\t\tcase *int:\n\t\t\tn, err := strconv.Atoi(row[k])\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"sql: Scan error on column index %d: converting %q to int\", k, row[k])\n\t\t\t}\n\t\t\t*p = n\n\t\tcase *string:\n\t\t\t*p = row[k]\n\t\tdefault:\n\t\t\treturn fmt.Errorf(\"sql: Scan error on column index %d: destination not a pointer\", k)\n\t\t}\n\t}\n\treturn nil\n}\n\nfunc (r *Rows) Close() error {\n\tr.Closed = true\n\treturn nil\n}\n\n// ---- ここまで ----\n\n// listUsers は SELECT id, name, age FROM users の結果 rows から []User を作る\nfunc listUsers(rows *Rows) ([]User, error) {\n\t// TODO\n\treturn nil, nil\n}\n\nfunc main() {\n\trows := &Rows{}\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tif f := strings.Split(sc.Text(), \",\"); len(f) == 3 {\n\t\t\trows.data = append(rows.data, f) // SELECT id, name, age FROM users の 1 行\n\t\t}\n\t}\n\tusers, err := listUsers(rows)\n\tif err != nil {\n\t\tfmt.Println(\"500\", err)\n\t} else {\n\t\tb, _ := json.Marshal(users)\n\t\tfmt.Println(string(b))\n\t}\n\tfmt.Println(\"closed:\", rows.Closed)\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"strconv\"\n\t\"strings\"\n)\n\ntype User struct {\n\tID   int    `json:\"id\"`\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\n// ---- ここから下は「*sql.Rows の代わり」。変えなくてよい ----\n\ntype Rows struct {\n\tdata   [][]string\n\ti      int\n\tClosed bool\n}\n\nfunc (r *Rows) Next() bool {\n\tif r.Closed || r.i >= len(r.data) {\n\t\treturn false\n\t}\n\tr.i++\n\treturn true\n}\n\nfunc (r *Rows) Scan(dest ...any) error {\n\trow := r.data[r.i-1]\n\tif len(dest) != len(row) {\n\t\treturn fmt.Errorf(\"sql: expected %d destination arguments in Scan, not %d\", len(row), len(dest))\n\t}\n\tfor k, d := range dest {\n\t\tswitch p := d.(type) {\n\t\tcase *int:\n\t\t\tn, err := strconv.Atoi(row[k])\n\t\t\tif err != nil {\n\t\t\t\treturn fmt.Errorf(\"sql: Scan error on column index %d: converting %q to int\", k, row[k])\n\t\t\t}\n\t\t\t*p = n\n\t\tcase *string:\n\t\t\t*p = row[k]\n\t\tdefault:\n\t\t\treturn fmt.Errorf(\"sql: Scan error on column index %d: destination not a pointer\", k)\n\t\t}\n\t}\n\treturn nil\n}\n\nfunc (r *Rows) Close() error {\n\tr.Closed = true\n\treturn nil\n}\n\n// ---- ここまで ----\n\nfunc listUsers(rows *Rows) ([]User, error) {\n\tdefer rows.Close()\n\n\tusers := []User{}\n\tfor rows.Next() {\n\t\tvar u User\n\t\tif err := rows.Scan(&u.ID, &u.Name, &u.Age); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tusers = append(users, u)\n\t}\n\treturn users, nil\n}\n\nfunc main() {\n\trows := &Rows{}\n\tsc := bufio.NewScanner(os.Stdin)\n\tfor sc.Scan() {\n\t\tif f := strings.Split(sc.Text(), \",\"); len(f) == 3 {\n\t\t\trows.data = append(rows.data, f) // SELECT id, name, age FROM users の 1 行\n\t\t}\n\t}\n\tusers, err := listUsers(rows)\n\tif err != nil {\n\t\tfmt.Println(\"500\", err)\n\t} else {\n\t\tb, _ := json.Marshal(users)\n\t\tfmt.Println(string(b))\n\t}\n\tfmt.Println(\"closed:\", rows.Closed)\n}\n",
+      "tests": [
+        {
+          "stdin": "1,washi,30\n2,taro,25\n"
+        },
+        {
+          "stdin": ""
+        },
+        {
+          "stdin": "1,washi,30\n2,taro,abc\n3,hanako,22\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "模範解答は次のとおりです。\n\n```go\nfunc listUsers(rows *Rows) ([]User, error) {\n\tdefer rows.Close()\n\n\tusers := []User{}\n\tfor rows.Next() {\n\t\tvar u User\n\t\tif err := rows.Scan(&u.ID, &u.Name, &u.Age); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tusers = append(users, u)\n\t}\n\treturn users, nil\n}\n```\n\nよくある書き間違いは 3 つあります。`rows.Close()` を defer にせず最後に書くと、3 つ目のテスト(2 行目の age が数字でない)で途中の return を通るので `closed: false` になります。`var users []User` で始めると、2 つ目のテスト(0 行)で `null` になります。Scan の引数を `&u.Name, &u.ID, &u.Age` の順にすると、1 列目の id が Name に、2 列目の name が ID に入ろうとしてエラーになります。Scan は SELECT の列の順に書き込みます。"
+    }
+  ]
+}

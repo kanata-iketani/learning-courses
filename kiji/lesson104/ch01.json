@@ -1,0 +1,105 @@
+{
+  "lesson": 104,
+  "chapter": 1,
+  "title": "型が要る理由とtscの役割",
+  "priority": "🔴",
+  "text": "### JavaScript だけだと、壊れても黙っている\n\n#2・#3 で書いてきた JavaScript のコードには弱点があります。間違ったコードを書いても、**実行するまで誰も教えてくれない**ことです。記事の最初の例を見ます。\n\n```js\n// bug.js\nfunction total(price, count) {\n  return price * count;\n}\nconsole.log(total(1200, \"2個\"));\n```\n\n`total` は価格と個数を掛けるだけの関数です。ところが `count` に数値ではなく `\"2個\"` という文字列を渡してしまいました。実行すると次のように出ます。\n\n```\nNaN\n```\n\nエラーにすらなりません。`NaN`(Not a Number。「数値ではない」ことを表す特殊な数値)が静かに返るだけです。この値がカートの合計金額として画面に出れば、ユーザーには「合計 ¥NaN」が見えます。\n\n問題は**気づくタイミング**です。書いた瞬間でも保存した瞬間でもなく、その関数が実行された瞬間に初めて壊れます。テストで文字列を渡すケースを試していなければ、最初にこのバグを踏むのは本番のユーザーです。\n\n型は「ここには数値しか入らない」という宣言です。宣言しておけば、文字列を渡そうとした時点で弾かれます。ユーザーが踏むまで待つ必要がなくなります。\n\n### TypeScript は「実行前のチェック」を足した JavaScript\n\nTypeScript は、JavaScript に型の宣言を書けるようにした言語です。文法はほぼ JavaScript のままで、#2・#3 で学んだ書き方はすべてそのまま使えます。\n\n大事なのは **TypeScript がいつ動くか** です。ブラウザや Node.js が実行できるのは JavaScript だけで、`.ts` ファイルはそのままでは動きません。実行の前に `tsc`(TypeScript コンパイラ。型チェックと変換を行うツール)が次の 2 つを行います。\n\n1. 型をチェックし、間違いがあればエラーとして報告する\n2. 型の記述を消した JavaScript(`.js`)に変換する\n\n```mermaid\nflowchart LR\n  A[\"total.ts (型つき)\"] --> B[\"tsc で型チェック\"]\n  B -->|\"型エラーあり\"| C[\"エラーを報告 (行と列つき)\"]\n  B -->|\"問題なし\"| D[\"型を消して total.js に変換\"]\n  D --> E[\"node / ブラウザが実行\"]\n  C -.->|\"直して再実行\"| A\n```\n\nブラウザが実際に実行しているのは変換後の JavaScript です。型は変換の時点で消えているので、**実行時には型は存在しません**。そのため「TypeScript にすると実行が遅くなる」ということはありません。逆に言うと、型チェックの効果は実行前にしか働きません(この「実行時に型が消える」点を補う方法は #5 で扱われます)。\n\n### 最初の型エラーを出してみる\n\n導入は Node.js があれば 1 分で済みます。\n\n```sh\nmkdir ts-practice && cd ts-practice\nnpm init -y            # package.json を作る\nnpm install typescript # TypeScript(tsc)をこのフォルダに入れる\n```\n\n先ほどの壊れるコードに型を付けて `total.ts` として保存します。\n\n```ts\n// total.ts\nfunction total(price: number, count: number): number {\n  return price * count;\n}\nconsole.log(total(1200, \"2個\"));\n```\n\n`price: number` が**型注釈**(変数や引数の後ろに「: 型」を書いて型を宣言すること)です。引数リストの `)` の後ろにある `: number` は「この関数は数値を返す」という宣言です。`npx tsc total.ts` でコンパイルすると次のエラーが出ます。\n\n```\ntotal.ts(4,25): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.\n```\n\n`(4,25)` は 4 行目の 25 文字目、つまり `\"2個\"` を渡した場所です。メッセージは「string 型の引数は number 型のパラメータに渡せない」という意味です。**一度も実行していないのに、バグの場所まで特定されています。**これが型チェックです。\n\n`\"2個\"` を `2` に直して再度 `npx tsc total.ts` を実行するとエラーが消え、`node total.js` で `2400` が出ます。\n\n### エラーがあっても .js はできている\n\n記事の最後で触れられている注意点です。`total.ts` でエラーが出た状態でも、実は `total.js` は生成されていました。デフォルトの `tsc` は「**エラーを報告しつつ、変換は続行する**」という挙動です。これは tsconfig.json(tsc の設定ファイル)の `noEmitOnError` で止められますが、今は「エラーが出ても .js ができることがある」とだけ覚えておけば十分です。\n\n```mermaid\nsequenceDiagram\n  participant Dev as 開発者\n  participant Ed as エディタ\n  participant T as tsc\n  participant U as ユーザー\n  Dev->>Ed: コードを書く\n  Ed-->>Dev: 赤い波線で型エラーを表示\n  Dev->>T: npx tsc (ビルド)\n  T-->>Dev: 型エラーを行と列つきで報告\n  Note over Dev,U: JS だけなら、ここまで誰も教えてくれない\n  Dev->>U: 公開\n```\n\n実務では毎回 `npx tsc` を手で打つことはほとんどありません。VS Code などのエディタが裏で同じチェックを常に走らせていて、書いた瞬間に赤い波線で教えてくれます。保存すらしていない段階でエラーが分かるのが、エディタと TypeScript の組み合わせです。\n\n### まとめ\n\n- JavaScript だけでは、型の間違いに実行するまで気づけない。`NaN` のように静かに壊れることもある\n- TypeScript は実行前に `tsc` が型チェックし、型を消した JavaScript に変換する\n- ブラウザや Node.js が実行するのは変換後の JavaScript。型は実行時には存在しない\n- エラーは `ファイル(行,列)` で場所まで示される。デフォルトではエラーがあっても .js は出力される\n\n### 何も見ずに言えるように\n\n- JS はバグに「実行した時」気づく。TS は「実行する前」に気づける\n- tsc が型チェックをして、型を消した JS に変換する。動いているのは JS\n- 実務ではエディタが常にチェックしていて、書いた瞬間に赤線が出る\n",
+  "quiz": [
+    {
+      "question": "次の JavaScript を実行したときの出力はどれか。\n\n```js\nfunction total(price, count) {\n  return price * count;\n}\nconsole.log(total(1200, \"2個\"));\n```",
+      "choices": [
+        "TypeError: count is not a number",
+        "NaN",
+        "12002個",
+        "2400"
+      ],
+      "correct": 1,
+      "explanation": "数値と数値に変換できない文字列を掛けると、エラーにならず NaN が返ります。JavaScript はこのように「静かに壊れる」ので、画面に「¥NaN」が出るまで気づけないことがあります。"
+    },
+    {
+      "question": "TypeScript のファイル(.ts)とブラウザの関係として正しいものはどれか。",
+      "choices": [
+        "ブラウザは .ts をそのまま読み込み、実行しながら型をチェックする",
+        "ブラウザは .ts を実行できるが、型チェックは Node.js でしか行われない",
+        "tsc が .ts を実行時に毎回 JavaScript へ変換するので、TS を使うと実行が遅くなる",
+        "tsc が実行前に型をチェックし、型を消した JavaScript に変換する。ブラウザが実行するのはその JavaScript"
+      ],
+      "correct": 3,
+      "explanation": "ブラウザや Node.js が実行できるのは JavaScript だけです。型チェックと変換は実行前に tsc が済ませ、型は変換時に消えるので、実行時の速度には影響しません。"
+    },
+    {
+      "question": "`npx tsc total.ts` を実行したら次のエラーが出た。この表示から読み取れることとして正しいものはどれか。\n\n```\ntotal.ts(4,25): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.\n```",
+      "choices": [
+        "4 行目 25 文字目で、number 型の引数に string 型の値を渡している",
+        "4 番目の関数の 25 個目の引数が足りない",
+        "total.ts を 4 回目にコンパイルしたときに 25 件のエラーが出た",
+        "実行時に 4 行目で string が number に変換され、25 になった"
+      ],
+      "correct": 0,
+      "explanation": "`(行,列)` の形でエラーの場所が示されます。メッセージは「string 型の引数は number 型のパラメータに渡せない」で、まだ一度も実行していない段階で見つかっています。"
+    },
+    {
+      "question": "total.ts に型エラーがある状態で、設定を何も変えずに `npx tsc total.ts` を実行した。total.js はどうなるか。",
+      "choices": [
+        "型エラーがあるので total.js は必ず作られない",
+        "total.js は作られるが、中身は空になる",
+        "エラーは報告されるが、total.js は生成される",
+        "型エラーの行だけを削除した total.js が作られる"
+      ],
+      "correct": 2,
+      "explanation": "デフォルトの tsc は「エラーを報告しつつ変換は続行する」挙動です。止めたい場合は tsconfig.json の設定(noEmitOnError)で変えられます。"
+    },
+    {
+      "question": "TypeScript を使うと「バグに気づくタイミング」はどう変わるか。最も適切なものはどれか。",
+      "choices": [
+        "実行した時に、より詳しいエラーメッセージが出るようになる",
+        "実行する前(エディタで書いた時・コンパイル時)に型の間違いが分かるようになる",
+        "本番でユーザーが操作した時に、自動でバグが修正されるようになる",
+        "テストを書いた時だけ型の間違いが分かるようになる"
+      ],
+      "correct": 1,
+      "explanation": "JS では型の間違いは実行して初めて表に出ます。TS では tsc やエディタが実行前にチェックするので、ユーザーに届く前に捕まえられます。"
+    },
+    {
+      "kind": "essay",
+      "question": "TypeScript がどうやって「実行前に」型の間違いを見つけているのかを、tsc の役割と、ブラウザが実際に何を実行しているかに触れながら、何も見ずに 1 分で説明してください。",
+      "answer": "JavaScript だけだと、total(1200, \"2個\") のような型の間違いがあっても実行するまで分からず、NaN が静かに返るなど本番のユーザーが最初に踏むこともあります。TypeScript では、実行する前に tsc(TypeScript コンパイラ)がコードの型をチェックし、number の引数に string を渡しているといった間違いを、ファイル名・行・列つきで報告します。問題がなければ型の記述を消した JavaScript に変換します。ブラウザや Node.js が実行しているのはこの変換後の JavaScript で、型は実行時には存在しません。そのため実行速度は変わらない一方、チェックは実行前にしか効きません。実務ではエディタが同じチェックを常に走らせていて、書いた瞬間に赤い波線で教えてくれます。",
+      "rubric": [
+        "JS では実行するまで型の間違いに気づけない(NaN など静かに壊れる)ことに触れている",
+        "tsc が実行前に型チェックし、型を消した JavaScript に変換することを説明している",
+        "ブラウザ/Node.js が実行するのは変換後の JavaScript で、型は実行時に存在しないことに触れている",
+        "エディタが常時チェックする、またはエラーが場所つきで示されるなど、気づくタイミングの具体性がある"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "ポイントは「いつ」チェックが走るかです。tsc は実行前に型を検査して JS に変換するだけで、実行時には型は消えています。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "記事の total 関数を、型注釈つきで自分で書いてください。\n\n- `function total(price: number, count: number): number` を定義する(引数・戻り値の型注釈を必ず書く)\n- 標準入力は 1 行で「価格 個数」(半角スペース区切りの整数)\n- 出力は `合計: X円` を 1 行(X は price × count)\n\n例: 入力 `1200 2` → 出力 `合計: 2400円`\n\n※ 採点は `tsc --strict` で行います。型エラーがあると不正解です。入力は文字列なので、数値に変換してから total に渡してください。",
+      "setup": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\n// ここに total 関数を書く\n\n// lines[0] を価格と個数に分けて total を呼び、結果を出力する\n",
+      "answer": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\nfunction total(price: number, count: number): number {\n  return price * count;\n}\n\nconst [p, c] = lines[0].split(\" \").map(Number);\nconsole.log(`合計: ${total(p, c)}円`);\n",
+      "tests": [
+        {
+          "stdin": "1200 2\n"
+        },
+        {
+          "stdin": "150 0\n"
+        },
+        {
+          "stdin": "99 3\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "引数と戻り値に `number` を書き、入力の文字列は `Number()` で数値に変換してから渡します。変換を忘れて `total(\"1200\", \"2\")` のように文字列を渡すと、記事と同じ TS2345 で不正解になります。JavaScript なら \"1200\" * \"2\" は暗黙変換で 2400 になってしまい気づけませんが、TypeScript では渡す時点で止まります。"
+    }
+  ]
+}

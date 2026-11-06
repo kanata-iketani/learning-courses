@@ -1,0 +1,108 @@
+{
+  "lesson": 1,
+  "chapter": 4,
+  "title": "ログインの流れとトークンの保存先",
+  "priority": "🟡",
+  "text": "### ログイン機能の全体像\n\nJWT がログインの中でどう使われるかを、最初から最後まで追います。\n\n```\n① ユーザーがID/パスワードを送信\n   → POST /login {\"email\":\"user@example.com\", \"password\":\"xxx\"}\n② サーバーがDBでパスワードを確認\n   → 本人確認OK\n③ サーバーが秘密鍵を使ってJWTトークンを作成\n   → {\"token\": \"eyJhbGci...\"}\n④ ブラウザがトークンをCookieまたはlocalStorageに保存\n⑤ 以降のリクエストではトークンを毎回送る\n   → Authorization: Bearer eyJhbGci...\n⑥ サーバーがトークンの署名を検証\n   → 改ざんなし＋期限内 → データを返す\n⑦ トークンの期限が切れたら再ログインを要求\n```\n\n```mermaid\nsequenceDiagram\n    participant B as ブラウザ\n    participant S as サーバー\n    participant D as DB\n    B->>S: ① POST /login(email と password)\n    S->>D: ② パスワードを確認\n    D-->>S: 本人確認 OK\n    S->>S: ③ 秘密鍵で JWT を作成\n    S-->>B: JWT を返す\n    B->>B: ④ Cookie か localStorage に保存\n    B->>S: ⑤ Authorization: Bearer JWT\n    S->>S: ⑥ 署名と期限を検証\n    S-->>B: データを返す\n    Note over B,S: ⑦ 期限が切れたら再ログイン\n```\n\n秘密鍵を使うのは ③(発行)と ⑥(検証)で、どちらもサーバーの中です。ブラウザは受け取った JWT を保存して送るだけで、秘密鍵には一切触れません。\n\n⑤ の `Authorization: Bearer` は、JWT を送るときの決まった書き方です。Bearer(持参人)は「このトークンを持ってきた人に権限を認める」という意味です。持っていれば誰でも使えるので、盗まれないように保存することが大事になります。\n\n### Cookie とは\n\nCookie は、サーバーがブラウザに「これを覚えておいて」と渡す小さなデータです。\n\n```\n① ユーザーがログインに成功\n② サーバーがレスポンスに Set-Cookie ヘッダーを含める\n   → Set-Cookie: token=eyJhbGci...\n③ ブラウザがこのCookieを自動で保存\n④ 次回以降、同じサイトにアクセスするたびに\n   ブラウザが自動でCookieヘッダーを付けて送る\n   → Cookie: token=eyJhbGci...\n```\n\nポイントは **ブラウザが自動で送る** ことです。開発者が何も書かなくても、同じサイトへのリクエストには Cookie が付いていきます。サイトを閉じて開き直してもログイン状態が続くのは、保存された Cookie が自動で送られているからです。\n\n### localStorage とは\n\nlocalStorage は、ブラウザの中にあるもう少し大きなデータ保存領域です。Cookie と違って自動では送られません。JavaScript で取り出して、リクエストヘッダーに自分で付けます。\n\n```\n// 保存\nlocalStorage.setItem(\"token\", \"eyJhbGci...\");\n\n// 取得\nconst token = localStorage.getItem(\"token\");\n\n// リクエストに手動で付ける\nfetch(\"/api/data\", {\n  headers: { \"Authorization\": \"Bearer \" + token }\n});\n```\n\n`setItem` で保存し、`getItem` で取り出し、`fetch`(JavaScript から HTTP リクエストを送る関数)のヘッダーに `Bearer` を付けて自分で載せています。\n\n### Cookie と localStorage の比較\n\n| | Cookie | localStorage |\n|---|---|---|\n| 保存方法 | サーバーが Set-Cookie ヘッダーで指示 | JavaScript で手動 |\n| 送信方法 | ブラウザが毎回自動で送る | JavaScript で手動でヘッダーに付ける |\n| 容量 | 約 4KB | 約 5MB |\n| 期限 | サーバーが設定できる(例: 1 か月) | 明示的に消すまで残る |\n| JS からの読み取り | HttpOnly 属性で読めなくできる | いつでも読める |\n\nHttpOnly 属性は、Cookie を JavaScript から読めなくする設定です。\n\n### どちらに保存すべきか\n\nこれは Web 開発でよく議論になるテーマで、どちらにも弱点があります。\n\n```mermaid\nflowchart LR\n    C[\"Cookie(HttpOnly 付き)\"] --> C1[\"JS から読めない → XSS で盗まれにくい\"]\n    C --> C2[\"自動で送られる → CSRF への対策が必要\"]\n    L[\"localStorage\"] --> L1[\"JS で自由に扱えて便利\"]\n    L --> L2[\"JS から読める → XSS で盗まれやすい\"]\n```\n\n- XSS(クロスサイトスクリプティング。サイトに悪意ある JavaScript を紛れ込ませる攻撃)が起きると、その JavaScript は localStorage を読めます。HttpOnly 付きの Cookie なら読めないので、トークンを盗まれにくくなります\n- CSRF(利用者のブラウザに、本人が意図しないリクエストを送らせる攻撃)は、Cookie が自動で送られる性質を悪用します。Cookie に保存するなら、この対策が別に必要です\n\n詳しくはシリーズの認証認可編で扱います。ここでは「JWT は Cookie か localStorage に保存され、それぞれ XSS と CSRF に対して得意・不得意がある」と押さえておけば十分です。\n\n### curl で JWT を送る\n\ncurl(カール)は、ターミナルから HTTP リクエストを送るコマンドです。API 開発では、ブラウザの代わりに curl でリクエストを送り、レスポンスを確かめるのが基本の動作確認です。\n\n| オプション | 意味 | 例 |\n|---|---|---|\n| `-H` | HTTP ヘッダーを追加 | `-H \"Authorization: Bearer xxx\"` |\n| `-X` | HTTP メソッドを指定 | `-X POST` |\n| `-d` | 送信するデータを指定 | `-d '{\"name\":\"washi\"}'` |\n\nJWT は `-H` で Authorization ヘッダーとして送ります。`Bearer` の後にスペースを 1 つ挟んでトークンを続けます。\n\n```\ncurl -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ.XXXXX\" http://localhost:8080/secret\n```\n\n### まとめ\n\n- ログインは「パスワード確認 → JWT 発行 → 保存 → 毎回送る → 検証 → 期限切れで再ログイン」の流れ\n- 秘密鍵を使うのは発行と検証で、どちらもサーバーの中。ブラウザは JWT を保存して送るだけ\n- Cookie は自動で送られ、HttpOnly で JS から隠せる(XSS に強く CSRF 対策が要る)。localStorage は手動で送り、JS から読める(XSS に弱い)\n- curl では `-H \"Authorization: Bearer トークン\"` で JWT を送る\n\n### 何も見ずに言えるように\n\n- JWT はログイン時にサーバーが発行し、ブラウザが保存して、以降は `Authorization: Bearer` で毎回送る\n- Cookie はブラウザが自動で送り、localStorage は JavaScript で手動で付ける\n- HttpOnly Cookie は XSS に強いが CSRF 対策が必要、localStorage は XSS で盗まれやすい\n",
+  "quiz": [
+    {
+      "question": "ログインの流れ①〜⑦のうち、秘密鍵が使われる場面の説明として正しいものはどれか。",
+      "choices": [
+        "サーバーが JWT を作るとき(③)と、受け取った JWT の署名を検証するとき(⑥)。どちらもサーバーの中で、ブラウザは使わない",
+        "ブラウザが JWT を保存するとき(④)に、秘密鍵で暗号化して保存する",
+        "ブラウザが Authorization ヘッダーを付けるとき(⑤)に、秘密鍵も一緒に送る",
+        "ユーザーが ID とパスワードを送るとき(①)に、秘密鍵でパスワードを署名する"
+      ],
+      "correct": 0,
+      "explanation": "秘密鍵はサーバーの外に出しません。使うのは発行(③)と検証(⑥)だけです。ブラウザは受け取った JWT を保存して送るだけです。"
+    },
+    {
+      "question": "フロントエンドで「JWT を localStorage に保存したのに、API が 401(認証が必要)を返す」という相談を受けた。最も疑わしい原因はどれか。",
+      "choices": [
+        "localStorage の容量が 4KB を超えた",
+        "localStorage はサーバーが Set-Cookie で指示しないと保存できない",
+        "localStorage は自動では送られないので、fetch で Authorization ヘッダーに Bearer トークンを付けていない",
+        "localStorage に保存すると JWT の署名が消える"
+      ],
+      "correct": 2,
+      "explanation": "Cookie と違い、localStorage の値はブラウザが自動で送りません。getItem で取り出し、Authorization: Bearer を自分でヘッダーに付ける必要があります。容量は約 5MB です。"
+    },
+    {
+      "question": "サイトに XSS の脆弱性があり、攻撃者の JavaScript がページ上で動いてしまった。JWT が盗まれにくいのはどちらの保存方法か。",
+      "choices": [
+        "localStorage。JavaScript で手動で扱うので安全",
+        "HttpOnly 属性を付けた Cookie。JavaScript から読めないので、攻撃者のスクリプトも取り出せない",
+        "どちらも同じ。保存先は XSS に関係しない",
+        "HttpOnly を付けない Cookie。自動で送られるので盗まれない"
+      ],
+      "correct": 1,
+      "explanation": "XSS で動いた JavaScript は localStorage を読めます。HttpOnly 付きの Cookie は JavaScript から読めないので、トークンの持ち出しを防げます。ただし Cookie は自動で送られるので CSRF の対策が別に必要です。"
+    },
+    {
+      "question": "JWT を Cookie に保存する設計にしたとき、追加で CSRF の対策が必要になる理由として正しいものはどれか。",
+      "choices": [
+        "Cookie は 4KB しか保存できないから",
+        "Cookie は JavaScript から必ず読めるから",
+        "Cookie に入れると JWT の署名が無効になるから",
+        "Cookie はブラウザが同じサイトへのリクエストに自動で付けて送るので、本人が意図しないリクエストにも付いてしまうから"
+      ],
+      "correct": 3,
+      "explanation": "CSRF は「自動で送られる」性質を悪用し、利用者のブラウザから本人の意図しないリクエストを送らせる攻撃です。HttpOnly で JavaScript から隠しても、自動送信は止まりません。"
+    },
+    {
+      "question": "ローカルの API の /secret に JWT を付けて GET したい。正しい curl コマンドはどれか。",
+      "choices": [
+        "curl -d \"Bearer eyJhbGci...\" http://localhost:8080/secret",
+        "curl -X Bearer eyJhbGci... http://localhost:8080/secret",
+        "curl -H \"Authorization: Bearer eyJhbGci...\" http://localhost:8080/secret",
+        "curl -H \"Bearer: eyJhbGci...\" http://localhost:8080/secret"
+      ],
+      "correct": 2,
+      "explanation": "-H でヘッダーを追加し、ヘッダー名は Authorization、値は「Bearer + スペース + トークン」です。-X はメソッド指定、-d は送るデータの指定です。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "【Go で書く】Authorization ヘッダーの値から JWT を取り出す関数を書いてください。\n\n- 入力: 標準入力の 1 行目に Authorization ヘッダーの値(例 `Bearer eyJ...`)\n- 値が `Bearer `(B が大文字、後ろに半角スペース 1 つ)で始まり、その後ろの文字列に `.` がちょうど 2 つあるなら、その後ろの文字列(トークン)を 1 行出力\n- それ以外(`Basic ...`、`Bearer` の後にスペースがない、トークンが 3 パーツでない など)は `NG` だけを出力\n- この問題では `Bearer` の大文字小文字も含めて完全一致で判定する",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// extractToken は Authorization ヘッダーの値から JWT を取り出す\nfunc extractToken(v string) (string, bool) {\n\t// ここを書く\n\t_ = strings.HasPrefix\n\treturn \"\", false\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tif t, ok := extractToken(sc.Text()); ok {\n\t\tfmt.Println(t)\n\t} else {\n\t\tfmt.Println(\"NG\")\n\t}\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// extractToken は Authorization ヘッダーの値から JWT を取り出す\nfunc extractToken(v string) (string, bool) {\n\tconst prefix = \"Bearer \"\n\tif !strings.HasPrefix(v, prefix) {\n\t\treturn \"\", false\n\t}\n\ttoken := strings.TrimPrefix(v, prefix)\n\tif strings.Count(token, \".\") != 2 {\n\t\treturn \"\", false\n\t}\n\treturn token, true\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\tif t, ok := extractToken(sc.Text()); ok {\n\t\tfmt.Println(t)\n\t} else {\n\t\tfmt.Println(\"NG\")\n\t}\n}\n",
+      "tests": [
+        {
+          "stdin": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ.XXXXX\n"
+        },
+        {
+          "stdin": "Basic dXNlcjpwYXNz\n"
+        },
+        {
+          "stdin": "BearereyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ.XXXXX\n"
+        },
+        {
+          "stdin": "Bearer abc123\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`strings.HasPrefix(v, \"Bearer \")` で形式を確かめ、`strings.TrimPrefix` でトークンを取り出します。よくある間違いは接頭辞を `\"Bearer\"`(スペースなし)にすることで、トークンの先頭にスペースが残ったり、`BearereyJ...` のような壊れた値を通したりします。curl の `-H \"Authorization: Bearer トークン\"` で送られてくる値を、サーバー側で受け取る処理にあたります。"
+    },
+    {
+      "kind": "essay",
+      "question": "JWT の保存先として Cookie(HttpOnly 付き)と localStorage のどちらを選ぶか、チームで議論しています。それぞれの仕組みの違いと、XSS・CSRF に対する強み・弱みを説明してください。150〜350 字で。",
+      "answer": "Cookie はサーバーが Set-Cookie ヘッダーで保存させ、以降は同じサイトへのリクエストにブラウザが自動で付けて送ります。HttpOnly 属性を付けると JavaScript から読めなくなるので、XSS で悪意ある JavaScript が動いてもトークンを取り出されにくくなります。一方、自動で送られる性質を悪用する CSRF への対策が別に必要です。localStorage は JavaScript で保存・取得し、fetch の Authorization ヘッダーに Bearer トークンを自分で付けて送ります。自動送信されないので CSRF の心配は小さいですが、JavaScript からいつでも読めるため、XSS が起きるとトークンを盗まれやすくなります。どちらにも弱点があるので、選んだ方の弱点に合った対策をセットで入れる必要があります。",
+      "rubric": [
+        "Cookie は自動送信、localStorage は JavaScript で手動送信という違いを書いている",
+        "HttpOnly Cookie は JavaScript から読めず XSS で盗まれにくいと書いている",
+        "Cookie は自動送信のため CSRF 対策が必要だと書いている",
+        "localStorage は JavaScript から読めるため XSS に弱いと書いている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「自動で送られるか」「JS から読めるか」の 2 軸で整理すると、XSS と CSRF のどちらに弱いかが自然に説明できます。"
+    }
+  ]
+}

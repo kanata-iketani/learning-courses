@@ -1,0 +1,105 @@
+{
+  "lesson": 1,
+  "chapter": 2,
+  "title": "Base64とJWTの中身を読む",
+  "priority": "🔴",
+  "text": "### Base64 とは\n\nBase64 は、どんなデータも `A-Z`・`a-z`・`0-9`・`+`・`/` の 64 種類の文字だけで表す変換方法です。\n\n大事なのは、**Base64 は暗号ではない**ことです。変換ルールは公開されていて、鍵もいらないので、誰でも元に戻せます。HTTP ヘッダーには `{}` や日本語のような文字をそのまま入れにくいので、安全な文字だけに置き換えてから送るために使います。\n\n### ターミナルで試す\n\n```\n# 文字列をBase64エンコードする\necho -n \"hello\" | base64\n# → aGVsbG8=\n\n# Base64デコードして元に戻す\necho \"aGVsbG8=\" | base64 -d\n# → hello\n```\n\nコマンドを分解すると次のとおりです。\n\n- `echo` は文字列をそのまま出力するコマンド\n- `-n` は末尾に改行を付けないオプション\n- `|`(パイプ)は左のコマンドの出力を右のコマンドの入力に渡す\n- `base64` はエンコード、`-d` を付けるとデコード\n\n`-n` を忘れると改行文字までエンコードされます。`echo \"hello\" | base64` は `aGVsbG8K` になり、`aGVsbG8=` とは違う結果です。JWT を手で作るときにこの差があると、別のトークンになってしまいます。\n\n### パディング(=)\n\nBase64 は元データの 3 バイトを 4 文字に変換します。元データが 3 バイトで割り切れないときは、最後を `=` で埋めて 4 文字にそろえます。これをパディング(長さをそろえるための詰め物)と呼びます。\n\n```\necho -n \"a\" | base64    # → YQ==  (=が2つ)\necho -n \"ab\" | base64   # → YWI=  (=が1つ)\necho -n \"abc\" | base64  # → YWJj  (=なし)\n```\n\n### JWT が使うのは Base64URL\n\n正確には、JWT は Base64 そのものではなく **Base64URL**(URL に入れても壊れない形にした Base64)を使います。違いは 3 点です。\n\n| | Base64 | Base64URL(JWT) |\n|---|---|---|\n| 62 番目の文字 | `+` | `-` |\n| 63 番目の文字 | `/` | `_` |\n| 末尾の `=` | 付ける | 付けない |\n\nJWT で `=` が省かれるのはこのためです。`base64 -d` に `=` のない文字列を渡すと `base64: invalid input` と出ることがありますが、それより前に出た結果は正しく読めています。トークンに `-` や `_` が含まれるときは、`base64 -d` の前に `tr '_-' '/+'` で普通の Base64 に戻してから渡します。\n\n```mermaid\nflowchart LR\n    A[\"JSON 文字列\"] -->|\"Base64URL エンコード(鍵なし)\"| B[\"eyJ... の文字列\"]\n    B -->|\"Base64URL デコード(鍵なし・誰でもできる)\"| A\n    C[\"秘密鍵\"] -.->|\"使わない\"| B\n```\n\n### JWT の中身を覗く\n\n次の JWT を読んでみます。\n\n```\neyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4iLCJmbGFnIjoiRkxBR3t3ZWxjb21lX3RvX2p3dH0ifQ.XXXXX\n```\n\n1 番目と 2 番目のパーツを、それぞれデコードします。\n\n```\necho \"eyJhbGciOiJIUzI1NiJ9\" | base64 -d\n# → {\"alg\":\"HS256\"}\n\necho \"eyJ1c2VyIjoiYWRtaW4iLCJmbGFnIjoiRkxBR3t3ZWxjb21lX3RvX2p3dH0ifQ\" | base64 -d\n# → {\"user\":\"admin\",\"flag\":\"FLAG{welcome_to_jwt}\"}\n```\n\n1 行目でヘッダーが「HS256 で署名している」と宣言しているのが読めます。2 行目ではペイロードのユーザー名もフラグも丸見えです。鍵は一切使っていません。JWT は誰でも中身を読めるということが、この 2 行で分かります。\n\n### 暗号化と Base64 エンコードの違い\n\nここは確実に区別してください。\n\n| | 暗号化 | Base64 エンコード |\n|---|---|---|\n| 目的 | 中身を隠す | 安全な文字だけで表す |\n| 元に戻すには | 鍵が必要 | 誰でも戻せる(鍵不要) |\n| JWT で使われるか | 使われない | 使われる |\n\nJWT の署名は「中身を隠す」ためではなく、「改ざんされていないか確かめる」ためにあります。中身は誰にでも読まれる前提です。そのため、パスワードのような秘密の情報をペイロードに入れてはいけません。\n\n### シェルの '' と \"\" の違い\n\nJWT を手で作るときは JSON を `echo` に渡すので、クォートの違いが効いてきます。\n\n```\nNAME=\"tanaka\"\necho '$NAME'   # → $NAME(そのまま出力)\necho \"$NAME\"   # → tanaka(変数が展開される)\n```\n\n| | `''` シングルクォート | `\"\"` ダブルクォート |\n|---|---|---|\n| 中身 | 一切加工しない | 変数を展開する |\n| JSON を囲むとき | こちらを使う | `\"` が衝突する |\n\n`echo \"{\"alg\":\"none\"}\"` と書くと、シェルが中の `\"` をクォートの区切りとして解釈し、`{alg:none}` が出力されます。これは JSON ではありません。JSON は `echo -n '{\"alg\":\"none\"}'` のようにシングルクォートで囲みます。\n\n### まとめ\n\n- Base64 は 64 種類の文字だけで表す変換で、鍵なしで誰でも戻せる。暗号ではない\n- JWT は Base64URL を使い、`+` `/` を `-` `_` に置き換え、末尾の `=` を省く\n- `echo -n` を忘れると改行までエンコードされる。JSON はシングルクォートで囲む\n- JWT のペイロードは誰でも読めるので、秘密の情報は入れない\n\n### 何も見ずに言えるように\n\n- JWT はエンコードされているだけで暗号化されていないので、`base64 -d` で誰でも中身が読める\n- 署名の目的は中身を隠すことではなく、改ざんを見つけること\n- JWT の各パーツは Base64URL(`-` と `_` を使い、`=` を省く)で書かれている\n",
+  "quiz": [
+    {
+      "question": "`echo \"hello\" | base64` を実行したら `aGVsbG8K` になり、`echo -n \"hello\" | base64` の結果 `aGVsbG8=` と違った。理由として正しいものはどれか。",
+      "choices": [
+        "ダブルクォートで囲んだので hello が変数として展開された",
+        "-n がないと、末尾の改行文字もエンコードされるから",
+        "-n がないと、Base64 ではなく Base64URL で出力されるから",
+        "base64 コマンドは実行するたびにランダムな結果を返すから"
+      ],
+      "correct": 1,
+      "explanation": "echo は既定で末尾に改行を付けます。-n がないと「hello + 改行」の 6 バイトがエンコードされ、結果が変わります。Base64 は同じ入力なら必ず同じ出力です。"
+    },
+    {
+      "question": "`echo -n \"abcd\" | base64` の結果の末尾に付く `=` はいくつか。",
+      "choices": [
+        "0 個",
+        "1 個",
+        "3 個",
+        "2 個"
+      ],
+      "correct": 3,
+      "explanation": "Base64 は 3 バイトを 4 文字にします。abcd は 4 バイトで、最初の 3 バイトで 4 文字、残り 1 バイトで 2 文字 + `==` になります。結果は YWJjZA== です(1 バイト余りは = が 2 つ、2 バイト余りは 1 つ)。"
+    },
+    {
+      "question": "ある開発者が「JWT は暗号化されているから安全」と考え、ペイロードにユーザーのパスワードを入れた。この設計の問題として正しいものはどれか。",
+      "choices": [
+        "JWT は Base64URL でエンコードされているだけなので、トークンを手に入れた人なら誰でもデコードしてパスワードを読める",
+        "パスワードを入れると署名の計算ができなくなる",
+        "ペイロードには数字しか入れられない",
+        "パスワードは秘密鍵で暗号化されるので、サーバーが読めなくなる"
+      ],
+      "correct": 0,
+      "explanation": "JWT の中身は鍵なしで誰でも読めます。署名は改ざんを見つけるためのもので、中身を隠しません。秘密の情報はペイロードに入れないのが原則です。"
+    },
+    {
+      "question": "JWT のヘッダーを作るつもりで `echo -n \"{\"alg\":\"none\"}\" | base64` と書いた。何が起きるか。",
+      "choices": [
+        "正しく {\"alg\":\"none\"} がエンコードされる",
+        "シェルがエラーで止まり、何も出力されない",
+        "シェルが中の \" をクォートの区切りとして扱い、{alg:none} という JSON ではない文字列がエンコードされる",
+        "none が変数として展開され、空文字になる"
+      ],
+      "correct": 2,
+      "explanation": "ダブルクォートの中の \" はシェルのクォートとぶつかり、取り除かれます。結果は {alg:none} で、JSON として読めません。JSON は '{\"alg\":\"none\"}' のようにシングルクォートで囲みます。"
+    },
+    {
+      "question": "JWT のペイロード部分に `_` や `-` が含まれていて、そのまま `base64 -d` に渡すと正しく読めなかった。原因として最も適切なものはどれか。",
+      "choices": [
+        "JWT は Base64URL を使うので、Base64 の `/` `+` の代わりに `_` `-` が使われている",
+        "そのペイロードは暗号化されている",
+        "署名部分を間違えて渡している",
+        "JWT は 4 パーツでできており、1 つ足りない"
+      ],
+      "correct": 0,
+      "explanation": "JWT は URL でも壊れない Base64URL を使い、`+`→`-`、`/`→`_` と置き換え、`=` も省きます。`tr '_-' '/+'` で普通の Base64 に戻してから base64 -d に渡すと読めます。"
+    },
+    {
+      "kind": "code",
+      "lang": "go",
+      "question": "【Go で書く】JWT のヘッダーとペイロードを読むプログラムを書いてください。記事で `base64 -d` を使って手でやったことを、Go で書く問題です。\n\n- 入力: 標準入力の 1 行目に JWT が 1 つ\n- `.` で区切って 3 パーツでなければ `NG` だけを出力\n- 3 パーツなら、1 番目(ヘッダー)と 2 番目(ペイロード)を Base64URL(`=` なし)としてデコードし、ヘッダーの文字列を 1 行目、ペイロードの文字列を 2 行目に出力(JSON は整形せず、デコードしたまま)\n- どちらかのデコードに失敗したら `NG` だけを出力\n- 署名(3 番目)は読まなくてよい\n\n例: 入力 `eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ.XXXXX` → 出力 `{\"alg\":\"HS256\"}` と `{\"user\":\"admin\"}` の 2 行",
+      "setup": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/base64\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// decodePart は Base64URL(パディングなし)の文字列を元の文字列に戻す\nfunc decodePart(s string) (string, error) {\n\t// ここを書く\n\treturn \"\", nil\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\ttoken := strings.TrimSpace(sc.Text())\n\n\t// ここを書く(3 パーツに分ける → デコード → 出力)\n\t_ = token\n\t_ = base64.RawURLEncoding\n\tfmt.Println(\"NG\")\n}\n",
+      "answer": "package main\n\nimport (\n\t\"bufio\"\n\t\"encoding/base64\"\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\n// decodePart は Base64URL(パディングなし)の文字列を元の文字列に戻す\nfunc decodePart(s string) (string, error) {\n\tb, err := base64.RawURLEncoding.DecodeString(s)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\treturn string(b), nil\n}\n\nfunc main() {\n\tsc := bufio.NewScanner(os.Stdin)\n\tsc.Scan()\n\ttoken := strings.TrimSpace(sc.Text())\n\n\tparts := strings.Split(token, \".\")\n\tif len(parts) != 3 {\n\t\tfmt.Println(\"NG\")\n\t\treturn\n\t}\n\theader, err1 := decodePart(parts[0])\n\tpayload, err2 := decodePart(parts[1])\n\tif err1 != nil || err2 != nil {\n\t\tfmt.Println(\"NG\")\n\t\treturn\n\t}\n\tfmt.Println(header)\n\tfmt.Println(payload)\n}\n",
+      "tests": [
+        {
+          "stdin": "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4iLCJmbGFnIjoiRkxBR3t3ZWxjb21lX3RvX2p3dH0ifQ.XXXXX\n"
+        },
+        {
+          "stdin": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoidGFuYWthIiwibm90ZSI6ImE-Yj8ifQ.sig\n"
+        },
+        {
+          "stdin": "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "Go の `encoding/base64` には 4 種類のエンコーディングがあります。JWT に合うのは `base64.RawURLEncoding`(URL 用の文字 `-` `_` を使い、`=` を付けない)です。よくある間違いは `base64.StdEncoding` を使うことで、`=` のない JWT のパーツはデコードに失敗し、`-` や `_` を含むパーツ(テスト 2 の `ImE-Yj8`)も読めません。鍵は一切使わずに中身が読める、つまり JWT は暗号化されていないことを、コードでも確かめられます。"
+    },
+    {
+      "kind": "essay",
+      "question": "「暗号化」と「Base64 エンコード」の違いを説明し、そのうえで「JWT は暗号化されているか」「JWT の署名は何のためにあるか」を答えてください。150〜300 字で。",
+      "answer": "暗号化は中身を隠すための処理で、元に戻すには鍵が必要です。Base64 エンコードは、どんなデータも A-Z・a-z・0-9 などの安全な文字だけで表すための変換で、ルールが公開されているので鍵なしで誰でも元に戻せます。JWT のヘッダーとペイロードは Base64URL でエンコードされているだけで、暗号化はされていません。そのため base64 -d を使えば誰でも中身を読めます。JWT の署名は中身を隠すためではなく、ヘッダーとペイロードが改ざんされていないことをサーバーが確かめるためにあります。だからペイロードにパスワードなどの秘密の情報を入れてはいけません。",
+      "rubric": [
+        "暗号化は鍵がないと戻せない・Base64 は誰でも戻せる、という違いを書いている",
+        "JWT は暗号化されておらず、誰でも中身を読めると答えている",
+        "署名の目的を「改ざんの検知」と答え、「中身を隠す」とは書いていない",
+        "(加点)秘密の情報をペイロードに入れてはいけないことに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「エンコード=誰でも戻せる」「署名=改ざん検知」の 2 つがそろえば合格です。"
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "lesson": 104,
+  "chapter": 3,
+  "title": "interfaceで形を決める",
+  "priority": "🔴",
+  "text": "### オブジェクトの形を決める interface\n\n#2 で学んだとおり、JavaScript のデータの主役はオブジェクトです。フロントエンドの仕事の大半は、サーバーから受け取ったオブジェクトを画面に出すことです。そのオブジェクトの形(どんなプロパティが、どの型で必要か)を定義するのが **interface** です。\n\ninterface は記入用紙の様式にあたります。「氏名欄は必須」「ふりがな欄は任意」のように項目と形式を先に決めておくので、記入漏れをその場で指摘できます。\n\n```ts\ninterface User {\n  id: number;\n  name: string;\n  email: string;\n}\n\nconst user: User = {\n  id: 1,\n  name: \"佐藤\",\n};\n```\n\n`interface User { ... }` で「User は id(数値)・name(文字列)・email(文字列)を持つ」と宣言し、`const user: User` で「この変数は User の形をしている」と注釈しています。ところが `email` を書き忘れました。コンパイルするとこう出ます。\n\n```\nuser.ts(7,7): error TS2741: Property 'email' is missing in type '{ id: number; name: string; }' but required in type 'User'.\n```\n\n「User には email が必須なのに、このオブジェクトには無い」。記入漏れの指摘そのものです。\n\n```mermaid\nerDiagram\n  User {\n    number id \"必須\"\n    string name \"必須\"\n    string email \"必須\"\n    string nickname \"任意 (? 付き)\"\n  }\n```\n\n### タイプミスもその場で捕まる\n\n実務で一番ありがたいのがこちらです。\n\n```ts\nconsole.log(user.nmae); // name のつもりのタイプミス\n```\n\n```\ntypo.ts(6,18): error TS2339: Property 'nmae' does not exist on type 'User'.\n```\n\nJavaScript だけなら、存在しないプロパティを読むと `undefined` が返るだけでエラーになりません。画面に何も表示されず、原因を探して 30 分、という事故が起きます。interface があれば、User に `nmae` は無いと一瞬で分かります。\n\n```mermaid\nflowchart LR\n  A[\"user.nmae を読む\"] --> B{\"型はあるか\"}\n  B -->|\"JS のみ\"| C[\"undefined が返る\"]\n  C --> D[\"画面が空のまま 原因探し\"]\n  B -->|\"interface User\"| E[\"TS2339 エラー\"]\n  E --> F[\"書いた時点で修正\"]\n```\n\n### 任意の項目には ? を付ける\n\nあってもなくてもいい項目には、プロパティ名の後ろに `?` を付けます。これが「任意欄」です。\n\n```ts\ninterface User {\n  id: number;\n  name: string;\n  nickname?: string; // 任意。無くてもエラーにならない\n}\n```\n\nこの User に対して、次のように判定されます(TypeScript 7.0 で確認)。\n\n| 書いたオブジェクト | 結果 | 理由 |\n|---|---|---|\n| `{ id: 1, name: \"佐藤\" }` | OK | nickname は任意なので省略できる |\n| `{ id: 2, name: \"鈴木\", nickname: \"すず\" }` | OK | 任意の項目を書いてもよい |\n| `{ id: 1, nickname: \"x\" }` | エラー(TS2741) | 必須の name が無い |\n| `{ id: \"1\", name: \"佐藤\" }` | エラー(TS2322) | id は number なのに string |\n\n`?` は「欄そのものを省略してよい」という意味で、**必須の項目には付いていない**ことに注意します。また、型が違う値を入れればその項目でエラーになります。\n\n### 補足:用紙に無い項目を書いた場合\n\n記事では扱っていませんが、コードを読むときに出会うので短く補います。変数に直接オブジェクトを書いて代入するとき、interface に無いプロパティを書くとエラーになります。\n\n```ts\ninterface User { id: number; name: string; }\nconst u: User = { id: 1, name: \"佐藤\", age: 20 };\n// error TS2353: Object literal may only specify known properties, and 'age' does not exist in type 'User'.\n```\n\n様式に無い欄に書き込むと指摘される、と考えると覚えやすいです。プロパティ名を打ち間違えたときにも、この指摘で気づけます。\n\n### まとめ\n\n- interface はオブジェクトの形(プロパティ名と型)を定義する\n- 必須の項目が抜けていると TS2741、型が違うと TS2322 で指摘される\n- 存在しないプロパティを読むと TS2339。JS なら `undefined` で黙って進むタイプミスが捕まる\n- 任意の項目は `名前?: 型` と書く。省略してもエラーにならない\n\n### 何も見ずに言えるように\n\n- interface はオブジェクトの記入用紙。必須欄と任意欄(?)を先に決める\n- 記入漏れ(TS2741)とタイプミス(TS2339)が、実行前に捕まる\n- JS だと user.nmae は undefined で黙って進むので、原因探しに時間を取られる\n",
+  "quiz": [
+    {
+      "question": "次のコードをコンパイルするとどうなるか。\n\n```ts\ninterface User {\n  id: number;\n  name: string;\n  email: string;\n}\nconst user: User = { id: 1, name: \"佐藤\" };\n```",
+      "choices": [
+        "エラーにならない。足りないプロパティは自動で undefined が入る",
+        "エラーにならないが、実行時に email を読むと TypeError になる",
+        "id の型が合わないので TS2322 のエラーになる",
+        "email が無いので TS2741(必須プロパティが無い)のエラーになる"
+      ],
+      "correct": 3,
+      "explanation": "interface で必須と宣言した email が抜けているので、記入漏れとして TS2741 が出ます。id は 1(number)なので型は合っています。"
+    },
+    {
+      "question": "`interface User { id: number; name: string; }` として `const user: User = { id: 1, name: \"佐藤\" };` と書いた後、`console.log(user.nmae);` と書いた。TypeScript と、型の無い JavaScript でそれぞれどうなるか。",
+      "choices": [
+        "TS では TS2339(nmae は User に存在しない)のエラー。JS では undefined が出力されるだけ",
+        "TS でも JS でも undefined が出力されるだけ",
+        "TS では undefined が出力され、JS では ReferenceError になる",
+        "TS でも JS でも実行時に TypeError になる"
+      ],
+      "correct": 0,
+      "explanation": "存在しないプロパティを読むと、JS では undefined が返るだけでエラーになりません。TS では interface に nmae が無いことがコンパイル時に TS2339 として報告されます。"
+    },
+    {
+      "question": "次の interface があるとき、**型エラーになる**のはどれか。\n\n```ts\ninterface User {\n  id: number;\n  name: string;\n  nickname?: string;\n}\n```",
+      "choices": [
+        "`const a: User = { id: 1, name: \"佐藤\" };`",
+        "`const b: User = { id: 1, nickname: \"さとう\" };`",
+        "`const c: User = { id: 2, name: \"鈴木\", nickname: \"すず\" };`",
+        "`const d: User = { id: 3, name: \"田中\", nickname: \"たな\" };`"
+      ],
+      "correct": 1,
+      "explanation": "? が付いているのは nickname だけです。b は必須の name が無いので TS2741 になります。nickname を省略した a は問題ありません。"
+    },
+    {
+      "question": "同じ `interface User { id: number; name: string; nickname?: string; }` に対して、**型エラーにならない**のはどれか。",
+      "choices": [
+        "`const a: User = { id: \"1\", name: \"佐藤\" };`",
+        "`const b: User = { name: \"佐藤\" };`",
+        "`const c: User = { id: 1, name: \"佐藤\" };`",
+        "`const d: User = { id: 1, name: 123 };`"
+      ],
+      "correct": 2,
+      "explanation": "c は必須の id(number)と name(string)がそろい、任意の nickname を省略しているので OK です。a は id が string、b は id が無い、d は name が number なのでいずれもエラーです。"
+    },
+    {
+      "question": "`nickname?: string;` の `?` の意味として正しいものはどれか。",
+      "choices": [
+        "nickname には string 以外のどんな型も入れられる",
+        "nickname は書かなくてもよい(省略してもエラーにならない)",
+        "nickname は実行時に自動で空文字が入る",
+        "nickname を読むと必ず TS2339 のエラーになる"
+      ],
+      "correct": 1,
+      "explanation": "? は任意の項目を表します。書いてもよく、省略してもエラーになりません。書く場合は宣言どおり string である必要があります。"
+    },
+    {
+      "kind": "essay",
+      "question": "interface を使うと、JavaScript だけの場合と比べてどんな事故が防げるのかを、「記入漏れ」と「プロパティ名のタイプミス」の 2 つの例で説明してください。任意の項目の書き方にも触れること。",
+      "answer": "interface はオブジェクトの形、つまりどのプロパティがどの型で必要かを先に決めておく仕組みです。例えば User に id・name・email を必須と定義しておくと、email を書き忘れたオブジェクトを User として扱おうとした時点で TS2741(必須プロパティが無い)と指摘されます。また user.nmae のように name を打ち間違えると、User に nmae は無いとして TS2339 が出ます。JavaScript だけだと、存在しないプロパティは undefined が返るだけでエラーにならず、画面に何も出ないまま原因を探すことになります。interface があればこれらが実行前に分かります。必須ではない項目は nickname?: string のように ? を付けて定義し、省略してもエラーにならないようにします。",
+      "rubric": [
+        "必須プロパティの書き忘れが実行前に指摘される(TS2741 など)ことを説明している",
+        "プロパティ名のタイプミスが指摘されること、JS では undefined で黙って進むことを対比している",
+        "任意の項目は ? を付けて書くことに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "比較の軸は「JS では undefined で黙って進む」→「TS では書いた時点で指摘される」です。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "interface を定義して、表示名を決める関数を書いてください。\n\n- `interface User` を定義する: `id`(number・必須)、`name`(string・必須)、`nickname`(string・任意)\n- `function displayName(user: User): string` を定義する。nickname があればそれを、無ければ name を返す\n- 標準入力は 1 行 1 ユーザーで `id,name,nickname`(nickname が無いときは `id,name,` のように末尾が空)\n- 入力の各行から User を作り(nickname が空なら nickname を持たせない)、`id: 表示名` を 1 行ずつ出力する\n\n例: 入力\n```\n1,佐藤,\n2,鈴木,すず\n```\n出力\n```\n1: 佐藤\n2: すず\n```\n※ `tsc --strict` で型エラーがあると不正解です。",
+      "setup": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\n// ここに interface User を定義する\n\n// ここに displayName 関数を書く\n\n// 各行を User にして displayName の結果を出力する\nfor (const line of lines) {\n  const [id, name, nickname] = line.split(\",\");\n  // ...\n}\n",
+      "answer": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\ninterface User {\n  id: number;\n  name: string;\n  nickname?: string;\n}\n\nfunction displayName(user: User): string {\n  if (user.nickname) {\n    return user.nickname;\n  }\n  return user.name;\n}\n\nfor (const line of lines) {\n  const [id, name, nickname] = line.split(\",\");\n  const user: User = nickname ? { id: Number(id), name, nickname } : { id: Number(id), name };\n  console.log(`${user.id}: ${displayName(user)}`);\n}\n",
+      "tests": [
+        {
+          "stdin": "1,佐藤,\n2,鈴木,すず\n"
+        },
+        {
+          "stdin": "3,田中,たな\n"
+        },
+        {
+          "stdin": "10,高橋,\n11,伊藤,\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "任意の項目は `nickname?: string` と書きます。--strict では `user.nickname` の型は `string | undefined` になるので、`return user.nickname;` とそのまま返すと「undefined を string として返せない」型エラーになります。if で「ある」ことを確かめてから返すのがポイントです。id は `Number()` で数値にしないと、interface の `id: number` と合わず型エラーになります。"
+    },
+    {
+      "kind": "code",
+      "lang": "ts",
+      "question": "User の配列から id で名前を探す関数を書いてください。\n\n- `interface User { id: number; name: string; }` を定義する\n- `function findName(users: User[], id: number): string` を定義する。見つかればその name、見つからなければ `見つかりません` を返す\n- 標準入力: 1 行目に探す id(整数)、2 行目以降に `id,name` が 1 行 1 ユーザー\n- 出力は findName の戻り値を 1 行\n\n例: 入力\n```\n2\n1,佐藤\n2,鈴木\n```\n出力 `鈴木`\n\n※ `tsc --strict` で型エラーがあると不正解です。",
+      "setup": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\n// ここに interface User を定義する\n\n// ここに findName 関数を書く\n\n// lines[0] が探す id、lines.slice(1) がユーザーの行\n",
+      "answer": "declare const require: any; // 標準入力を読むための宣言(消さない)\nconst input: string = require(\"fs\").readFileSync(0, \"utf8\");\nconst lines: string[] = input.split(\"\\n\").filter((l: string) => l.trim() !== \"\");\n\ninterface User {\n  id: number;\n  name: string;\n}\n\nfunction findName(users: User[], id: number): string {\n  for (const user of users) {\n    if (user.id === id) {\n      return user.name;\n    }\n  }\n  return \"見つかりません\";\n}\n\nconst target = Number(lines[0]);\nconst users: User[] = lines.slice(1).map((line) => {\n  const [id, name] = line.split(\",\");\n  return { id: Number(id), name };\n});\nconsole.log(findName(users, target));\n",
+      "tests": [
+        {
+          "stdin": "2\n1,佐藤\n2,鈴木\n"
+        },
+        {
+          "stdin": "5\n1,佐藤\n2,鈴木\n"
+        },
+        {
+          "stdin": "1\n1,佐藤\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`User[]` は「User の配列」です。interface も配列の要素の型として使えます。探す id を文字列のまま `===` で比べると、number と string の比較として型エラー(TS2367)になります。見つからないときの戻り値を書き忘れると、戻り値 `string` の宣言と合わずこれも型エラーです。"
+    }
+  ]
+}

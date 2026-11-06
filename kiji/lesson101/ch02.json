@@ -1,0 +1,149 @@
+{
+  "lesson": 101,
+  "chapter": 2,
+  "title": "DOMとJavaScriptによる書き換え",
+  "priority": "🔴",
+  "text": "### 🔴 DOM とは「HTML を木にしたもの」\n\nDOM(Document Object Model)は、このシリーズで何度も出てくる最重要語です。DOM とは、ブラウザが HTML を読み込んで作る、**プログラムから触れる木構造のデータ**です。\n\n第 1 章の HTML の `<body>` 部分を見てください。\n\n```html\n<body>\n  <h1 id=\"greeting\">こんにちは</h1>\n  <p>これは<strong>最初</strong>のページです</p>\n</body>\n```\n\nブラウザの中では、これが次のような親子関係の木になります。\n\n```\nbody\n├── h1 「こんにちは」\n└── p\n    ├── テキスト「これは」\n    ├── strong 「最初」\n    └── テキスト「のページです」\n```\n\n`body` の下に `h1` と `p` がぶら下がり、`p` の下にさらに文字や `strong` がぶら下がります。この入れ子が「木」です。木の 1 つひとつの点をノード(木を構成する 1 個の要素や文字のかたまり)と呼びます。\n\n```mermaid\nflowchart TB\n    body[\"body\"] --> h1[\"h1 id=greeting\"]\n    body --> p[\"p\"]\n    h1 --> t0[\"テキスト: こんにちは\"]\n    p --> t1[\"テキスト: これは\"]\n    p --> strong[\"strong\"]\n    p --> t2[\"テキスト: のページです\"]\n    strong --> t3[\"テキスト: 最初\"]\n```\n\n注目してほしいのは `p` の中身です。`<strong>` で文の途中を囲むと、`p` の子は「これは」「strong」「のページです」の 3 つに分かれます。タグだけでなく文字のかたまりも木の一部になる、という点が HTML を眺めているだけでは見落としやすいところです。\n\n### 🔴 HTML と DOM の違い\n\nHTML と DOM は似ていますが、別物です。\n\n| | HTML | DOM |\n|---|---|---|\n| どこにあるか | ファイル(またはサーバーからの応答) | ブラウザの中(メモリ上) |\n| 形 | 文字の並び | 親子関係を持つ木 |\n| 変わるか | 書いた時点から変わらない | JavaScript から後で書き換えられる |\n| 役割 | 最初の設計図 | いま画面を作っている実物 |\n\nJavaScript が Web ページを動かせるのは、この DOM を後から書き換えられるからです。ボタンを押したら文字が変わる、リストに新しい項目が追加される。これらはすべて JavaScript が DOM の木を操作した結果です。HTML はあくまで最初の設計図で、動きがつくのは DOM を触るからです。\n\n### 【手を動かす①】DOM の木を自分の目で見る\n\n第 1 章の HTML 全体を `index.html` という名前で、文字コード UTF-8 で保存し、ブラウザにドラッグ&ドロップで開きます。「こんにちは」と表示されたら、F12 キー(または右クリック →「検証」)で開発者ツール(DevTools。ブラウザに付いている調査用の道具)を開きます。\n\n「Elements」(要素)タブには、HTML が木構造として表示されます。`body` の左の三角を開くと `h1` と `p` が入れ子になっているのが見えます。これが DOM です。\n\nここで知っておくと役立つ点があります。Elements タブが見せているのはファイルの文字そのものではなく、**ブラウザが組み立てた後の DOM** です。だから、次の手順で JavaScript から書き換えると、Elements タブの表示も書き換え後の内容に変わります。元のファイルの中身を見たいときは「ページのソースを表示」を使います。\n\n### 【手を動かす②】JavaScript で画面を書き換える\n\nDevTools の「Console」(コンソール)タブを開き、次の 1 行を入力して Enter キーを押します。\n\n```js\ndocument.querySelector(\"#greeting\").textContent = \"書き換わりました\";\n```\n\n画面の「こんにちは」が「書き換わりました」に変わります。この 1 行を分解します。\n\n- `document`: いま開いているページの DOM 全体を指します\n- `querySelector(\"#greeting\")`: `id=\"greeting\"` の要素(先ほどの `h1`)を木の中から探し出します。`#` は「この id の要素」という指定で、CSS のセレクタ(どの要素に適用するかを指定する書き方)と同じ書き方です\n- `.textContent = \"...\"`: その要素の中の文字を書き換えます\n\n```mermaid\nsequenceDiagram\n    participant U as あなた(Console)\n    participant J as JavaScript\n    participant D as DOM\n    participant B as ブラウザの描画\n    U->>J: 1 行を入力して Enter\n    J->>D: querySelector で h1 を探す\n    D-->>J: h1 要素\n    J->>D: textContent を書き換え\n    D->>B: 中身が変わったことを通知\n    B->>B: レイアウトとペイントをやり直す\n    B-->>U: 画面に「書き換わりました」\n```\n\nHTML ファイル自体は 1 文字も変えていません。変えたのはブラウザの中の DOM だけです。試しにページを再読み込みすると、表示は「こんにちは」に戻ります。ファイルから DOM が作り直されるからです。この挙動が「HTML は設計図、DOM は実物」という違いをいちばんはっきり示しています。\n\n### 🔴 Vue も根っこは DOM の書き換え\n\nJavaScript が DOM を触ると画面が変わる。これがフロントエンドのいちばんの土台です。Vue のようなフレームワーク(よく使う仕組みをまとめた土台のライブラリ)も、突き詰めれば「データが変わったら、対応する DOM を賢く自動で書き換える」道具です。\n\nいまは 1 行を手で打ちましたが、画面が大きくなると「どの要素を、いつ、どう書き換えるか」を手で管理するのは大変になります。それを肩代わりするのが Vue です。後の回で Vue を学ぶときも、「最終的には DOM が書き換わって画面が変わっている」という見方を持っていると、仕組みを見失いません。\n\n### まとめ\n\n- DOM は、ブラウザが HTML を読み込んで作る、プログラムから触れる木構造。タグだけでなく文字のかたまりも木の一部になる\n- HTML はファイルにある変わらない設計図、DOM はブラウザの中にある書き換えられる実物\n- `document.querySelector(\"#id\")` で要素を探し、`.textContent` で文字を書き換えると画面が変わる。HTML ファイルは変わらないので、再読み込みで元に戻る\n- Vue などのフレームワークも、根っこは DOM 書き換えの自動化\n\n### 何も見ずに言えるように\n\n- DOM は HTML をブラウザが木にしたもので、JavaScript から後で書き換えられる\n- `document.querySelector(\"#greeting\").textContent = \"...\"` で、id で探した要素の文字を変えられる\n- JavaScript が変えるのは DOM で HTML ファイルではない。Vue もこの書き換えを自動でやる道具\n",
+  "quiz": [
+    {
+      "question": "`<p>これは<strong>最初</strong>のページです</p>` を DOM にしたとき、`p` の直接の子はいくつになりますか。",
+      "choices": [
+        "1 つ(文全体のテキスト)",
+        "2 つ(テキストと strong)",
+        "3 つ(テキスト「これは」・strong・テキスト「のページです」)",
+        "0 個(strong は p の属性として扱われる)"
+      ],
+      "correct": 2,
+      "explanation": "`strong` で文の途中を囲むと、その前後の文字はそれぞれ別のテキストノードになります。p の子は「これは」「strong」「のページです」の 3 つで、「最初」は strong の子です。文字のかたまりも木の一部になる点が大事です。"
+    },
+    {
+      "question": "Console で `document.querySelector(\"#greeting\").textContent = \"書き換わりました\";` を実行した後、ページを再読み込みすると表示はどうなりますか。",
+      "choices": [
+        "「こんにちは」に戻る。HTML ファイルは変わっておらず、DOM が作り直されるから",
+        "「書き換わりました」のまま。HTML ファイルが書き換えられたから",
+        "「書き換わりました」のまま。ブラウザが DOM を保存して次回も使うから",
+        "何も表示されなくなる。DOM と HTML ファイルの内容が食い違うから"
+      ],
+      "correct": 0,
+      "explanation": "書き換えたのはブラウザの中の DOM だけで、HTML ファイルは 1 文字も変わっていません。再読み込みするとファイルから DOM が作り直されるので、元の「こんにちは」に戻ります。"
+    },
+    {
+      "question": "`document.querySelector(\"#msg\")` の `#msg` の意味として正しいものはどれですか。",
+      "choices": [
+        "class が msg の要素をすべて取り出す",
+        "msg というタグ名の要素を探す",
+        "msg という名前の JavaScript 変数を読み出す",
+        "id が msg の要素を木の中から探す"
+      ],
+      "correct": 3,
+      "explanation": "`#` は「この id の要素」という指定で、CSS のセレクタと同じ書き方です。`querySelector` は条件に合う最初の要素を DOM の木から探して返します。"
+    },
+    {
+      "question": "Console で h1 の文字を書き換えた直後に DevTools の Elements タブを見ると、h1 の中身はどう表示されますか。",
+      "choices": [
+        "元の「こんにちは」のまま。Elements タブは HTML ファイルをそのまま表示しているから",
+        "書き換え後の「書き換わりました」。Elements タブはブラウザの中の DOM を表示しているから",
+        "空になる。書き換えた要素は Elements タブから消えるから",
+        "「こんにちは」と「書き換わりました」の両方が並ぶ。変更履歴が残るから"
+      ],
+      "correct": 1,
+      "explanation": "Elements タブが見せているのは、ブラウザが組み立てた後の DOM です。JavaScript で DOM を書き換えれば、Elements タブの表示もその内容になります。元のファイルを見たいときは「ページのソースを表示」を使います。"
+    },
+    {
+      "question": "Vue のようなフレームワークの説明として、記事の内容に合うものはどれですか。",
+      "choices": [
+        "Vue を使うと DOM を使わずに画面を直接描けるので、DOM の知識は要らなくなる",
+        "Vue はサーバー側で HTML ファイルを毎回書き換えて、画面を変えている",
+        "Vue は CSS の代わりに見た目を担当する言語である",
+        "Vue も根っこは、DOM の書き換えを賢く自動でやってくれる道具である"
+      ],
+      "correct": 3,
+      "explanation": "記事では、Vue も突き詰めれば「DOM の書き換え」を自動でやる道具だと説明しています。だから DOM の仕組みを知っておくと、Vue を学ぶときに何が起きているかを見失いません。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "DOM の木を JSON で表したものが標準入力から 1 つ届きます。要素ノードは `{\"tag\": \"タグ名\", \"children\": [...]}`(`id` を持つこともある。`children` がない要素もある)、テキストノードは `{\"text\": \"文字\"}` です。\n\nこの木を、記事の木の図のように親子関係が分かる形で出力する関数 `printTree` を書いてください。\n\n- 1 ノード 1 行。深さ 0(根)はインデントなし、深さが 1 増えるごとに半角スペース 2 つを先頭に足す\n- 要素ノードはタグ名だけを出力する(id は出さない)\n- テキストノードは `#text ` に続けて文字を出力する\n- 子は配列の前から順に出力する(親 → 子 → 孫 … の深さ優先)\n\n入力例:\n```\n{\"tag\":\"p\",\"children\":[{\"text\":\"これは\"},{\"tag\":\"strong\",\"children\":[{\"text\":\"最初\"}]}]}\n```\n出力例:\n```\np\n  #text これは\n  strong\n    #text 最初\n```",
+      "setup": "const tree = JSON.parse(require(\"fs\").readFileSync(0, \"utf8\"));\n\n// node を深さ depth として出力し、子を depth + 1 で出力する\nfunction printTree(node, depth) {\n  // ここを書く\n}\n\nprintTree(tree, 0);\n",
+      "answer": "const tree = JSON.parse(require(\"fs\").readFileSync(0, \"utf8\"));\n\nfunction printTree(node, depth) {\n  const indent = \"  \".repeat(depth);\n  if (node.text !== undefined) {\n    console.log(indent + \"#text \" + node.text);\n    return;\n  }\n  console.log(indent + node.tag);\n  for (const child of node.children || []) {\n    printTree(child, depth + 1);\n  }\n}\n\nprintTree(tree, 0);\n",
+      "tests": [
+        {
+          "stdin": "{\"tag\":\"body\",\"children\":[{\"tag\":\"h1\",\"id\":\"greeting\",\"children\":[{\"text\":\"こんにちは\"}]},{\"tag\":\"p\",\"children\":[{\"text\":\"これは\"},{\"tag\":\"strong\",\"children\":[{\"text\":\"最初\"}]},{\"text\":\"のページです\"}]}]}\n"
+        },
+        {
+          "stdin": "{\"tag\":\"ul\",\"children\":[{\"tag\":\"li\",\"children\":[{\"tag\":\"a\",\"children\":[{\"tag\":\"span\",\"children\":[{\"text\":\"深い\"}]}]}]},{\"tag\":\"li\",\"children\":[]}]}\n"
+        },
+        {
+          "stdin": "{\"tag\":\"br\"}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "木は「自分を出力して、子それぞれに同じことをする」再帰で素直に書けます。テキストノードは `text` を持つかで見分け、子を持たないので出力して終わりです。よくある書き間違いは、子を呼ぶときに `depth + 1` ではなく固定の `1` を渡してしまい、孫より深いノードのインデントが崩れるものです。`children` がない要素(`br` など)のために `node.children || []` としておきます。1 つ目のテストは記事の HTML で、`p` の子がテキスト・strong・テキストの 3 つに分かれることを出力で確かめられます。"
+    },
+    {
+      "kind": "code",
+      "lang": "js",
+      "question": "`document.querySelector(\"#id\").textContent = \"...\"` がやっていることを、ブラウザなしで再現します。標準入力は次の形です。\n\n- 1 行目: 探す id\n- 2 行目: 新しい文字\n- 3 行目: DOM の木の JSON(書式は前の問題と同じ。要素ノード `{\"tag\",\"id\"?,\"children\"?}`、テキストノード `{\"text\"}`)\n\n関数 `findById(node, id)` を書き、深さ優先(親 → 子を配列の前から順)で最初に見つかった、`id` が一致する要素を返してください。見つからなければ `null` を返します。\n\n見つかった場合は、その要素の `children` を `[{\"text\": 新しい文字}]` に置き換え、木全体を `JSON.stringify(tree)`(インデントなし)で 1 行出力してください。見つからなければ `not found` と 1 行出力してください。",
+      "setup": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").map((s) => s.trim()).filter((s) => s !== \"\");\nconst id = lines[0];\nconst newText = lines[1];\nconst tree = JSON.parse(lines.slice(2).join(\"\\n\"));\n\nfunction findById(node, id) {\n  // ここを書く(深さ優先で最初に一致した要素。なければ null)\n  return null;\n}\n\nconst target = findById(tree, id);\n// 見つかったら children を書き換えて木全体を出力、なければ not found\n",
+      "answer": "const lines = require(\"fs\").readFileSync(0, \"utf8\").split(\"\\n\").map((s) => s.trim()).filter((s) => s !== \"\");\nconst id = lines[0];\nconst newText = lines[1];\nconst tree = JSON.parse(lines.slice(2).join(\"\\n\"));\n\n// 深さ優先(親 → 子を前から順)で、最初に見つかった id の要素を返す。なければ null\nfunction findById(node, id) {\n  if (node.id === id) return node;\n  for (const child of node.children || []) {\n    const found = findById(child, id);\n    if (found !== null) return found;\n  }\n  return null;\n}\n\nconst target = findById(tree, id);\nif (target === null) {\n  console.log(\"not found\");\n} else {\n  target.children = [{ text: newText }];\n  console.log(JSON.stringify(tree));\n}\n",
+      "tests": [
+        {
+          "stdin": "greeting\n書き換わりました\n{\"tag\":\"body\",\"children\":[{\"tag\":\"h1\",\"id\":\"greeting\",\"children\":[{\"text\":\"こんにちは\"}]},{\"tag\":\"p\",\"children\":[{\"text\":\"これは\"},{\"tag\":\"strong\",\"children\":[{\"text\":\"最初\"}]},{\"text\":\"のページです\"}]}]}\n"
+        },
+        {
+          "stdin": "msg\n完了しました\n{\"tag\":\"body\",\"children\":[{\"tag\":\"div\",\"children\":[{\"tag\":\"section\",\"children\":[{\"tag\":\"p\",\"id\":\"msg\",\"children\":[{\"text\":\"処理中\"}]}]}]}]}\n"
+        },
+        {
+          "stdin": "nothing\nx\n{\"tag\":\"body\",\"children\":[{\"tag\":\"h1\",\"id\":\"greeting\",\"children\":[{\"text\":\"こんにちは\"}]},{\"tag\":\"p\",\"children\":[{\"text\":\"これは\"},{\"tag\":\"strong\",\"children\":[{\"text\":\"最初\"}]},{\"text\":\"のページです\"}]}]}\n"
+        },
+        {
+          "stdin": "dup\n新\n{\"tag\":\"body\",\"children\":[{\"tag\":\"div\",\"children\":[{\"tag\":\"p\",\"id\":\"dup\",\"children\":[{\"text\":\"1つ目\"}]}]},{\"tag\":\"p\",\"id\":\"dup\",\"children\":[{\"text\":\"2つ目\"}]}]}\n"
+        }
+      ],
+      "choices": [
+        "⭕ 正解",
+        "❌ 不正解"
+      ],
+      "correct": 0,
+      "explanation": "`querySelector` は木全体を深さ優先でたどり、条件に合う最初の 1 つを返します。自分が一致すれば自分を返し、そうでなければ子を前から順に再帰で調べ、見つかった時点で返します。よくある誤りは、根の直下の子しか調べず、`div` の奥にある要素を見落とすこと(2 つ目のテスト)と、全部たどって最後に見つかったものを返してしまうこと(4 つ目のテスト。同じ id が 2 つあると最初のほうだけが書き換わるのが正しい)です。書き換えたのは JSON(= DOM)だけで、入力の元データ(= HTML ファイル)は変わっていない、という対応も意識してください。"
+    },
+    {
+      "kind": "essay",
+      "question": "DOM とは何かを、HTML との違いが分かるように何も見ずに 1 分で説明するつもりで書いてください。150〜300 字で。",
+      "answer": "DOM は、ブラウザが HTML を読み込んで作る、親子関係を持つ木構造のデータです。HTML はファイルに文字で書かれた「最初の設計図」で、書いた時点から変わりません。一方 DOM はブラウザの中にある「組み立て後の実物」で、JavaScript から後で書き換えられます。ボタンを押すと表示が変わるといった動きは、JavaScript が DOM を操作して実現しています。JavaScript で DOM を書き換えても HTML ファイルは変わらないので、ページを再読み込みすると DOM はファイルから作り直され、元の表示に戻ります。",
+      "rubric": [
+        "DOM がブラウザの中にある木構造のデータであることを述べている",
+        "HTML は変わらないファイル(設計図)、DOM は書き換えられる実物、という対比がある",
+        "JavaScript が操作するのは DOM であり、それで画面に動きがつくことに触れている",
+        "DOM を書き換えても HTML ファイルは変わらない(再読み込みで戻る等)ことに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「どこにあるか(ファイル/ブラウザの中)」「変わるか(変わらない/書き換えられる)」の 2 軸で比べると違いがはっきりします。再読み込みで元に戻る例を添えると説得力が増します。"
+    },
+    {
+      "kind": "essay",
+      "question": "次の HTML があります。`<p id=\"msg\">処理中</p>` ページを開いた後、Console で実行して、この p の文字を「完了しました」に書き換えるコードを 1 行書き、各部分が何をしているかを説明してください。",
+      "answer": "コードは `document.querySelector(\"#msg\").textContent = \"完了しました\";` です。`document` はいま開いているページの DOM 全体を指します。`querySelector(\"#msg\")` は、`#` が「この id の要素」という意味なので、id が msg の要素(この p)を DOM の木の中から探し出します。`.textContent` はその要素の中の文字で、ここに「完了しました」を代入すると表示が変わります。書き換えたのはブラウザの中の DOM で、HTML ファイルは変わらないので、再読み込みすると「処理中」に戻ります。",
+      "rubric": [
+        "`document.querySelector(\"#msg\").textContent = \"完了しました\"` と同等の正しいコードを書いている",
+        "`#msg` が id で要素を探す指定であることを説明している",
+        "`textContent` に代入すると要素の文字が書き換わることを説明している",
+        "変わるのは DOM であり HTML ファイルではない点に触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「どこから探すか(document)」「何を探すか(#msg)」「何を変えるか(textContent)」の 3 つに分けて説明できれば十分です。`#` は CSS のセレクタと同じ書き方で、Vue の回でも繰り返し出てきます。"
+    }
+  ]
+}
