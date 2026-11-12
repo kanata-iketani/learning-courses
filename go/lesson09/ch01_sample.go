@@ -9,10 +9,11 @@ func divmod2(a, b int) (int, int) {
 }
 
 func main() {
+	// 2 つの戻り値を、左から順に q と r で受け取ります
 	q, r := divmod2(17, 5)
 	fmt.Println(q)
 	fmt.Println(r)
 
-	// タプルという 1 つの値ではないため、受け取る変数は個数分必要です
+	// 多値は、そのまま別の関数の引数として渡すこともできます
 	fmt.Println(divmod2(9, 2))
 }

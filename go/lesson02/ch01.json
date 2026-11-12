@@ -3,7 +3,7 @@
   "chapter": 1,
   "title": "fmt.Println",
   "priority": "🔴",
-  "text": "`fmt.Println` は Python の `print()` に一番近い関数です。複数の値をカンマで並べると空白区切りで出力され、最後に自動で改行が付きます。Python と違い、括弧の前に `fmt.` というパッケージ名が必要な点だけ注意してください。🔴 一番よく使う関数なので、手が覚えるまで書きましょう。\n\nPython ではこう書いた:\n\n```python\nprint(\"score\", 80)\n```\n\nGo ではこう書く:\n\n```go\nfmt.Println(\"score\", 80)\n```",
+  "text": "`fmt.Println` は Python の `print()` に一番近い関数です。複数の値をカンマで並べると空白区切りで出力され、最後に自動で改行が付きます。Python と違い、括弧の前に `fmt.` というパッケージ名が必要な点だけ注意してください。🔴 一番よく使う関数なので、手が覚えるまで書きましょう。\n\nPython ではこう書いた:\n\n```python\nprint(\"score\", 80)\n```\n\nGo ではこう書く:\n\n```go\nfmt.Println(\"score\", 80)\n```\n\n### 名前の読み方\n\n`fmt.Println` は「`fmt` パッケージ（L01 で import したもの）の中の `Println` 関数」という意味です。Println は Print line（1 行出力する）の略です。`P` は大文字で書きます。Go は大文字と小文字を区別するので、`fmt.println` と書くとエラーになります。\n\n### サンプルを 1 行ずつ読む\n\n- `fmt.Println(\"Hello, world!\")` → 出力: `Hello, world!` ／ ポイント: `\"` で囲んだ文字列は、`\"` を除いた中身が出ます\n- `fmt.Println(42)` → 出力: `42` ／ ポイント: 数値は `\"` なしでそのまま渡せます\n- `fmt.Println(\"score\", 80)` → 出力: `score 80` ／ ポイント: カンマで並べた値の間に空白が 1 つ入ります\n- `fmt.Println(\"x\", 1, \"y\", 2)` → 出力: `x 1 y 2` ／ ポイント: いくつ並べても同じです\n\nカンマで渡す 1 つ 1 つの値を**引数**（関数に渡す値）と呼びます。Println は引数をいくつでも受け取れます。\n\n実行結果（各行の最後で改行されています）:\n\n```text\nHello, world!\n42\nscore 80\nx 1 y 2\n```\n",
   "sample": "// lesson02 ch01: fmt.Println\npackage main\n\nimport \"fmt\"\n\nfunc main() {\n\t// 文字列も数値もそのまま出力できます\n\tfmt.Println(\"Hello, world!\")\n\tfmt.Println(42)\n\n\t// カンマで並べると空白区切りになり、最後に改行が付きます\n\tfmt.Println(\"score\", 80)\n\tfmt.Println(\"x\", 1, \"y\", 2)\n}\n",
   "exercise": {
     "description": "`fmt.Println` を 2 回使って、次の 2 行を出力してください。\n2 行目は文字列 `\"level\"` と数値 `5` をカンマで並べて 1 回の `Println` で出力すること。\n\n**期待出力**\n\n```text\nGo の標準出力\nlevel 5\n```",
