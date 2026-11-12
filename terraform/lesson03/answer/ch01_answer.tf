@@ -2,7 +2,7 @@
 # この講座の演習では必ず default を付けます。参照は var.名前 です。
 variable "project" {
   type    = string
-  default = "skillax"
+  default = "myapp"
 }
 
 output "project_name" {

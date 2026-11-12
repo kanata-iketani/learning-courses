@@ -12,6 +12,8 @@ variable を3つ定義してください。
 - `env_tag`: `var.tags` の `"env"` キーの値を表示
 - `first_port`: `var.ports` の先頭要素を表示
 
+(ヒント: list の先頭は `[0]` です。map の要素は `var.tags["env"]` のように、`[ ]` の中のキーを引用符で囲みます。output は名前のアルファベット順に表示されるので、期待出力は debug_mode → env_tag → first_port の順です)
+
 **期待出力**
 
 ```text

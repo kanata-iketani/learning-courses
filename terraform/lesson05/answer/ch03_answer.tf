@@ -1,14 +1,14 @@
 variable "common_tags" {
   default = {
     Env     = "prod"
-    Project = "skillax"
+    Project = "shop"
   }
 }
 
 variable "extra_tags" {
   default = {
     Env  = "stg"
-    Name = "skillax-api"
+    Name = "shop-api"
   }
 }
 

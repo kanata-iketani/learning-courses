@@ -8,8 +8,8 @@ locals {
       Effect = "Allow"
       Action = ["s3:GetObject", "s3:ListBucket"]
       Resource = [
-        "arn:aws:s3:::skillax-prod-logs",
-        "arn:aws:s3:::skillax-prod-logs/*",
+        "arn:aws:s3:::myapp-prod-logs",
+        "arn:aws:s3:::myapp-prod-logs/*",
       ]
     }]
   }

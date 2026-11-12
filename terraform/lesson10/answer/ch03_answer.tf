@@ -1,7 +1,7 @@
 module "naming" {
   source = "./modules/naming"
   env    = "prod"
-  app    = "skillax"
+  app    = "myapp"
 }
 
 # terraform output はアルファベット順に表示されます(bucket_name が先)

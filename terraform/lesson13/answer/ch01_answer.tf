@@ -2,7 +2,7 @@
 # jsonencode はキーをアルファベット順に並べるため、タグの合成結果を
 # 安定した文字列として確認できます(採点にも使えます)。
 variable "project" {
-  default = "skillax"
+  default = "myapp"
 }
 
 variable "env" {

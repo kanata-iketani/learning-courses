@@ -7,6 +7,8 @@ variable `env` を定義してください。
 
 さらに output `current_env` で `var.env` を表示してください。
 
+(ヒント: `validation { ... }` は variable ブロックの `{ }` の中に書きます。`error_message` は `"..."` で囲んだ文字列にします。default の `"dev"` は条件を満たすので、apply はそのまま通ります)
+
 **期待出力**
 
 ```text

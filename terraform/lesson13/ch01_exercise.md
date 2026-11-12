@@ -1,10 +1,10 @@
 # lesson13 ch01 演習: 命名とタグの流儀
 
-次の実務風コードを読み、`aws_ecs_service.api` に付く name とタグを再現してください。
+次の実務風コードを読み、`aws_ecs_service.api`(ECS のサービス `api`)に付く name とタグを再現してください。
 
 ```hcl
 locals {
-  name_prefix = "${var.project}-${var.env}" # project = "skillax", env = "prod"
+  name_prefix = "${var.project}-${var.env}" # project = "myapp", env = "prod"
   common_tags = {
     Project   = var.project
     Env       = var.env
@@ -18,16 +18,18 @@ resource "aws_ecs_service" "api" {
 }
 ```
 
-variable `project`(default `"skillax"`)と `env`(default `"prod"`)を定義し、
+variable `project`(default `"myapp"`)と `env`(default `"prod"`)を定義し、
 
 - output `name`: サービス名
 - output `tags`: merge の結果を `jsonencode()` した文字列
 
 を出力してください。
 
+(resource ブロックは書かず、locals に `name_prefix` と `common_tags` を書き、output で `name` と `tags` に入る値を計算します。期待出力の `\"` は文字列の中の `"` を表すエスケープで、自分で `\` を書く必要はありません。`jsonencode` が自動でキーをアルファベット順に並べます)
+
 **期待出力**
 
 ```text
-name = "skillax-prod-api"
-tags = "{\"Env\":\"prod\",\"ManagedBy\":\"terraform\",\"Name\":\"skillax-prod-api\",\"Project\":\"skillax\"}"
+name = "myapp-prod-api"
+tags = "{\"Env\":\"prod\",\"ManagedBy\":\"terraform\",\"Name\":\"myapp-prod-api\",\"Project\":\"myapp\"}"
 ```

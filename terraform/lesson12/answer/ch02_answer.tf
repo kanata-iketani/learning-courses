@@ -2,7 +2,7 @@
 # 命名規則としては「project-tfstate」「env/component/terraform.tfstate」の
 # 組み立てです。この規則が読めると state の置き場所を推測できます。
 variable "project" {
-  default = "skillax"
+  default = "myapp"
 }
 
 variable "env" {

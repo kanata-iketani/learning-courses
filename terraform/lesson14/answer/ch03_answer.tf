@@ -1,8 +1,8 @@
-# (1) 前提値: project=skillax, env=prod なので name_prefix は "skillax-prod"
+# (1) 前提値: project=myapp, env=prod なので name_prefix は "myapp-prod"
 # (2) for_each は local.services の3キー(api, web, worker)分 → 3個できる
 # (3) 名前は "<prefix>-<キー>"、タグは common_tags に Name を merge したもの
 variable "project" {
-  default = "skillax"
+  default = "myapp"
 }
 
 variable "env" {

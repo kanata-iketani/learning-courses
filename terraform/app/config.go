@@ -17,7 +17,7 @@ const (
 	codeFence   = "hcl" // 質問回答のコードフェンス言語
 
 	qaCourseDesc = "「Terraform入門」(HCL の文法から、実務のコードベースで分かれる書き方の流儀までを学ぶ講座) の"
-	qaAudience   = "受講者はプログラミング経験はありますが、Terraform と IaC は初めてです。実務(Finatext/Skillax)の Terraform コードを読めるようになるのが目標です。"
+	qaAudience   = "受講者はプログラミング経験はありますが、Terraform と IaC は初めてです。実務の Terraform コードを読めるようになるのが目標です。"
 	qaExtraRule  = "- 実務では複数の書き方が存在する話題(count/for_each、環境分割など)は「現場ではこう分かれる」という視点を添える"
 )
 
