@@ -5,6 +5,8 @@ variable `topics`(default `["audit", "mail", "sync"]`)を宣言し、`terraform_
 - output `all_topics`: `values()` と splat を使い、全リソースの `output` 属性を `,` 区切りで join した文字列
 - output `mail`: キー `"mail"` のリソースの `output` 属性
 
+(ヒント: for_each のリソースはマップなので `[0]` は使えません。全部の output は `values(terraform_data.topic)[*].output` でキー順のリストになり、それを `join(",", ...)` でつなぎます)
+
 **期待出力**
 
 ```text

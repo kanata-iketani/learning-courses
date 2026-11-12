@@ -6,6 +6,8 @@ variable `azs`(default `["ap-northeast-1a", "ap-northeast-1c"]`)と `extra_azs`(
 - output `az_count`: 連結後の要素数
 - output `has_1a`: 連結後のリストに `"ap-northeast-1a"` が含まれるかどうか
 
+(ヒント: 連結は `concat`、要素数は `length`、含まれるかは `contains` です。`join` は第1引数が区切り文字です)
+
 **期待出力**
 
 ```text

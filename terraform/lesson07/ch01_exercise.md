@@ -6,6 +6,8 @@ variable `node_count`(default `4`)を宣言し、`terraform_data` リソース `
 - output `last`: 最後のノード(`[3]`)の `output` 属性
 - output `total`: `length` で数えたノードの個数
 
+(ヒント: `format("node-%d", count.index)` の `%d` は「整数をそのまま入れる」指定です。count 付きリソースはリストなので、全要素の属性は `terraform_data.node[*].output`、4番目は `[3]`(0 始まり)、個数は `length(terraform_data.node)` で取れます)
+
 **期待出力**
 
 ```text

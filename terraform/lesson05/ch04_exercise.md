@@ -6,6 +6,8 @@ variable `owner`(default `""`)と `tags`(type `map(string)`、default `{ Team = 
 - output `team`: `try` を使って `var.tags["Team"]` を取り出す。失敗したら `"none"`
 - output `cost_center`: `try` を使って `var.tags["CostCenter"]` を取り出す。失敗したら `"none"`
 
+(ヒント: `var.tags["CostCenter"]` だけを書くとキーが無いためエラーで止まります。`try(式, 既定値)` で包むと、エラーのときに既定値が返ります)
+
 **期待出力**
 
 ```text

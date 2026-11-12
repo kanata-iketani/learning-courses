@@ -10,7 +10,7 @@ resource "terraform_data" "member" {
 }
 
 # ito は [0]、kato は [1]、sato は [2] に対応しています。
-# ここから kato を消すと sato が [1] に繰り上がり、作り直しの対象になります
+# ここから kato を消すと sato が [1] に繰り上がり、[1] の書き換えと [2] の削除が計画されます
 output "pairs" {
   value = join(" ", terraform_data.member[*].output)
 }

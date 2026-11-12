@@ -2,14 +2,16 @@
 
 locals 集約スタイルで名前を組み立てます。
 
-1. variable `project` を定義: `type` は `string`、`default` は `"skillax"`
+1. variable `project` を定義: `type` は `string`、`default` は `"shop"`
 2. variable `env` を定義: `type` は `string`、`default` は `"stg"`
 3. locals で `name_prefix = "${var.project}-${var.env}"` と、それを使った `bucket_name = "${local.name_prefix}-logs"` を定義
 4. output `bucket_name` で `local.bucket_name` を、output `name_prefix` で `local.name_prefix` を表示
 
+(ヒント: locals の中から別の local を使うときも `local.名前` と書きます。2つは同じ locals ブロックの中に並べて構いません)
+
 **期待出力**
 
 ```text
-bucket_name = "skillax-stg-logs"
-name_prefix = "skillax-stg"
+bucket_name = "shop-stg-logs"
+name_prefix = "shop-stg"
 ```

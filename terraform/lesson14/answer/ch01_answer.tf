@@ -1,7 +1,7 @@
 # 流儀が違っても最終的な値は同じです。フラット派は grep で追いやすく、
 # モジュール派は再利用しやすい、というトレードオフを体感するのが狙いです。
 variable "project" {
-  default = "skillax"
+  default = "myapp"
 }
 
 variable "env" {

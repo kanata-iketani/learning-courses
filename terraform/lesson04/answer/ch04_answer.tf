@@ -3,7 +3,7 @@
 # locals の中から別の locals を参照するときも local. を使います。
 variable "project" {
   type    = string
-  default = "skillax"
+  default = "shop"
 }
 
 variable "env" {

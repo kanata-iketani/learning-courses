@@ -15,6 +15,8 @@ variable `vpcs` を type `list(object({ name = string, subnets = list(string) })
 - output `subnets`: 平坦化したサブネットのリストを `,` 区切りで join した文字列
 - output `vpc_names`: splat で取り出した VPC 名を `,` 区切りで join した文字列
 
+(ヒント: `var.vpcs[*].subnets` は「リストのリスト」になるので、`flatten` で1段のリストにしてから `length` や `join` に渡します。`object({ ... })` 型は lesson03 で見た、名前付きの項目を持つ型です)
+
 **期待出力**
 
 ```text

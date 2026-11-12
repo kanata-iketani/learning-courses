@@ -6,6 +6,8 @@ AMI ID を data ソースで調べて使う構図を、`terraform_data` で再�
 2. output `ami_id` でリソース `registry` の `output` 属性を参照で表示
 3. output `readonly` で bool 値 `true` を表示(data ソースは読むだけ、の意味)
 
+`true` は引用符で囲まずに書きます。`"true"` と書くと文字列になり、表示が `readonly = "true"` になって期待出力と合いません。真偽値(true / false)は output でも引用符なしで表示されます。
+
 **期待出力**
 
 ```text

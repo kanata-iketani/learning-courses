@@ -18,6 +18,8 @@ resource "terraform_data" "env" {
 - output `env_keys`: 作られたリソースのキー一覧を `,` 区切りで join した文字列
 - output `prod`: キー `"prod"` のリソースの `output` 属性
 
+(ヒント: `count = length(...)` を `for_each = toset(var.envs)` に、`var.envs[count.index]` を `each.value` に置き換えます。キー一覧は `keys(terraform_data.env)` です)
+
 **期待出力**
 
 ```text

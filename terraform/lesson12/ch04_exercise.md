@@ -27,6 +27,8 @@ resource "aws_acm_certificate" "cdn" {
 - output `aliases`: map のキーを `", "` で連結(`keys()` はアルファベット順で返します)
 - output `cert_region`: 証明書 `cdn` が作られるリージョン(map から引く)
 
+(map は `{ キー = 値 }` を1行ずつ並べて書きます。使う関数は lesson05 で見たものです。`length(map)` は要素(キーと値の組)の数、`keys(map)` はキーのリスト、`join(", ", リスト)` はリストを `", "` でつないだ文字列を返します。map の値は `local.provider_regions["キー"]` で取り出します)
+
 **期待出力**
 
 ```text
