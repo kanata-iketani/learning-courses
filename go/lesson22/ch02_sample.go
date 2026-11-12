@@ -22,7 +22,7 @@ type Employee struct {
 func main() {
 	e := Employee{
 		Person:  Person{Name: "田中", Age: 30},
-		Company: "ペイザ",
+		Company: "ゴーファー商事",
 	}
 	// 内側のフィールドとメソッドが「昇格」して直接使えます
 	fmt.Println(e.Name)    // e.Person.Name と書かなくてよい

@@ -243,3 +243,8 @@ pre.code {
   font-size: 12.5px;
 }
 .stderrBox { color: var(--danger); }
+
+/* 教科書の表 */
+table.mdtable { border-collapse: collapse; margin: 10px 0; font-size: 13.5px; max-width: 100%; display: block; overflow-x: auto; }
+table.mdtable th, table.mdtable td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; vertical-align: top; }
+table.mdtable th { background: #f2f4f7; }

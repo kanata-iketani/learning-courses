@@ -1,4 +1,4 @@
-// lesson09 ch04: 構造体で「変更できない組」を表す
+// lesson09 ch04: 構造体で「組」を表す
 package main
 
 import "fmt"
