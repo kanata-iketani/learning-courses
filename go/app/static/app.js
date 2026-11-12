@@ -48,6 +48,20 @@ function mdToHtml(md) {
     }
     const h = line.match(/^(#{1,4})\s+(.*)/);
     if (h) { closeList(); const lv = Math.min(h[1].length + 2, 6); html += `<h${lv}>${inlineMd(h[2])}</h${lv}>`; i++; continue; }
+    if (/^\|/.test(line)) {
+      closeList();
+      const rows = [];
+      while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => inlineMd(c.trim()));
+      let t = '<table class="mdtable">';
+      rows.forEach((r, idx) => {
+        if (/^\|[\s:-]+\|?[\s|:-]*$/.test(r)) return; // 区切り行
+        const tag = idx === 0 ? 'th' : 'td';
+        t += '<tr>' + cells(r).map((c) => `<${tag}>${c}</${tag}>`).join('') + '</tr>';
+      });
+      html += t + '</table>';
+      continue;
+    }
     const ul = line.match(/^[-*]\s+(.*)/);
     if (ul) { if (list !== 'ul') { closeList(); html += '<ul>'; list = 'ul'; } html += `<li>${inlineMd(ul[1])}</li>`; i++; continue; }
     const ol = line.match(/^\d+\.\s+(.*)/);
@@ -55,7 +69,7 @@ function mdToHtml(md) {
     if (line.trim() === '') { closeList(); i++; continue; }
     const para = [line];
     i++;
-    while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,4}\s|```|[-*]\s|\d+\.\s)/.test(lines[i])) {
+    while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,4}\s|```|[-*]\s|\d+\.\s|\|)/.test(lines[i])) {
       para.push(lines[i]); i++;
     }
     closeList();
