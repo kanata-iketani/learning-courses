@@ -6,6 +6,8 @@ variable `users`(default `["sato", "suzuki", "takahashi"]`)を宣言し、for式
 - output `emails`: リストを `tolist(...)` で包んでそのまま出力(複数行の表示形式を確認します)
 - output `joined`: リストを `,` 区切りで join した文字列
 
+(ヒント: 1要素ごとの変換は文字列補間で `"${u}@example.com"` と書けます。要素数は lesson05 で見た `length`、つなぐのは `join` です。for式で作ったリストは `locals` に名前を付けて置くと、3つの output から `local.名前` で使い回せます)
+
 **期待出力**
 
 ```text

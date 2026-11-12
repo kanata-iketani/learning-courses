@@ -6,6 +6,8 @@ variable `enable_logging`(default `true`)と `enable_monitoring`(default `false`
 - output `logging_count`: logging リソースの個数
 - output `monitoring`: `try` を使い、monitoring リソースがあればその `output` 属性、無ければ `"off"`
 
+(ヒント: `try(式, "off")` は lesson05 で見た関数で、1つ目の式がエラーになったら2つ目の値を返します。count が 0 のリソースに `[0]` を付けるとエラーになるので、`try` で包みます。個数は `length(terraform_data.logging)` です)
+
 **期待出力**
 
 ```text

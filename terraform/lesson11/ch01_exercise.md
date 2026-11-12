@@ -5,6 +5,8 @@ starter のモジュール `./modules/service` は env を受け取り、名前�
 1. `module "prod"`(env = `"prod"`)と `module "stg"`(env = `"stg"`)の 2 つの呼び出しを書く
 2. output `prod_type` と `stg_type` で各モジュールの `instance_type` を表示する
 
+(ヒント: starter の `# === file: modules/service/main.tf ===` から下は子モジュールです。書くのは区切り行より上だけです。`module.prod.instance_type` のように、呼び出し名で prod と stg を区別して受け取ります)
+
 **期待出力**
 
 ```text

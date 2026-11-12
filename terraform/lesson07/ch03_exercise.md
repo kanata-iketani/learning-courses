@@ -5,6 +5,8 @@ index のずれを出力で確認します。variable `before`(default `["app-a"
 - output `after_pairs`: after 側の全 `output` 属性を半角スペース区切りで join した文字列(`app-c` の index が繰り上がることを確認)
 - output `before_pairs`: before 側の全 `output` 属性を半角スペース区切りで join した文字列
 
+(補足: `var.before[count.index]` は「before リストの count.index 番目の要素」です。`%d` に index(整数)、`%s` に名前(文字列)が入ります。▶実行は毎回まっさらな状態から作るので作り直しは起きませんが、2つの出力を見比べると、本文の plan で `app-c` に当たるリソースの番号がずれて変更・削除の対象になる理由がわかります)
+
 **期待出力**
 
 ```text

@@ -2,6 +2,8 @@
 
 starter に用意されたローカルモジュール `./modules/greet` を呼び出してください。
 
+starter の `# === file: modules/greet/main.tf ===` から下は、子モジュールのファイルとして別に保存されます。書くのは区切り行より上(呼び出し側の main.tf)だけです。
+
 1. `module "welcome"` ブロックを書き、source に `"./modules/greet"` を指定する
 2. 引数 `name` に `"module"` を渡す
 3. output `greeting` で `module.welcome.message` を表示する

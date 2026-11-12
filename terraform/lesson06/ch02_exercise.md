@@ -6,6 +6,8 @@ variable `sizes`(default `{ api = "t3.medium", web = "t3.small" }`)を宣言し�
 - output `label_values`: 新しいマップの値一覧(values)を半角スペース区切りで join した文字列
 - output `web`: 新しいマップの `"web"` キーの値
 
+(ヒント: 値は文字列補間で `"${k}:${v}"` と組み立てられます。マップのキー一覧は `keys`、値の一覧は `values`(lesson05)で、どちらもキーのアルファベット順のリストになります。半角スペース区切りは `join(" ", ...)` です。マップの値は `local.名前["web"]` で取り出せます)
+
 **期待出力**
 
 ```text

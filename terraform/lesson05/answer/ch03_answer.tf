@@ -1,14 +1,14 @@
 variable "common_tags" {
   default = {
     Env     = "prod"
-    Project = "myapp"
+    Project = "shop"
   }
 }
 
 variable "extra_tags" {
   default = {
     Env  = "stg"
-    Name = "myapp-api"
+    Name = "shop-api"
   }
 }
 

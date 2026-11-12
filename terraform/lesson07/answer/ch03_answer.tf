@@ -7,7 +7,7 @@ variable "after" {
 }
 
 # before では app-c が index 2 ですが、真ん中を消した after では index 1 に繰り上がります。
-# 実際の運用では「同じ app-c なのに位置が変わった」ことで作り直しが計画されます。
+# 実際の運用では「同じ app-c なのに位置が変わった」ことで、変更や作り直し・削除が計画されます。
 resource "terraform_data" "before" {
   count = length(var.before)
   input = format("%d:%s", count.index, var.before[count.index])

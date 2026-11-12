@@ -6,6 +6,8 @@
 2. output `decision` で、件数が 3 以上なら `"dynamic"`、そうでなければ `"static"` を表示する
 3. output `rule_count` で件数を表示する
 
+(ヒント: 件数は `length(var.rules)`、「3 以上」は `>= 3`、条件で値を切り替えるのは lesson04 の条件式 `条件 ? "dynamic" : "static"` です)
+
 **期待出力**
 
 ```text

@@ -6,6 +6,8 @@
 2. 呼び出し側で `module "labels"` ブロックを書き、`team = "platform"`、`system = "billing"` を渡す
 3. 呼び出し側の output `label` で `module.labels.label` を表示する
 
+(ヒント: 区切り行より上が呼び出し側、下が子モジュールです。子モジュールの locals は外から見えないので、先に子モジュール側の output で `local.label` を公開してから、呼び出し側で `module.labels.label` と参照します)
+
 **期待出力**
 
 ```text

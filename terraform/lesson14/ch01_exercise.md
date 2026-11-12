@@ -8,6 +8,11 @@
 
 モジュールは `# === file: modules/naming/main.tf ===` という区切り行で同じエディタ内に書けます。
 
+(ヒント)
+- モジュール側には、入力の `variable` 2つと、名前を返す `output "bucket_name"` を書きます。サンプルのモジュール側とほぼ同じ形です
+- 呼び出し側では `module.naming.bucket_name` でモジュールの出力を受け取ります(lesson10)
+- `a == b` は「a と b が等しければ true」になる比較です。`条件 ? 真のときの値 : 偽のときの値` が条件式です(lesson04 ch03)。`x == y ? "yes" : "no"` の形で、x と y に2つの名前を入れます
+
 **期待出力**
 
 ```text

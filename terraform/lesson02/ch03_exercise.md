@@ -7,6 +7,8 @@
 
 さらに output `network_name` で `network` の `output` 属性を、output `server_network` で `server` の `output` 属性を表示してください。
 
+(ヒント: `server` の `input` には `"vpc-main"` と直接書かず、`terraform_data.network.output` と参照で書きます。結果の文字は同じですが、参照にすることで network → server の依存関係ができます)
+
 **期待出力**
 
 ```text

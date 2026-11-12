@@ -7,6 +7,8 @@ variable `db` を object 型で定義してください。
 
 さらに output `db_name` で `var.db.name` を、output `db_port` で `var.db.port` を表示してください。
 
+(ヒント: `type = object({ ... })` の中は改行して `name = string` と `port = number` を1行ずつ書いても、1行で `,` 区切りにしてもかまいません。default も同じです)
+
 **期待出力**
 
 ```text
