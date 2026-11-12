@@ -1,13 +1,13 @@
 #!/bin/bash
 # 学習講座アプリの起動/停止/状態確認
-# 使い方: ./course.sh {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|finatext|nippo|kiji|dbspec|fukuri|awsnet|all}
+# 使い方: ./course.sh {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|finatext|nippo|kiji|dbspec|fukuri|awsnet|daily|all}
 set -u
 
-declare -A ROOTS=( [go]="$HOME/learning/go" [fastapi]="$HOME/learning/fastapi" [vue]="$HOME/learning/vue" [terraform]="$HOME/learning/terraform" [takken]="$HOME/learning/takken" [nwspec]="$HOME/learning/nwspec" [cissp]="$HOME/learning/cissp" [ddd]="$HOME/learning/ddd" [finatext]="$HOME/learning/finatext" [nippo]="$HOME/learning/nippo" [kiji]="$HOME/learning/kiji" [dbspec]="$HOME/learning/dbspec" [fukuri]="$HOME/learning/fukuri" [awsnet]="$HOME/learning/awsnet" )
-declare -A PORTS=( [go]=8080 [fastapi]=8081 [vue]=8082 [terraform]=8083 [takken]=8084 [nwspec]=8085 [cissp]=8086 [ddd]=8087 [finatext]=8088 [nippo]=8089 [kiji]=8090 [dbspec]=8091 [fukuri]=8092 [awsnet]=8093 )
+declare -A ROOTS=( [go]="$HOME/learning/go" [fastapi]="$HOME/learning/fastapi" [vue]="$HOME/learning/vue" [terraform]="$HOME/learning/terraform" [takken]="$HOME/learning/takken" [nwspec]="$HOME/learning/nwspec" [cissp]="$HOME/learning/cissp" [ddd]="$HOME/learning/ddd" [finatext]="$HOME/learning/finatext" [nippo]="$HOME/learning/nippo" [kiji]="$HOME/learning/kiji" [dbspec]="$HOME/learning/dbspec" [fukuri]="$HOME/learning/fukuri" [awsnet]="$HOME/learning/awsnet" [daily]="$HOME/learning/daily" )
+declare -A PORTS=( [go]=8080 [fastapi]=8081 [vue]=8082 [terraform]=8083 [takken]=8084 [nwspec]=8085 [cissp]=8086 [ddd]=8087 [finatext]=8088 [nippo]=8089 [kiji]=8090 [dbspec]=8091 [fukuri]=8092 [awsnet]=8093 [daily]=8094 )
 
 targets() {
-  if [ "${1:-all}" = "all" ]; then echo "go fastapi vue terraform takken nwspec cissp ddd finatext nippo kiji dbspec fukuri awsnet"; else echo "$1"; fi
+  if [ "${1:-all}" = "all" ]; then echo "go fastapi vue terraform takken nwspec cissp ddd finatext nippo kiji dbspec fukuri awsnet daily"; else echo "$1"; fi
 }
 
 is_up() { curl -s -m 2 "http://127.0.0.1:${PORTS[$1]}/api/course" >/dev/null 2>&1; }
@@ -42,6 +42,6 @@ for c in $(targets "${2:-all}"); do
     stop)    stop_one "$c" ;;
     restart) stop_one "$c"; start_one "$c" ;;
     status)  status_one "$c" ;;
-    *) echo "使い方: $0 {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|finatext|nippo|kiji|dbspec|fukuri|awsnet|all}"; exit 1 ;;
+    *) echo "使い方: $0 {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|finatext|nippo|kiji|dbspec|fukuri|awsnet|daily|all}"; exit 1 ;;
   esac
 done
