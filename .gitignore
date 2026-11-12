@@ -47,3 +47,6 @@ kiji/source/
 */app/quizstate.json
 */app/mistakes.json
 */app/ai_usage.json
+
+# 毎日のテックニュース(提案に社内情報を含む。会社PCで運用)
+daily/
