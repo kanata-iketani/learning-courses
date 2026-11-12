@@ -3,7 +3,7 @@
   "chapter": 2,
   "title": "関数・複数戻り値・map・エラー処理",
   "priority": "🔴",
-  "text": "この章は Q21〜Q34 と Q50 を土台に、関数・複数戻り値・エラー処理の型・map を手で書けるようにします。とくに Go のエラー処理は「処理 → エラーチェック → 止める or 続ける」という一定のリズムがあり、ここを体に入れると後のサーバー実装がぐっと楽になります。\n\n## 関数の入口と出口\n\n関数は「何を受け取り、何を返すか」を先に決めると書けます。\n\n```go\nfunc add(a int, b int) int {\n    return a + b\n}\n```\n\n`func add(a int, b int) int` は「int を2つ受け取って int を返す」という意味で、最後の `int` が戻り値の型です。戻り値が不要なら型を書きません（表示だけの関数など）。引数 `u User` の `User` は型で、「User 型のデータを受け取り、関数の中では u という名前で扱う」という読み方をします。\n\n## 複数の戻り値\n\nGo の関数は値を複数返せます。和と差を同時に返すならこうです。\n\n```go\nfunc calc(a, b int) (int, int) {\n    return a + b, a - b\n}\nsum, diff := calc(10, 3) // 13 7\n```\n\n戻り値が2つあるときは型を `(int, int)` と並べ、受ける側も `sum, diff :=` と2つで受けます。この仕組みはエラー処理（結果, err）でも使う Go の基本機能です。\n\n## エラーを返す・受ける型\n\n失敗しうる処理は、戻り値の最後に `error` を足すのが Go の慣習です。0 で割ると異常終了するので、先に弾きます。\n\n```go\nfunc divide(a, b int) (int, error) {\n    if b == 0 {\n        return 0, errors.New(\"division by zero\")\n    }\n    return a / b, nil\n}\n```\n\nエラーのときは `errors.New(...)` でエラーを作って返し、正常のときは `nil`（エラー無しを表す値）を返します。呼ぶ側は必ず受けてチェックします。\n\n```go\nresult, err := divide(10, 0)\nif err != nil {\n    // 失敗時の処理\n    return\n}\n// 成功時の処理\n```\n\nここで `return` がないと、エラーを返したあとも処理が続き、エラーなのに正常系まで実行されてしまいます。だから「エラーなら `return` で抜ける」を必ずセットにします。この形は外から来るデータを扱うたびに出てきます。\n\n## map by キーと値の対応表\n\nmap はキーと値の対応表です。`map[キーの型]値の型` で型を書きます。\n\n```go\nscores := map[string]int{\"washi\": 90, \"taro\": 75}\nscores[\"hanako\"] = 88          // 後から追加\ndelete(scores, \"taro\")         // 削除\n```\n\n`m[\"キー\"] = 値` で後から足せ、`delete(m, \"キー\")` で消せます。構造体と違ってキーを自由に増減できるのが map の持ち味です。\n\n存在しないキーに触ってもエラーにはならず、値の型のゼロ値（string なら空文字、int なら 0）が返ります。これだと「値が空なのか、キーが無いのか」を区別できないので、2つ受け取りの形を使います。\n\n```go\nvalue, ok := m[\"nothing\"]\n// ok が false ならキーが存在しない\n```\n\n`ok` が `true` ならキーあり、`false` ならキーなしと判定できます。この comma-ok（2つ目に有無を受け取る書き方）は実務で頻出します。\n\n\n```mermaid\nflowchart TD\n  A[\"result, err := someFunc()\"] --> B{\"err != nil ?\"}\n  B -->|\"はい(失敗)\"| C[\"エラー処理 → return で抜ける\"]\n  B -->|\"いいえ(成功)\"| D[\"正常系の処理を続ける\"]\n```\n\n### まとめ\n関数は入口（引数の型）と出口（戻り値の型）を決めると書けます。Go は複数の値を返せ、失敗しうる処理は最後に error を足します。エラーを返したら必ず return で抜けます。map はキーと値の対応表で、後から増減でき、存在確認は value, ok := の形で行います。\n\n### 何も見ずに言えるように\n・失敗しうる関数は (結果, error) を返す。正常時は nil を返す\n・エラーを受けたら if err != nil { ... return } で止める。return が無いと正常系まで動く\n・map の存在確認は value, ok := m[key]。ok が false ならキー無し",
+  "text": "この章は Q21〜Q34 と Q50 を土台に、関数・複数戻り値・エラー処理の型・map を手で書けるようにします。とくに Go のエラー処理は「処理 → エラーチェック → 止める or 続ける」という一定のリズムがあり、ここを体に入れると後のサーバー実装がぐっと楽になります。\n\n## 関数の入口と出口\n\n関数は「何を受け取り、何を返すか」を先に決めると書けます。\n\n```go\nfunc add(a int, b int) int {\n    return a + b\n}\n```\n\n`func add(a int, b int) int` は「int を2つ受け取って int を返す」という意味で、最後の `int` が戻り値の型です。`result := add(10, 20)` と呼ぶと a に 10、b に 20 が入り、`return a + b` で返した 30 が result に入ります。戻り値が不要なら型を書きません（表示だけの関数など）。引数 `u User` の `User` は型で、「User 型のデータを受け取り、関数の中では u という名前で扱う」という読み方をします。\n\n## 複数の戻り値\n\nGo の関数は値を複数返せます。和と差を同時に返すならこうです。\n\n```go\nfunc calc(a, b int) (int, int) {\n    return a + b, a - b\n}\nsum, diff := calc(10, 3) // 13 7\n```\n\n`(a, b int)` は `(a int, b int)` の省略形で、同じ型の引数が続くときは最後にまとめて型を書けます。戻り値が2つあるときは型を `(int, int)` と並べ、受ける側も `sum, diff :=` と2つで受けます。この仕組みはエラー処理（結果, err）でも使う Go の基本機能です。\n\n## エラーを返す・受ける型\n\n失敗しうる処理は、戻り値の最後に `error` を足すのが Go の慣習です。0 で割ると異常終了するので、先に弾きます。\n\n```go\nfunc divide(a, b int) (int, error) {\n    if b == 0 {\n        return 0, errors.New(\"division by zero\")\n    }\n    return a / b, nil\n}\n```\n\nエラーのときは `errors.New(...)` でエラーを作って返し、正常のときは `nil`（エラー無しを表す値）を返します。`errors.New` を使うには `import` に `\"errors\"` を足します。`b == 0` の `==` は「等しいか」を調べる比較で、1 つの `=`(代入)とは別物です。\n\n### 割り算の / と、余りの %\n\n整数どうしの `/` は、小数を切り捨てた商になります。`%` は割った余りです。\n\n| 式 | 結果 | 読み方 |\n|---|---|---|\n| `7 / 2` | `3` | 7 割る 2 の商(0.5 は切り捨て) |\n| `7 % 2` | `1` | 7 を 2 で割った余り |\n| `8 % 2` | `0` | 割り切れるので余り 0 |\n| `-7 % 2` | `-1` | 負の数の余りは負になる |\n\n偶数とは「2 で割った余りが 0 の数」なので、`n%2 == 0` が true なら偶数です。`n%2 == 1` で奇数を判定すると、`-7` のような負の奇数(余り -1)で間違えるので、偶数判定は `== 0` で書きます。比較の結果は true か false(bool)なので、`func isEven(n int) bool { return n%2 == 0 }` のようにそのまま返せます。呼ぶ側は必ず受けてチェックします。\n\n```go\nresult, err := divide(10, 0)\nif err != nil {\n    // 失敗時の処理\n    return\n}\n// 成功時の処理\n```\n\n`if err != nil { ... }` は「err が nil と等しくない(=エラーが入っている)なら、`{ }` の中を実行する」という意味です。`!=` は「等しくない」です。成功と失敗で表示を分けるなら、`if 条件 { A } else { B }`(条件が成り立てば A、そうでなければ B)も使えます。\n\n```go\nresult, err := divide(10, 2)\nif err != nil {\n    fmt.Println(\"error\")\n} else {\n    fmt.Println(result)   // 5\n}\n```\n\nここで `return` がないと、エラーを返したあとも処理が続き、エラーなのに正常系まで実行されてしまいます。だから「エラーなら `return` で抜ける」を必ずセットにします。この形は外から来るデータを扱うたびに出てきます。\n\n## map: キーと値の対応表\n\nmap はキーと値の対応表です。`map[キーの型]値の型` で型を書きます。\n\n```go\nscores := map[string]int{\"washi\": 90, \"taro\": 75}\nscores[\"hanako\"] = 88          // 後から追加\ndelete(scores, \"taro\")         // 削除\n```\n\n`m[\"キー\"] = 値` で後から足せ、`delete(m, \"キー\")` で消せます。構造体と違ってキーを自由に増減できるのが map の持ち味です。\n\n存在しないキーに触ってもエラーにはならず、値の型のゼロ値（string なら空文字、int なら 0）が返ります。これだと「値が空なのか、キーが無いのか」を区別できないので、2つ受け取りの形を使います。\n\n```go\nvalue, ok := m[\"nothing\"]\n// ok が false ならキーが存在しない\n```\n\n`ok` が `true` ならキーあり、`false` ならキーなしと判定できます。`m := map[string]int{\"washi\": 90}` なら、次のとおりです。\n\n| 書き方 | value | ok |\n|---|---|---|\n| `value, ok := m[\"washi\"]` | 90 | true |\n| `value, ok := m[\"taro\"]` | 0 | false |この comma-ok（2つ目に有無を受け取る書き方）は実務で頻出します。\n\n\n```mermaid\nflowchart TD\n  A[\"result, err := someFunc()\"] --> B{\"err != nil ?\"}\n  B -->|\"はい(失敗)\"| C[\"エラー処理 → return で抜ける\"]\n  B -->|\"いいえ(成功)\"| D[\"正常系の処理を続ける\"]\n```\n\n### まとめ\n関数は入口（引数の型）と出口（戻り値の型）を決めると書けます。Go は複数の値を返せ、失敗しうる処理は最後に error を足します。エラーを返したら必ず return で抜けます。map はキーと値の対応表で、後から増減でき、存在確認は value, ok := の形で行います。\n\n### 何も見ずに言えるように\n・失敗しうる関数は (結果, error) を返す。正常時は nil を返す\n・エラーを受けたら if err != nil { ... return } で止める。return が無いと正常系まで動く\n・map の存在確認は value, ok := m[key]。ok が false ならキー無し",
   "quiz": [
     {
       "question": "`func divide(a, b int) (int, error)` で、b が 0 でない正常なときに返すべき値の組み合わせはどれですか。",
@@ -20,11 +20,11 @@
       "question": "次のエラー処理には問題があります。どこが危険ですか。\n```go\nresult, err := divide(10, 0)\nif err != nil {\n    fmt.Println(\"エラー:\", err)\n}\nfmt.Println(result * 2)\n```",
       "choices": [
         "err をチェックしているので問題はない",
-        "エラー時に return していないため、エラーなのに下の result を使う処理まで実行される",
+        "fmt.Println は2回呼べない",
         "divide の引数が間違っている",
-        "fmt.Println は2回呼べない"
+        "エラー時に return していないため、エラーなのに下の result を使う処理まで実行される"
       ],
-      "correct": 1,
+      "correct": 3,
       "explanation": "エラーを表示したあと return で抜けていないので、失敗しているのに `result * 2` まで実行されます。エラー時は return で関数を抜けて、正常系を実行させないのが基本です。"
     },
     {
@@ -41,23 +41,23 @@
     {
       "question": "map で「キーが存在するかどうか」を確実に判定したいとき、正しい書き方はどれですか。",
       "choices": [
-        "if m[key] != 0 { ... }",
-        "if m[key] != nil { ... }",
         "value, ok := m[key] とし、ok を見る",
+        "if m[key] != nil { ... }",
+        "if m[key] != 0 { ... }",
         "len(m[key]) > 0 で判定する"
       ],
-      "correct": 2,
+      "correct": 0,
       "explanation": "`value, ok := m[key]` の2つ受け取り（comma-ok）で、ok が true ならキーあり、false ならキー無しと判定できます。値だけ見る方法では、値がゼロ値のときに有無を区別できません。"
     },
     {
       "question": "Go で「和と差の両方を返す関数」を書くとき、戻り値の型の書き方として正しいのはどれですか。",
       "choices": [
         "func calc(a, b int) int, int",
-        "func calc(a, b int) (int, int)",
         "func calc(a, b int) [int, int]",
+        "func calc(a, b int) (int, int)",
         "func calc(a, b int) {int; int}"
       ],
-      "correct": 1,
+      "correct": 2,
       "explanation": "複数の戻り値はカッコで並べて `(int, int)` と書きます。`return a + b, a - b` で2つまとめて返し、受ける側も `sum, diff :=` と2つで受けます。"
     },
     {
