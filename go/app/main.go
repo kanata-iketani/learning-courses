@@ -404,7 +404,7 @@ func detectRoot() string {
 
 func main() {
 	flag.StringVar(&courseRoot, "root", "", "講座ルート（lessonNN の親ディレクトリ。省略時は自動検出）")
-	flag.StringVar(&claudeModel, "claude-model", "sonnet", "質問回答に使う Claude モデル（claude CLI の --model に渡す）")
+	flag.StringVar(&claudeModel, "claude-model", "opus", "質問回答に使う Claude モデル（claude CLI の --model に渡す）")
 	addr := flag.String("addr", "127.0.0.1:8080", "待ち受けアドレス（127.0.0.1 のみ推奨）")
 	flag.Parse()
 
