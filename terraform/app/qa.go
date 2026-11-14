@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-var claudeModel string // -claude-model フラグ（既定 "sonnet"）
+var claudeModel string // -claude-model フラグ（既定 "opus"）
 
 const reviewLesson = 90 // 自動生成した復習問題を置くレッスン番号
 
