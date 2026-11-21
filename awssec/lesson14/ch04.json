@@ -1,0 +1,92 @@
+{
+  "lesson": 14,
+  "chapter": 4,
+  "title": "メトリクスフィルター・アラームと Detective",
+  "priority": "🔴",
+  "text": "### 基礎: 「1 回」ではなく「回数」で気づく\nch03 の EventBridge は、イベント 1 つごとに反応します。ルートユーザーのサインインのように「1 回でも起きたら知らせる」ものには向いています。一方、次のようなものは 1 回だけでは判断できません。\n\n- アクセスの拒否(AccessDenied)が 1 回出るのは日常のこと。しかし 5 分で 50 回なら、盗んだ認証情報で権限を手当たり次第に試している疑いがある\n- コンソールへのサインインの失敗が 1 回なら打ち間違い。10 分で 20 回ならパスワードの総当たり\n\nこうした「一定の時間に何回起きたか」で判断するには、ログを数に変えて数え、しきい値を超えたら知らせる仕組みが要ります。これが CloudWatch のメトリクスフィルターとアラームです。\n\n### 基礎の基礎: メトリクスとアラーム\n| 用語 | 意味 | 例 |\n|---|---|---|\n| メトリクス | 時刻ごとに記録される数の並び | 1 分ごとの CPU 使用率、5 分ごとのルートユーザーの利用回数 |\n| 名前空間 | メトリクスをまとめる入れ物の名前 | `LogMetrics` |\n| 統計 | ある期間の数をどうまとめるか | Sum(合計)、Average(平均)、Maximum(最大) |\n| 期間 | まとめる時間の長さ | 300 秒(5 分) |\n| しきい値 | これを超えたら異常とみなす値 | 1 以上 |\n| アラーム | メトリクスがしきい値を超えたかを見張り、状態を変えて知らせるもの | OK → ALARM になったら SNS へ |\n\nアラームの状態は 3 つです。\n\n| 状態 | 意味 |\n|---|---|\n| `OK` | しきい値を超えていない |\n| `ALARM` | しきい値を超えた。ここで通知などが動く |\n| `INSUFFICIENT_DATA` | 判断するだけのデータがない |\n\n### AWS での仕組み: ログから数を作る\n流れは次のとおりです。\n\n1. CloudTrail の証跡(L13)が、全リージョンの記録を CloudWatch Logs のロググループ(ログをまとめて置く場所)に送る\n2. **メトリクスフィルター**が、ロググループに届く記録を 1 行ずつ見て、条件に合ったら数を 1 足す\n3. **アラーム**が、そのメトリクスを期間ごとに合計し、しきい値以上なら ALARM になって SNS に知らせる\n\nここで ch03 の宿題が解けます。ルートユーザーのサインインは us-east-1・us-east-2・us-west-2 のどこかに記録されますが、**全リージョンを記録する証跡**(マルチリージョンの証跡。組織の証跡はこれが既定)を 1 つのロググループに送れば、どのリージョンの記録も同じ場所で数えられます。\n\n```mermaid\narchitecture-beta\n    group acct(aws:account)[Security Account]\n\n    service ct(aws:cloudtrail)[Org Trail] in acct\n    service logs(aws:res-amazon-cloudwatch-logs)[CloudTrail Log Group] in acct\n    service cw(aws:cloudwatch)[Metric Filter] in acct\n    service alarm(aws:res-amazon-cloudwatch-alarm)[Root Usage Alarm] in acct\n    service sns(aws:sns)[SNS Topic] in acct\n    service team(aws:users)[Security Team]\n\n    ct:R --> L:logs\n    logs:R --> L:cw\n    cw:B --> T:alarm\n    alarm:L --> R:sns\n    sns:L --> R:team\n```\n\n組織の証跡が全アカウント・全リージョンの記録を CloudWatch Logs のロググループへ送ります。メトリクスフィルターがルートユーザーの利用を数え、アラームが 1 回以上で ALARM になり、SNS のトピックからセキュリティチームへ知らせます。\n\n### フィルターパターンを 1 行ずつ\nCloudTrail の記録は JSON なので、JSON 用のフィルターパターンを使います。CIS の基準(ch02 の Security Hub のコントロール CloudWatch.1)が求める、ルートユーザーの利用を数えるパターンです。\n\n```text\n{ $.userIdentity.type = \"Root\" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != \"AwsServiceEvent\" }\n```\n\n| 部分 | 意味 |\n|---|---|\n| `{ … }` | JSON の記録に対する条件であることを表す |\n| `$.userIdentity.type = \"Root\"` | `$` は記録の先頭。記録の中の userIdentity の type が Root のもの |\n| `&&` | かつ |\n| `$.userIdentity.invokedBy NOT EXISTS` | invokedBy という項目がないもの。invokedBy は、AWS のサービスが利用者の代わりに呼んだときに付く。それを除き、人が直接使ったものだけにする |\n| `$.eventType != \"AwsServiceEvent\"` | AWS のサービスが自分で起こしたイベントを除く。`!=` は「等しくない」 |\n\nL3 の ch04 で見たルートユーザーのサインインの記録に当てはめます。\n\n| 記録 | type | invokedBy | eventType | 数えるか |\n|---|---|---|---|---|\n| ルートユーザーがコンソールにサインイン | Root | なし | AwsConsoleSignIn | 数える |\n| ルートユーザーが IAM のパスワードを変更 | Root | なし | AwsApiCall | 数える |\n| IAM ユーザーが S3 のバケットを作成 | IAMUser | なし | AwsApiCall | 数えない(type が違う) |\n\n書き方の決まりをまとめます。`=` と `!=` で比べ、`&&`(かつ)と 2 本の縦線(または)でつなぎます。値には `*` で「任意の文字の並び」を書けます。たとえば、権限のない API の呼び出しを数える CIS のパターンは次のとおりです。\n\n```text\n{ ($.errorCode = \"*UnauthorizedOperation\") || ($.errorCode = \"AccessDenied*\") }\n```\n\nerrorCode が UnauthorizedOperation で終わるか、AccessDenied で始まる記録を数えます。L3 で見た「暗黙の拒否」「明示的な拒否」で断られた呼び出しが、ここに入ります。\n\n### CLI で作る\n```bash\naws logs put-metric-filter \\\n  --log-group-name org-cloudtrail-logs \\\n  --filter-name RootAccountUsage \\\n  --filter-pattern '{ $.userIdentity.type = \"Root\" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != \"AwsServiceEvent\" }' \\\n  --metric-transformations metricName=RootAccountUsageCount,metricNamespace=LogMetrics,metricValue=1,defaultValue=0\n```\n\n| 行 | 意味 |\n|---|---|\n| `put-metric-filter` | メトリクスフィルターを作る |\n| `--log-group-name org-cloudtrail-logs` | 見張るロググループ。証跡の送り先 |\n| `--filter-name RootAccountUsage` | フィルターの名前 |\n| `--filter-pattern '…'` | 上で読んだパターン |\n| `metricName=RootAccountUsageCount` | 作るメトリクスの名前 |\n| `metricNamespace=LogMetrics` | メトリクスを入れる名前空間 |\n| `metricValue=1` | 条件に合った記録 1 つにつき 1 を足す |\n| `defaultValue=0` | 合う記録がない期間は 0 を記録する。アラームが INSUFFICIENT_DATA のままになるのを防ぐ |\n\n```bash\naws cloudwatch put-metric-alarm \\\n  --alarm-name root-account-usage \\\n  --namespace LogMetrics --metric-name RootAccountUsageCount \\\n  --statistic Sum --period 300 \\\n  --evaluation-periods 1 --threshold 1 \\\n  --comparison-operator GreaterThanOrEqualToThreshold \\\n  --treat-missing-data notBreaching \\\n  --alarm-actions arn:aws:sns:ap-northeast-1:111122223333:security-alerts\n```\n\n| 行 | 意味 |\n|---|---|\n| `--alarm-name root-account-usage` | アラームの名前 |\n| `--namespace` と `--metric-name` | 見張るメトリクス。上で作ったもの |\n| `--statistic Sum --period 300` | 5 分ごとに合計する |\n| `--evaluation-periods 1` | 1 つの期間でしきい値を超えたら ALARM にする |\n| `--threshold 1` と `GreaterThanOrEqualToThreshold` | 合計が 1 以上なら超えたとみなす |\n| `--treat-missing-data notBreaching` | データがない期間は「超えていない」とみなす。めったに起きないことを見張るアラームの定番 |\n| `--alarm-actions arn:aws:sns:…` | ALARM になったら、このトピックに知らせる |\n\nルートユーザーがサインインすると、アラームの状態は次のようになります。\n\n```bash\naws cloudwatch describe-alarms --alarm-names root-account-usage \\\n  --query \"MetricAlarms[0].[StateValue,StateReason]\"\n```\n\n```json\n[\n    \"ALARM\",\n    \"Threshold Crossed: 1 datapoint [1.0 (20/11/26 03:15:00)] was greater than or equal to the threshold (1.0).\"\n]\n```\n\n`StateValue` が `ALARM` で、`StateReason` に「11 月 20 日 3 時 15 分からの 5 分間の合計が 1.0 で、しきい値 1.0 以上になった」と理由が書かれています。\n\n注意点が 2 つあります。メトリクスフィルターは、**作ったあとに届いた記録だけ**を数えます。過去の記録はさかのぼって数えません。また、記録が CloudTrail から CloudWatch Logs に届くまで数分かかるので、EventBridge より少し遅れて鳴ります。\n\n### よく作るメトリクスフィルター\nCIS の基準や Security Hub のコントロールが求める主なものです(パターンの正確な文字列は、Security Hub の CloudWatch のコントロールの説明に載っています)。\n\n| 見張るもの | 何に気づけるか |\n|---|---|\n| ルートユーザーの利用 | 金庫にしまったはずの鍵が使われた(L3) |\n| MFA なしのコンソールへのサインイン | MFA の付け忘れ、MFA を避けた侵入 |\n| 権限のない API の呼び出し | 盗んだ認証情報での権限の探り |\n| IAM のポリシーの変更 | 権限の不正な拡大 |\n| CloudTrail の設定の変更 | 記録を止めて痕跡を消す動き |\n| KMS キーの無効化や削除の予約 | データを読めなくする攻撃や操作ミス(L9 の ch02) |\n| SG・NACL・ルートテーブルの変更 | 守りの穴あけ(L10) |\n\nMFA なしのサインインのパターンは次の形です。\n\n```text\n{ ($.eventName = \"ConsoleLogin\") && ($.additionalEventData.MFAUsed != \"Yes\") && ($.userIdentity.type = \"IAMUser\") && ($.responseElements.ConsoleLogin = \"Success\") }\n```\n\nサインインの記録で、MFA を使っておらず、IAM ユーザーで、成功したものを数えます。4 つの条件はすべて L3 の ch04 で読んだ記録の項目です。\n\n### 実務での使い方と判断: ルートユーザーの利用に気づく 3 つの方法\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. EventBridge のルール | サインインのイベントを 1 つずつ拾う(ch03) | 速い。イベントの中身をそのまま通知に使える | 記録が残るリージョンにルールが要る。回数のしきい値は書けない | 中(複数リージョンに配る) | ほぼ無料 |\n| B. メトリクスフィルターとアラーム | 全リージョンの証跡を 1 つのロググループで数える | 1 か所で全リージョンを見張れる。回数のしきい値を書ける。CIS の基準に合う | CloudWatch Logs への取り込みに数分。ロググループの料金 | 低い | ログの取り込みと保存の料金 |\n| C. GuardDuty | `Policy:IAMUser/RootCredentialUsage` を受ける(ch01) | 設定がほぼ不要 | 重要度は Low。通知には ch03 のルールが要る | 低い | GuardDuty の料金に含まれる |\n\nプロは、監査の基準(CIS)に合わせて B を必ず作り、速さが要るものは A も足します。C は追加の手間なしで得られる保険として受けておきます。\n\n#### よくある設定ミス\n- 証跡を CloudWatch Logs に送っていない。メトリクスフィルターは CloudWatch Logs の機能なので、S3 に送るだけでは数えられない\n- 1 つのリージョンだけを記録する証跡を使い、ルートユーザーのサインインの記録を取りこぼす\n- パターンに余計な条件を足して、Security Hub のコントロールが不合格のままになる。コントロールは CIS が定めたパターンそのものを求める\n- アラームのアクションに SNS のトピックを設定し忘れる。ALARM になっても誰にも届かない\n- `treat-missing-data` を既定のまま使い、平常時に INSUFFICIENT_DATA が並んで、本当の異常と見分けにくくなる\n\n### Detective: 何が起きたかを調べる\nここまでは「気づく」ための仕組みでした。気づいたあとには「何が起きたのか、どこまで広がったのか」を調べる必要があります。これを**調査**と呼びます。\n\nたとえば ch01 の `UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.OutsideAWS`(EC2 のロールの認証情報が AWS の外で使われた)を受けたとします。調べたいのは次のことです。\n\n- その認証情報で、いつから、どの IP アドレスから、どんな API が呼ばれたか\n- ふだんのこのロールの使われ方と比べて、何が違うか\n- どのリソース(S3 のバケット、別のロールなど)に手が伸びたか\n- ほかの検出結果と同じ攻撃の一部か\n\nCloudTrail の記録を Athena で検索すれば答えは出ますが(L15)、クエリを書くのに時間がかかります。Detective は、この調査を画面で素早く行うためのサービスです。\n\n#### Detective の仕組み\n| 項目 | 内容 |\n|---|---|\n| 集めるもの | CloudTrail の管理イベント、VPC Flow Logs、GuardDuty の検出結果を自動で取り込む。追加で EKS の監査ログや Security Hub に集まった結果も選べる |\n| 動作グラフ | 取り込んだデータから、アカウント・ロール・EC2・IP アドレスなどの「つながり」と「時間ごとの動き」を整理したもの。行動グラフとも呼ぶ |\n| 期間 | 最長 1 年分のデータをさかのぼって見られる |\n| 検出結果グループ | 関係のある複数の検出結果と、関わったリソースをまとめて 1 つの図で見せる |\n| Detective Investigation | IAM のユーザーやロールについて、侵害の兆候(IOC。攻撃があったことを示す痕跡)を自動で調べる |\n| 入り方 | GuardDuty や Security Hub の検出結果の画面から、そのまま Detective の調査画面に移れる |\n| 組織での使い方 | 委任管理者のアカウントで、組織の全アカウントのデータを 1 つの動作グラフにまとめる |\n| 料金 | 取り込んだデータの量で課金。最初の 30 日は無料 |\n\nDetective は**検知も遮断もしません**。GuardDuty が見つけたものを、深く調べるための道具です。\n\n#### 調査の流れの例\n1. GuardDuty の検出結果の画面で、`InstanceCredentialExfiltration.OutsideAWS` を開き、Detective へ移る\n2. ロールの画面で、API を呼んだ IP アドレスの一覧と国を見る。ふだんは東京の EC2 からだけなのに、昨夜から海外の IP アドレスが加わっている\n3. その IP アドレスが呼んだ API を時間順に見る。`ListBuckets` の後に、`GetObject` が数千回続いている\n4. 検出結果グループを見ると、同じ時間帯の `Exfiltration:S3/AnomalousBehavior` が同じ攻撃としてまとめられている\n5. 「EC2 から盗まれた認証情報で、S3 のデータが持ち出された」と判断し、認証情報の失効と影響範囲の確定(L17)へ進む\n\n#### 調べ方の比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. Detective | 自動で整理された動作グラフを画面で見る | クエリを書かずに素早く全体像をつかめる。ふだんとの差が見える | 期間は最長 1 年。細かい条件の集計は苦手 | 低い | 取り込んだデータ量で課金 |\n| B. Athena や CloudWatch Logs Insights | 保存したログにクエリを書く(L15) | どんな条件でも自由に調べられる。長期のログも対象 | クエリを書く力と時間が要る | 中〜高 | 検索したデータ量で課金 |\n| C. CloudTrail のイベント履歴 | コンソールで過去 90 日の管理イベントを見る | 準備が要らない | 1 つのアカウント・リージョンずつ。関連付けは自分で行う | 高い | 無料 |\n\n最初の全体像は A でつかみ、細かい裏付けや長期の検索は B で行う、という組み合わせが定石です。\n\n### 試験ではこう問われる\n「ルートユーザーの利用や権限のない API の呼び出しが一定回数を超えたら通知したい」は、CloudTrail を CloudWatch Logs に送り、メトリクスフィルターとアラームと SNS を組み合わせます。「CIS の基準のコントロールが不合格」はこの仕組みの欠けを疑います。「GuardDuty の検出結果の根本原因を、最も少ない手間で調べたい」「関わったリソースとふだんとの違いを視覚的に見たい」は Detective です。Detective を「検知」や「自動遮断」の答えに選ばないようにします。\n\n### まとめ\n- 回数で判断する監視は、CloudTrail → CloudWatch Logs → メトリクスフィルター → アラーム → SNS の流れで作ります。全リージョンの証跡を 1 つのロググループに集めると、記録が残るリージョンの違いを気にせずに済みます\n- フィルターパターンは `{ $.項目 = \"値\" }` を `&&` などでつなぎます。ルートユーザーの利用は type が Root で、invokedBy がなく、AwsServiceEvent でないものを数えます\n- アラームは期間・統計・しきい値で判定し、OK・ALARM・INSUFFICIENT_DATA の状態を持ちます。フィルターは作成後の記録だけを数えます\n- Detective は、CloudTrail・Flow Logs・GuardDuty の結果から動作グラフを作り、最長 1 年分を画面で調べるためのサービスです。検知や遮断はしません\n",
+  "quiz": [
+    {
+      "question": "CloudWatch Logs のメトリクスフィルター `{ $.userIdentity.type = \"Root\" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != \"AwsServiceEvent\" }` について、`$.userIdentity.invokedBy NOT EXISTS` の条件を入れる理由として最も適切なものはどれか。",
+      "choices": [
+        "ルートユーザーの記録のうち、MFA を使わなかったものだけを数えるため",
+        "AWS のサービスが利用者の代わりに呼んだ記録を除き、人が直接ルートユーザーを使ったものだけを数えるため",
+        "失敗したサインインを除き、成功したサインインだけを数えるため",
+        "us-east-1 以外のリージョンの記録を除くため"
+      ],
+      "correct": 1,
+      "explanation": "invokedBy は、AWS のサービスが利用者の代わりに API を呼んだときに記録に付く項目です。それがないものだけにすると、人が直接ルートユーザーを使った操作に絞れます。MFA の有無は MFAUsed、成否は responseElements の ConsoleLogin で判断し、リージョンはこの条件と関係ありません。"
+    },
+    {
+      "question": "組織の全アカウント・全リージョンで、ルートユーザーの利用を 1 回でも検知したら通知したい。CIS の基準にも合わせたい。最も運用負荷が低く、記録の取りこぼしがない構成はどれか。",
+      "choices": [
+        "各アカウントの東京リージョンに、ルートユーザーのサインインを拾う EventBridge のルールを作る",
+        "各アカウントで単一リージョンの証跡を作り、S3 に保存して週に 1 回確認する",
+        "組織の証跡(全リージョン)を CloudWatch Logs に送り、メトリクスフィルターとアラームで数えて SNS で通知する",
+        "IAM の認証情報レポートを毎日取得し、ルートユーザーの最終利用日時を確認する"
+      ],
+      "correct": 2,
+      "explanation": "全リージョンを記録する組織の証跡を 1 つのロググループに送れば、ルートユーザーの記録がどのリージョンに残っても 1 か所で数えられ、CIS の基準のコントロールにも合います。東京だけのルールでは us-east-1 などに残る記録を取りこぼします。S3 への保存だけではメトリクスフィルターが使えず、週次や日次の確認は遅すぎます。"
+    },
+    {
+      "question": "「権限のない API の呼び出しが 5 分間に 20 回以上あったら通知したい」という要件がある。最も適切な仕組みはどれか。",
+      "choices": [
+        "CloudTrail の記録を CloudWatch Logs に送り、errorCode を条件にしたメトリクスフィルターと、5 分の合計が 20 以上で ALARM になるアラームを作る",
+        "EventBridge のルールで AccessDenied のイベントを拾い、そのたびに SNS で通知する",
+        "GuardDuty の抑制ルールで、AccessDenied が 20 回を超えたら検出結果を出すように設定する",
+        "Detective で、権限のない API の呼び出しが 20 回を超えたらアラームを出すように設定する"
+      ],
+      "correct": 0,
+      "explanation": "一定の時間の回数で判断するには、メトリクスフィルターで数に変え、アラームの期間・統計・しきい値で判定します。EventBridge は 1 件ずつ反応するので、回数のしきい値は書けません。抑制ルールは検出結果をアーカイブする仕組みで、Detective は調査のためのサービスでアラームは出しません。"
+    },
+    {
+      "question": "新しくメトリクスフィルターとアラームを作ったあと、昨日のルートユーザーのサインインが数えられていないことに気づいた。証跡は正しく CloudWatch Logs に届いている。最も適切な説明はどれか。",
+      "choices": [
+        "アラームの期間が 300 秒なので、昨日の分は合計に入らない",
+        "ルートユーザーのサインインは CloudWatch Logs に送られない",
+        "treat-missing-data を notBreaching にしたので、過去のデータが無視された",
+        "メトリクスフィルターは作成後に届いた記録だけを数え、過去の記録をさかのぼらない"
+      ],
+      "correct": 3,
+      "explanation": "メトリクスフィルターは、作ったあとにロググループに届いた記録だけを数えます。過去の記録を調べたいときは、CloudWatch Logs Insights や Athena で検索します(L15)。treat-missing-data はデータのない期間の扱いで、過去の記録を数えるかどうかとは関係ありません。"
+    },
+    {
+      "question": "GuardDuty が `UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.OutsideAWS` を出した。盗まれた認証情報で、いつから、どの IP アドレスから、どのリソースに何をしたかを、クエリを書かずに最も素早く把握したい。最も適切なサービスはどれか。",
+      "choices": [
+        "Security Hub CSPM の標準",
+        "Amazon Detective",
+        "CloudWatch のメトリクスフィルター",
+        "IAM Access Analyzer"
+      ],
+      "correct": 1,
+      "explanation": "Detective は、CloudTrail・VPC Flow Logs・GuardDuty の検出結果から動作グラフを作り、ロールの API の呼び出し元やふだんとの違い、関係する検出結果を画面で示します。GuardDuty の画面からそのまま移れます。Security Hub の標準は設定の点検、メトリクスフィルターは回数の監視、Access Analyzer は外部に開いたアクセスや使っていない権限の分析です。"
+    },
+    {
+      "question": "Amazon Detective の説明として正しいものはどれか。",
+      "choices": [
+        "怪しい通信を見つけると、自動で SG を書き換えて遮断する",
+        "使う前に、各アカウントで VPC Flow Logs と CloudTrail の証跡を Detective 用に作る必要がある",
+        "CloudTrail・VPC Flow Logs・GuardDuty の検出結果などから動作グラフを作り、最長 1 年分の動きを調査できる",
+        "取り込んだデータを無期限に保存し、何年前の動きでもさかのぼれる"
+      ],
+      "correct": 2,
+      "explanation": "Detective はデータを自動で取り込み、動作グラフにして最長 1 年分を調べられる調査のためのサービスです。検知や遮断はしません。データは自動で集められ、期間には上限があります。"
+    },
+    {
+      "kind": "essay",
+      "question": "あるアカウントで、CIS の基準のコントロール「ルートユーザーの利用に対するメトリクスフィルターとアラームがあるべき」が不合格になっています。合格させつつ、実際にルートユーザーの利用に必ず気づけるようにする手順を、CloudTrail・CloudWatch Logs・メトリクスフィルター・アラーム・SNS の順に説明してください。ルートユーザーのサインインの記録が残るリージョンについての注意にも触れてください(250〜450 字)。",
+      "answer": "まず全リージョンを記録する CloudTrail の証跡(組織なら組織の証跡)を作り、CloudWatch Logs のロググループに送ります。ルートユーザーのサインインは us-east-1・us-east-2・us-west-2 のいずれかに記録されるので、単一リージョンの証跡や東京だけのルールでは取りこぼすからです。次に、そのロググループに CIS が定めたパターン { $.userIdentity.type = \"Root\" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != \"AwsServiceEvent\" } のメトリクスフィルターを作り、名前空間 LogMetrics、値 1、既定値 0 のメトリクスにします。コントロールは定められたパターンそのものを求めるので、条件を足しません。続いて、そのメトリクスの 5 分の合計が 1 以上で ALARM になるアラームを作り、データのない期間は notBreaching にします。アラームのアクションに SNS のトピックを設定し、セキュリティチームのメールなどを購読させて確認を済ませます。最後に、テスト用の手順でアラームと通知が動くことを確かめます。",
+      "rubric": [
+        "全リージョン(または組織)の証跡を CloudWatch Logs に送る理由として、記録が残るリージョンの違いに触れている",
+        "Root・invokedBy・AwsServiceEvent を使う CIS のパターンのメトリクスフィルターを作り、余計な条件を足さないことに触れている",
+        "しきい値 1 以上のアラームと、その通知先の SNS のトピック(購読の確認)を設定している",
+        "メトリクスの値・既定値、データのない期間の扱い、動作確認のいずれかに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "CIS のコントロールに合格する構成と、実際に通知が届く構成は同じです。全リージョンの記録を 1 か所に集めることが鍵になります。"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "lesson": 14,
+  "chapter": 2,
+  "title": "Security Hub — 結果を集めて形をそろえる",
+  "priority": "🔴",
+  "text": "### 基礎: 検知の結果が散らばると何が困るか\nch01 の GuardDuty のほかにも、検知の結果を出すサービスはたくさんあります。\n\n| サービス | 見つけるもの | 学ぶレッスン |\n|---|---|---|\n| GuardDuty | 怪しい動き(脅威) | ch01 |\n| Inspector | ソフトウェアの脆弱性 | L12 |\n| Macie | S3 の中の機密データ | L9 の ch04 |\n| IAM Access Analyzer | 外部に開いたアクセス、使っていない権限 | L6 の ch04 |\n| AWS Config | ルールに反した設定 | L20 |\n\nこれがアカウントの数 × リージョンの数だけあります。10 アカウント × 3 リージョン × 5 サービスなら、150 個の画面です。しかも、サービスごとに結果の形(JSON の項目名や重要度の表し方)が違います。次のような事故が起きます。\n\n- Inspector の「重大な脆弱性」と GuardDuty の「その EC2 への攻撃」が別々の画面にあり、同じサーバーの話だと誰も気づかない\n- 大阪リージョンで出た High の検出結果を、東京の画面しか見ていない担当者が見逃す\n- 重要度の基準がサービスごとに違い、どれから手を付けるか決められない\n\nそこで、結果を 1 か所に集め、**正規化**(形をそろえること)して、まとめて優先順位を付けます。この役目を持つのが Security Hub です。\n\n### 基礎の基礎: CSPM とは\nCSPM(Cloud Security Posture Management。クラウドの設定の健全さを点検し続けること)は、「設定がベストプラクティスに合っているか」を自動で確かめ続ける考え方です。たとえば「既定の SG が通信を許可していないか」「ルートユーザーに MFA が付いているか」を、全アカウントで毎日点検します。ch01 の GuardDuty が「いま起きている攻撃」を見つけるのに対し、CSPM は「攻撃される前の弱い設定」を見つけます。\n\n### AWS での仕組み: Security Hub は 2 つある\n現在の公式ドキュメントでは、名前の似た 2 つのサービスがあります。\n\n| | Security Hub CSPM | Security Hub |\n|---|---|---|\n| 位置づけ | 以前から「Security Hub」と呼ばれていたサービス | その上に作られた新しい統合サービス |\n| 主な役目 | 標準に沿った設定の点検(コントロール)と、検出結果の集約 | 複数の信号を関連付けて、本当に危ないものを優先順位付けする |\n| 検出結果の形式 | ASFF | OCSF |\n| 特徴 | セキュリティスコア、自動化ルール、カスタムアクション | 露出の検出結果(弱い設定と脆弱性などを組み合わせた危険)、攻撃経路の図 |\n\n試験の問題文で「Security Hub」と書かれていれば、多くは標準による点検と集約(この表の左)を指します。この章では両方の仕組みを押さえます。標準とコントロールの詳しい使い方は L20 で扱います。\n\n#### 標準とコントロール\n**標準**は点検項目の集まり、**コントロール**は 1 つ 1 つの点検項目です。主な標準は次のとおりです。\n\n| 標準 | 中身 |\n|---|---|\n| AWS Foundational Security Best Practices(FSBP) | AWS がまとめたベストプラクティス。まず有効にする |\n| CIS AWS Foundations Benchmark | CIS(セキュリティの基準を作る団体)の基準。ルートユーザーやログの監視など |\n| PCI DSS | クレジットカードの業界の基準 |\n| NIST SP 800-53 | 米国の政府機関の基準 |\n\nほとんどのコントロールは、AWS Config(設定の変化を記録するサービス。L20)の仕組みを使って点検します。そのため、**AWS Config を有効にして、リソースを記録していないと、多くのコントロールが結果を出せません**。導入でいちばん多いつまずきです。\n\n点検の結果は、合格したコントロールの割合で**セキュリティスコア**として表示されます。\n\n### 検出結果の形式 1: ASFF を 1 行ずつ\nASFF(AWS Security Finding Format)は、Security Hub CSPM が使う共通の形式です。GuardDuty・Inspector・Macie の結果も、取り込むときにこの形に変換されます。ch04 で作る「ルートユーザーの利用を見張るメトリクスフィルター」がないときに出るコントロールの検出結果を読みます(主な項目だけ抜き出しています)。\n\n```json\n{\n  \"SchemaVersion\": \"2018-10-08\",\n  \"Id\": \"arn:aws:securityhub:ap-northeast-1:111122223333:security-control/CloudWatch.1/finding/0f1e2d3c-example\",\n  \"ProductArn\": \"arn:aws:securityhub:ap-northeast-1::product/aws/securityhub\",\n  \"GeneratorId\": \"security-control/CloudWatch.1\",\n  \"AwsAccountId\": \"111122223333\",\n  \"Region\": \"ap-northeast-1\",\n  \"Title\": \"A log metric filter and alarm should exist for usage of the \\\"root\\\" user\",\n  \"Severity\": { \"Label\": \"LOW\" },\n  \"Compliance\": { \"Status\": \"FAILED\" },\n  \"Workflow\": { \"Status\": \"NEW\" },\n  \"RecordState\": \"ACTIVE\",\n  \"Resources\": [\n    { \"Type\": \"AwsAccount\", \"Id\": \"AWS::::Account:111122223333\" }\n  ],\n  \"UpdatedAt\": \"2026-11-20T04:00:00Z\"\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `\"SchemaVersion\"` | ASFF の版。どの検出結果も同じ値 |\n| `\"Id\"` | この検出結果の一意な ID |\n| `\"ProductArn\"` | どの製品が出した結果か。`product/aws/securityhub` は Security Hub CSPM 自身。GuardDuty なら `product/aws/guardduty` になる |\n| `\"GeneratorId\"` | 結果を生んだもの。ここではコントロール `CloudWatch.1` |\n| `\"AwsAccountId\"` と `\"Region\"` | どのアカウントの、どのリージョンの結果か |\n| `\"Title\"` | 「ルートユーザーの利用に対するメトリクスフィルターとアラームがあるべき」 |\n| `\"Severity\": { \"Label\": \"LOW\" }` | 重要度。INFORMATIONAL・LOW・MEDIUM・HIGH・CRITICAL の 5 段階で、どの製品の結果もこの物差しにそろえる |\n| `\"Compliance\": { \"Status\": \"FAILED\" }` | コントロールの点検に不合格。合格なら PASSED。ほかに WARNING・NOT_AVAILABLE がある |\n| `\"Workflow\": { \"Status\": \"NEW\" }` | 対応の進み具合。NEW(未着手)→ NOTIFIED(担当に知らせた)→ RESOLVED(解決)。SUPPRESSED(問題なしと判断して抑えた)もある |\n| `\"RecordState\": \"ACTIVE\"` | 結果が有効。設定が直ると、Security Hub CSPM が ARCHIVED にする |\n| `\"Resources\"` | 対象のリソース。ここではアカウント全体 |\n| `\"UpdatedAt\"` | 最後に更新された時刻 |\n\n**Workflow** と **RecordState** の違いが大切です。Workflow は人が対応をどこまで進めたか、RecordState は結果そのものがまだ生きているか、です。ch03 の EventBridge で「新しく出た、生きている、重大なもの」だけを拾うときに、この 2 つを使います。\n\n### 検出結果の形式 2: OCSF\nOCSF(Open Cybersecurity Schema Framework)は、AWS を含む多くの企業が共同で作った、セキュリティのデータの共通の形式です。新しい Security Hub は検出結果を OCSF で扱い、L13 の Security Lake もログを OCSF にそろえて保存します。AWS 以外の製品とも同じ形でやりとりできるのが利点です。\n\nGuardDuty の検出結果を OCSF で表すと、主な項目は次のようになります(項目の一部を抜き出した説明用の形です。実物の全体は公式ドキュメントで確認してください)。\n\n```json\n{\n  \"class_name\": \"Detection Finding\",\n  \"class_uid\": 2004,\n  \"severity\": \"High\",\n  \"severity_id\": 4,\n  \"status\": \"New\",\n  \"finding_info\": {\n    \"uid\": \"a4c9f2e81b7d4e0f9a3b2c1d0e9f8a7b\",\n    \"title\": \"Bitcoin-related domain name queried by EC2 instance i-0abc1234example0.\",\n    \"types\": [\"CryptoCurrency:EC2/BitcoinTool.B!DNS\"]\n  },\n  \"cloud\": { \"account\": { \"uid\": \"111122223333\" }, \"region\": \"ap-northeast-1\" },\n  \"resources\": [ { \"type\": \"AWS::EC2::Instance\", \"uid\": \"i-0abc1234example0\" } ],\n  \"metadata\": { \"product\": { \"name\": \"GuardDuty\" } }\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `\"class_name\"` と `\"class_uid\"` | データの種類。2004 は「検知の結果」。脆弱性や設定の点検には別の番号がある |\n| `\"severity\"` と `\"severity_id\"` | 重要度を文字と数の両方で持つ。4 が High |\n| `\"status\": \"New\"` | 対応の進み具合。ASFF の Workflow にあたる |\n| `\"finding_info\"` | 検出結果の ID・タイトル・種類 |\n| `\"cloud\"` | どのアカウント・リージョンか |\n| `\"resources\"` | 対象のリソース |\n| `\"metadata.product.name\"` | どの製品が出した結果か。ASFF の ProductArn にあたる |\n\nASFF は大文字始まり(`Severity`)、OCSF は小文字とアンダースコア(`severity_id`)です。同じ中身でも項目名が違うので、ch03 の EventBridge のルールや自作のプログラムを書くときは、どちらの形式を相手にしているかを必ず確かめます。\n\n### 集約: 全アカウント・全リージョンを 1 か所に\n#### アカウントをまとめる\nGuardDuty と同じく、Organizations と連携してセキュリティ用のアカウントを Security Hub CSPM の委任管理者にします。**中央設定**(委任管理者が、どの標準・コントロールを有効にするかを組織全体に配る仕組み)を使うと、アカウントごとに設定がばらばらになるのを防げます。\n\n#### リージョンをまとめる(クロスリージョン集約)\nSecurity Hub CSPM もリージョンごとのサービスです。**ホームリージョン**(集約先。以前は集約リージョンと呼ばれていた)を 1 つ決め、ほかを**リンクされたリージョン**にすると、検出結果・インサイト・コントロールの状態・セキュリティスコアがホームリージョンに集まります。\n\n| 項目 | 内容 |\n|---|---|\n| 集まるもの | 検出結果、インサイト(条件で絞った結果のまとめ)、コントロールの状態、セキュリティスコア |\n| 更新の向き | リンク先での更新はホームへ、ホームでの更新はリンク先へ、両方向に反映される |\n| 前提 | 各リージョンで Security Hub CSPM が有効になっていること。集約の設定だけでは有効にならない |\n| 料金 | 集約そのものに追加料金はかからない |\n\n```mermaid\narchitecture-beta\n    group sec(aws:account)[Security Account]\n    group wl(aws:account)[Workload Account]\n\n    service hubhome(aws:aws-security-hub)[Hub Home Region] in sec\n    service eb(aws:eventbridge)[EventBridge] in sec\n    service hubtyo(aws:aws-security-hub)[Hub Tokyo] in wl\n    service hubosa(aws:aws-security-hub)[Hub Osaka] in wl\n    service gd(aws:guardduty)[GuardDuty] in wl\n    service insp(aws:amazon-inspector)[Inspector] in wl\n    service cfg(aws:aws-config)[AWS Config] in wl\n\n    gd:R --> L:hubtyo\n    insp:B --> T:hubtyo\n    cfg:B --> T:hubosa\n    hubtyo:R --> L:hubhome\n    hubosa:R --> L:hubhome\n    hubhome:R --> L:eb\n```\n\nワークロードのアカウントでは、GuardDuty・Inspector の結果が東京の Security Hub に、AWS Config を使った点検の結果が大阪の Security Hub に入ります。これらはセキュリティ用のアカウントのホームリージョンに集まり、そこから EventBridge で通知や自動対応(ch03)へ流れます。担当者はホームリージョンの画面だけを見れば、全アカウント・全リージョンの状況が分かります。\n\n### 結果を扱う道具\n| 道具 | 何をするか | 例 |\n|---|---|---|\n| 自動化ルール | 条件に合う検出結果を、取り込んだ時点で自動で書き換える | 本番アカウントの結果は重要度を 1 段上げる。テスト用アカウントの特定のコントロールは SUPPRESSED にする |\n| カスタムアクション | 画面で選んだ検出結果を、EventBridge に手動で送る | 担当者が「チケットを起票」ボタンを押すと、チケット管理システムに送られる |\n| インサイト | 条件で絞って数え上げた一覧 | 「重大な結果が最も多い EC2 の上位 10 台」 |\n\n### 実務での使い方と判断\n#### 結果をどこで見るか\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. 各サービスの画面を個別に見る | GuardDuty・Inspector などをそれぞれ確認 | 追加の設定がない | 画面がアカウント × リージョン × サービスの数だけある。見落とす | 高い | 追加なし |\n| B. Security Hub で集約 | 委任管理者+ホームリージョンに集める | 1 画面で全体を見られる。形式がそろい、標準による点検も付く | Config の記録などの前提がある | 低い | 点検の回数と取り込んだ結果の数で課金。Config の料金も別にかかる |\n| C. 外部の SIEM | Security Hub の結果を SIEM に送る | AWS 以外の結果と合わせて相関分析できる | 製品の導入と運用 | 中〜高 | 製品の料金 |\n\nまず B を作り、組織の事情で必要なら C を足すのが定石です。\n\n#### よくある設定ミス\n- AWS Config を有効にしておらず、多くのコントロールが結果を出さない\n- ホームリージョンだけで Security Hub CSPM を有効にし、リンク先のリージョンで有効にしていないので何も集まらない\n- 全標準・全コントロールを有効にし、関係のない結果が大量に出てアラート疲れになる。使っていないサービスのコントロールや重複は、理由を記録して無効にする\n- 結果を集めただけで、誰も Workflow を進めない。担当と期限を決めた運用(L16)までつなげる\n\n#### プロならどう決めるか\nセキュリティ用のアカウントを委任管理者にし、中央設定で FSBP(必要なら CIS)を全アカウントに配ります。全リージョンで有効にし、ホームリージョンに集約します。AWS Config は全アカウント・全リージョンで記録します。自動化ルールで環境ごとの重要度を調整し、重大なものだけを ch03 で通知します。\n\n### 試験ではこう問われる\n「複数のアカウントとリージョンの検出結果を、最も運用負荷が低く 1 か所で見たい」は、Security Hub の委任管理者とクロスリージョン集約です。「CIS や PCI DSS への準拠状況を継続的に点検したい」は Security Hub の標準です。「コントロールの結果が出ない」は AWS Config の未設定を疑います。「異なる製品の検出結果を共通の形式で扱う」は ASFF(新しい問題では OCSF)が答えになります。\n\n### まとめ\n- 検知の結果はサービス・アカウント・リージョンの数だけ散らばるので、Security Hub で 1 か所に集め、形をそろえて優先順位を付けます\n- Security Hub CSPM は標準(FSBP・CIS・PCI DSS など)のコントロールで設定を点検します。多くのコントロールは AWS Config の記録が前提です\n- 検出結果の形式は、Security Hub CSPM が ASFF(Severity.Label・Compliance.Status・Workflow.Status・RecordState)、新しい Security Hub と Security Lake が OCSF です\n- 委任管理者と中央設定でアカウントを、ホームリージョンとリンクされたリージョンでリージョンを集約します\n",
+  "quiz": [
+    {
+      "question": "Security Hub CSPM を全アカウントで有効にし、FSBP 標準を有効にした。ところが、多くのコントロールが結果を出さない。最も可能性の高い原因はどれか。",
+      "choices": [
+        "GuardDuty が有効になっていない",
+        "CloudTrail の証跡がホームリージョンにしかない",
+        "Security Hub CSPM の無料期間が終わっていない",
+        "AWS Config が有効になっておらず、リソースが記録されていない"
+      ],
+      "correct": 3,
+      "explanation": "Security Hub CSPM の多くのコントロールは、AWS Config のサービスリンクされたルールで点検します。Config でリソースを記録していないと結果を出せません。GuardDuty は検出結果を送る製品の 1 つで、コントロールの点検の前提ではありません。無料期間は点検に関係しません。"
+    },
+    {
+      "question": "ASFF の検出結果で `\"Compliance\": {\"Status\": \"FAILED\"}`、`\"Workflow\": {\"Status\": \"NOTIFIED\"}`、`\"RecordState\": \"ACTIVE\"` となっていた。この状態の説明として正しいものはどれか。",
+      "choices": [
+        "コントロールの点検に不合格で、担当者には知らせたがまだ解決しておらず、結果は有効なままである",
+        "コントロールの点検には合格したが、念のため担当者に知らせている",
+        "設定は直ったが、Workflow を更新し忘れているので結果が残っている",
+        "問題なしと判断して抑えた結果で、今後は通知されない"
+      ],
+      "correct": 0,
+      "explanation": "Compliance.Status の FAILED は点検に不合格、Workflow.Status の NOTIFIED は担当に知らせた段階、RecordState の ACTIVE は結果がまだ有効であることを表します。設定が直れば RecordState が ARCHIVED になり、問題なしと判断して抑えた場合は Workflow が SUPPRESSED になります。"
+    },
+    {
+      "question": "8 アカウント・4 リージョンで Security Hub CSPM を使っている。セキュリティ担当は、全アカウント・全リージョンの検出結果を 1 つの画面で見たい。最も運用負荷が低い方法はどれか。",
+      "choices": [
+        "各アカウントの各リージョンで検出結果を CSV に書き出し、毎日 S3 に集めて表計算ソフトで見る",
+        "セキュリティ用のアカウントを委任管理者にし、ホームリージョンを決めてほかのリージョンをリンクする",
+        "各リージョンの EventBridge から Lambda を呼び、検出結果を DynamoDB に集める仕組みを自作する",
+        "東京リージョンだけで Security Hub CSPM を有効にし、ほかのリージョンは無効にする"
+      ],
+      "correct": 1,
+      "explanation": "委任管理者でアカウントを、クロスリージョン集約でリージョンをまとめれば、ホームリージョンの画面で全体を見られます。CSV や自作の仕組みは作る手間も保守の手間も大きくなります。東京だけを有効にすると、ほかのリージョンの結果がそもそも生まれません。"
+    },
+    {
+      "question": "クロスリージョン集約を設定し、東京をホームリージョン、大阪をリンクされたリージョンにした。しかし、あるメンバーアカウントの大阪の検出結果がホームリージョンに表示されない。最も可能性の高い原因はどれか。",
+      "choices": [
+        "クロスリージョン集約には追加料金の支払い設定が必要で、それがされていない",
+        "クロスリージョン集約は検出結果を集めず、セキュリティスコアだけを集める",
+        "そのアカウントの大阪リージョンで Security Hub CSPM が有効になっていない",
+        "大阪リージョンの結果は、ホームリージョンではなく us-east-1 に集まる"
+      ],
+      "correct": 2,
+      "explanation": "Security Hub CSPM は、有効になっているリージョンのデータだけを集約します。集約の設定をしても、各リージョンで自動的に有効になるわけではありません。集約には追加料金がかからず、検出結果・インサイト・コントロールの状態・セキュリティスコアが集まります。"
+    },
+    {
+      "question": "自社で使っている SIEM と AWS の検出結果を、ベンダーに依存しない共通の形式でやりとりしたい。Security Lake にもログを集める予定である。この目的に最も合う形式はどれか。",
+      "choices": [
+        "OCSF",
+        "ASFF",
+        "CloudTrail のイベントの形式",
+        "VPC Flow Logs の形式"
+      ],
+      "correct": 0,
+      "explanation": "OCSF は多くの企業が共同で作った、ベンダーに依存しないセキュリティデータの共通形式で、新しい Security Hub と Security Lake が使います。ASFF は AWS が定めた Security Hub CSPM の形式です。CloudTrail や Flow Logs の形式は、それぞれのログの形式で、検出結果の共通形式ではありません。"
+    },
+    {
+      "question": "テスト用のアカウントでは、あるコントロールの不合格が意図どおりで、毎回の通知が負担になっている。本番アカウントの結果には影響を与えずに、テスト用アカウントのこのコントロールの結果だけを自動で抑えたい。最も適切な方法はどれか。",
+      "choices": [
+        "そのコントロールを組織全体で無効にする",
+        "テスト用アカウントの Security Hub CSPM を無効にする",
+        "カスタムアクションを作り、結果が出るたびに担当者が手動で抑える",
+        "アカウント ID とコントロールを条件にした自動化ルールで、Workflow.Status を SUPPRESSED にする"
+      ],
+      "correct": 3,
+      "explanation": "自動化ルールは、条件に合う検出結果を取り込んだ時点で自動で書き換えられます。アカウント ID とコントロールで絞れば、本番には影響しません。組織全体での無効化は本番の点検まで止め、Security Hub CSPM の無効化はほかの結果まで失います。カスタムアクションは手動の操作で、自動にはなりません。"
+    },
+    {
+      "kind": "essay",
+      "question": "上司から「GuardDuty と Security Hub は何が違うのか。両方要るのか」と聞かれました。何も見ずに 1 分で説明するつもりで答えてください。それぞれの役目、ASFF または OCSF の意味、組織での集め方に触れてください(200〜400 字)。",
+      "answer": "GuardDuty は、CloudTrail・VPC Flow Logs・DNS ログなどを分析して、いま起きている攻撃や怪しい動きを見つける検知のサービスです。Security Hub は、GuardDuty・Inspector・Macie・Config などの結果を 1 か所に集めて形をそろえ、優先順位を付けるサービスで、Security Hub CSPM の標準(FSBP や CIS)で設定の弱いところも点検します。役目が違うので両方使います。GuardDuty が見つけたものも Security Hub に集まります。サービスごとに結果の形が違うので、Security Hub CSPM は ASFF、新しい Security Hub は OCSF という共通の形式にそろえ、重要度などを同じ物差しで比べられるようにします。組織では、セキュリティ用のアカウントを両方の委任管理者にして全アカウントを自動で有効にし、Security Hub はホームリージョンに全リージョンの結果を集約して、1 画面で全体を見ます。",
+      "rubric": [
+        "GuardDuty は攻撃や怪しい動きの検知、Security Hub は結果の集約・正規化・優先順位付けと標準による設定の点検、と役目の違いを示している",
+        "両方を組み合わせて使う理由(GuardDuty の結果も Security Hub に集まる、など)を述べている",
+        "ASFF または OCSF が、異なるサービスの結果をそろえる共通の形式であることを説明している",
+        "委任管理者とクロスリージョン集約(ホームリージョン)による集め方に触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "検知するもの(GuardDuty)と、集めて並べるもの(Security Hub)を区別して説明できることが要点です。"
+    }
+  ]
+}
