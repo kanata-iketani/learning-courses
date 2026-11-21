@@ -1,0 +1,92 @@
+{
+  "lesson": 10,
+  "chapter": 4,
+  "title": "Network Firewall と Verified Access",
+  "priority": "🔴",
+  "text": "### 基礎: SG と NACL では止められないもの\nch01〜ch03 の道具(SG・NACL・エンドポイント)は、IP アドレス・ポート・プロトコルと、AWS の API の要求を見て判断します。次のような要件には届きません。\n\n| 要件 | SG・NACL で足りない理由 |\n|---|---|\n| 外向きの HTTPS は `updates.example.com` と AWS のサービスにだけ許したい | 相手の IP はしばしば変わり、同じ IP に多くのサイトが同居する。ポート 443 だけでは行き先を区別できない |\n| 既知の攻撃の手口(シグネチャ。攻撃に特有のデータの並び)を見つけて止めたい | SG・NACL はパケットの中身を見ない |\n| 侵入されたサーバーが攻撃者の指令サーバーに通信したら止めたい | 指令サーバーの IP の一覧を手で保てない |\n\nこうした「中身や行き先の名前まで見て止める」仕組みを、IDS(侵入検知システム)・IPS(侵入防止システム)と呼びます。AWS では **Network Firewall** がこれに当たります。\n\nもう 1 つの課題は、社員が社内のアプリを使うときの入口です。従来の VPN(社外から暗号化した通り道で社内のネットワークにつなぐ仕組み)は、一度つながると VPC の中の多くのサーバーにネットワークとして届きます。VPN のパスワードが盗まれれば、攻撃者も同じ範囲に届きます。場所ではなく、**要求のたびに本人と端末を確かめる**考え方をゼロトラストと呼び、AWS では **Verified Access** がこれを実現します。この章は、この 2 つを扱います。\n\n### AWS での仕組み: Network Firewall\n#### 部品\n| 部品 | 役割 |\n|---|---|\n| ファイアウォール | 守る VPC と、AZ ごとのファイアウォール用サブネットを指定する本体。ファイアウォールポリシーを 1 つ持つ |\n| ファイアウォールエンドポイント | 各 AZ のファイアウォール用サブネットに置かれる検査の入口。ここに通信を流すと検査される |\n| ファイアウォールポリシー | ルールグループの組み合わせと、どれにも当たらないときの既定の動作 |\n| ルールグループ | ルールの集まり。ステートレス(パケット 1 つずつを見る)とステートフル(通信の流れ全体を見る)がある |\n\nステートフルの検査は、オープンソースの IPS である Suricata の書式のルールで動きます。ファイアウォール用サブネットは検査専用にし、ほかのリソースを置きません(そのサブネット自身の通信は検査できないため)。\n\nなお、公式ドキュメントでは、新しく作るファイアウォールには Next Generation ポリシー(アクセス制御用のエンジンは既定で拒否、脅威検知用の IPS エンジンは既定で許可、という 2 段の構成)を勧めています。既存の環境や多くの解説は、次に説明する Classic ポリシー(ステートレスとステートフルの 2 段)で書かれているので、まずこちらを理解します。最新は公式ドキュメントで確認してください。\n\n#### 検査の順番(Classic ポリシー)\n1. **ステートレスのエンジン**がパケットを 1 つずつ見て、「通す(Pass)」「落とす(Drop)」「ステートフルへ回す(Forward)」のどれかを決めます。どのルールにも当たらないときの既定の動作も、この 3 つから選びます。普通は「ステートフルへ回す」にします\n2. **ステートフルのエンジン**が、通信の流れ全体を見てルールを当てます。評価の順は 2 通りあり、ポリシーを作るときに決めます(後から変えられない)\n   - 動作の順(既定): 通す → 落とす → 拒否(相手に通知して切る) → 警告 の順に当てる\n   - 厳密な順(strict order): 書いた優先度の順に当て、どれにも当たらないときの既定の動作(すべて落とす、など)を選ぶ\n\n#### 通信を流すためのルーティング\nNetwork Firewall は、**ルートテーブルでファイアウォールエンドポイントを通るように道を作らないと、何も検査しません**。プライベートサブネットのアプリが NAT ゲートウェイからインターネットへ出る構成では、次のように作ります。\n\n| ルートテーブル | 関連付け先 | 宛先 | 次の行き先 |\n|---|---|---|---|\n| app-rt | アプリのプライベートサブネット | 0.0.0.0/0 | NAT ゲートウェイ |\n| nat-rt | NAT ゲートウェイのパブリックサブネット(10.0.1.0/24) | 0.0.0.0/0 | ファイアウォールエンドポイント |\n| fw-rt | ファイアウォール用サブネット | 0.0.0.0/0 | IGW |\n| igw-rt | IGW(エッジ関連付け。IGW から入ってくる通信の行き先を決める) | 10.0.1.0/24 | ファイアウォールエンドポイント |\n\n行きは アプリ → NAT → ファイアウォール → IGW、戻りは IGW → ファイアウォール → NAT → アプリ と、両方向ともファイアウォールを通ります。最後の igw-rt を忘れると、戻りがファイアウォールを素通りし、ステートフルの検査が流れを正しく追えません。この配置では、ファイアウォールから見た送信元は NAT ゲートウェイのプライベート IP になる点も覚えておきます。\n\n#### ドメインで行き先を絞る(ドメインリストのルールグループ)\n外向きの HTTPS を、決めたドメインにだけ許す設定です(公式ドキュメントの形に沿った例)。\n\n```json\n{\n    \"RulesSource\": {\n        \"RulesSourceList\": {\n            \"Targets\": [\".amazonaws.com\", \"updates.example.com\"],\n            \"TargetTypes\": [\"TLS_SNI\", \"HTTP_HOST\"],\n            \"GeneratedRulesType\": \"ALLOWLIST\"\n        }\n    }\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `\"Targets\"` | 対象のドメイン。先頭が `.` の `.amazonaws.com` は、その名前自体とすべてのサブドメインに当たる。`updates.example.com` はその名前だけ |\n| `\"TLS_SNI\"` | HTTPS の最初のやりとりで、クライアントが「この名前のサーバーにつなぎたい」と平文で伝える欄(SNI)を見る |\n| `\"HTTP_HOST\"` | 暗号化しない HTTP の Host ヘッダー(接続先の名前の欄)を見る |\n| `\"ALLOWLIST\"` | 書いた名前だけを通し、それ以外の HTTP・HTTPS を落とす(動作の順のとき) |\n\n注意点が 2 つあります。1 つ目に、ドメインリストが見るのは HTTP と HTTPS だけです。ほかのプロトコル(SSH など)の外向き通信は、別のルールで止めます。2 つ目に、SNI や Host はクライアントが自分で書く値なので、偽れます。公式ドキュメントは、IP アドレスのルールと組み合わせるか、Route 53 Resolver が実際にその名前で解決した IP かを確かめる機能(解決済み IP の検証)を使う方法を案内しています。\n\n#### Suricata のルールを 1 行読む\n```text\ndrop tls $HOME_NET any -> $EXTERNAL_NET 443 (tls.sni; content:\"badsite.example\"; nocase; endswith; msg:\"block badsite\"; sid:1000001; rev:1;)\n```\n\n| 部分 | 意味 |\n|---|---|\n| `drop` | 当たったら落とす(ほかに pass・reject・alert) |\n| `tls` | TLS(HTTPS の暗号化の仕組み)の通信を対象にする |\n| `$HOME_NET any` | 送信元は自分のネットワーク、ポートは何でも。`HOME_NET` の既定はファイアウォールを置いた VPC の範囲 |\n| `->` | 向き。左から右へ流れる通信 |\n| `$EXTERNAL_NET 443` | 宛先は自分のネットワークの外の 443 番 |\n| `tls.sni; content:\"badsite.example\"` | SNI にこの文字列が含まれる |\n| `nocase; endswith` | 大文字・小文字を区別せず、文字列が末尾にある(`www.badsite.example` にも当たる) |\n| `msg:\"block badsite\"` | ログに出す説明 |\n| `sid:1000001; rev:1` | ルールの番号(重ならない値)と版 |\n\nTransit Gateway(多数の VPC をつなぐ中継の装置)で他の VPC の通信を 1 か所の検査用 VPC に集める場合は、`HOME_NET` にそれらの VPC の範囲を足します。足さないと、他の VPC の通信が `$HOME_NET` に当たらず、ルールが効きません。\n\n#### ログ\nNetwork Firewall のログは、ステートフルのエンジンに回した通信についてだけ出ます。種類は、警告ログ(alert。drop・alert・reject のルールに当たったもの)、フローログ(flow。通信の記録)、TLS ログ(TLS の中身を復号して検査する設定のとき)の 3 つで、送り先は S3・CloudWatch Logs・Data Firehose です。上のルールに当たったときの警告ログは、次のような JSON です(主な項目の例)。\n\n```json\n{\n    \"firewall_name\": \"egress-fw\",\n    \"availability_zone\": \"ap-northeast-1a\",\n    \"event_timestamp\": \"1795143600\",\n    \"event\": {\n        \"timestamp\": \"2026-11-20T03:00:00.123456+0000\",\n        \"event_type\": \"alert\",\n        \"src_ip\": \"10.0.1.15\",\n        \"src_port\": 40512,\n        \"dest_ip\": \"192.0.2.66\",\n        \"dest_port\": 443,\n        \"proto\": \"TCP\",\n        \"alert\": {\n            \"action\": \"blocked\",\n            \"signature_id\": 1000001,\n            \"rev\": 1,\n            \"signature\": \"block badsite\",\n            \"severity\": 3\n        },\n        \"tls\": { \"sni\": \"www.badsite.example\" }\n    }\n}\n```\n\n`event_type` が `alert`、`alert.action` が `blocked`(落とした)、`signature_id` がルールの `sid`、`signature` が `msg` です。`src_ip` の `10.0.1.15` は、上の配置なら NAT ゲートウェイの IP なので、元のサーバーを特定するには NAT の前後をつなぐ ch02 のフローログ(`pkt-srcaddr`)と突き合わせます。\n\n### 構成図: 外向きの通信を検査する\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n    group priv(aws:subnet-private)[App subnet] in vpc\n    group pub(aws:subnet-public)[NAT subnet] in vpc\n    group fwsub(aws:subnet-public)[Firewall subnet] in vpc\n\n    service app(aws:ec2)[App EC2] in priv\n    service nat(aws:nat)[NAT Gateway] in pub\n    service fw(aws:network-firewall)[Firewall Endpoint] in fwsub\n    service igw(aws:igw)[Internet Gateway] in vpc\n    service net(aws:internet)[Internet]\n    service logs(aws:s3)[Firewall Logs] in cloud\n\n    app:R --> L:nat\n    nat:R --> L:fw\n    fw:R --> L:igw\n    igw:R --> L:net\n    fw:B --> T:logs\n```\n\nアプリの通信は NAT ゲートウェイ、ファイアウォールエンドポイント、IGW の順に通ってインターネットへ出ます。戻りも同じ道を逆にたどります。検査の結果(警告ログ・フローログ)は S3 に残します。\n\n### AWS での仕組み: Verified Access\n#### 部品\n| 部品 | 役割 |\n|---|---|\n| インスタンス | 要求を受けて評価する本体 |\n| 信頼プロバイダー | 判断の材料を渡す外部の仕組み。ユーザーの身元(IAM Identity Center か OIDC の IdP。L5 で見た)を 1 つ、端末の状態(CrowdStrike・Jamf・JumpCloud)を複数つなげる |\n| グループ | 同じ要件のアプリ(エンドポイント)の集まり。グループのポリシーは配下のエンドポイントに引き継がれる |\n| エンドポイント | アプリ 1 つの入口。つなぎ先はロードバランサー・ENI・ネットワークの CIDR・RDS |\n| ポリシー | 通してよい条件。Cedar という AWS のポリシー言語で書く。ポリシーを書くまでは全部拒否 |\n| ログ | すべてのアクセスの試みを OCSF(セキュリティログの共通の形式)で CloudWatch Logs・S3・Data Firehose に送る |\n\nWeb アプリ(HTTP・HTTPS)はブラウザだけで使えます。SSH・RDP・データベースのような HTTP 以外の TCP のアプリは、利用者の PC に Connectivity Client という専用のソフトを入れて使います。\n\n#### 1 回のアクセスの流れ\n```mermaid\nsequenceDiagram\n    participant U as 社員のブラウザ\n    participant V as Verified Access\n    participant I as IAM Identity Center\n    participant D as 端末管理(CrowdStrike)\n    participant A as 社内アプリ(ALB)\n    U->>V: https://app.example.com を開く\n    V->>I: 本人確認へ転送(サインインと MFA)\n    I-->>V: 本人の情報(グループ・メール確認済みか)\n    D-->>V: 端末の状態(評価の点数)\n    V->>V: Cedar のポリシーで評価\n    V->>A: 許可なら要求を転送\n    A-->>U: 画面を返す\n```\n\n#### Cedar のポリシーを読む\n```text\npermit(principal, action, resource)\nwhen {\n    context.idc.groups has \"a1b2c3d4-1111-2222-3333-444455556666\"\n    && context.idc.user.email.verified == true\n    && context.crwd.assessment.overall > 50\n};\n```\n\n| 部分 | 意味 |\n|---|---|\n| `permit(principal, action, resource)` | 誰が・何を・どれに、を限定せずに「許可」の文を書く。条件は次の `when` で絞る |\n| `when { ... }` | 中の条件がすべて真のときだけ許可する |\n| `context.idc` | 信頼プロバイダーを作るときに付けた参照名(ここでは Identity Center に `idc` と付けた)から来る情報 |\n| `groups has \"a1b2…\"` | 利用者が、この ID の Identity Center のグループに入っている(名前を変えても壊れないよう ID で書く) |\n| `user.email.verified == true` | メールアドレスが確認済み |\n| `context.crwd.assessment.overall > 50` | 端末管理(参照名 `crwd`)が付けた端末の総合評価が 50 より上 |\n| `&&` | かつ(すべて満たす) |\n\n具体例で確かめます。\n\n| 利用者 | グループ | 端末の点数 | 結果 |\n|---|---|---|---|\n| 経理の佐藤さん、会社の PC | 入っている | 78 | 許可 |\n| 経理の佐藤さん、ウイルス対策が止まった PC | 入っている | 32 | 拒否 |\n| パスワードを盗んだ攻撃者、自分の PC | 入っている(なりすまし) | 端末が管理対象外で点数なし | 拒否 |\n| 営業の田中さん、会社の PC | 入っていない | 81 | 拒否 |\n\nVPN と違い、許可は「このアプリへの、この要求」に限られます。ほかのサーバーへはネットワークとして届きません。\n\n### 構成図: Verified Access で社内アプリを公開する\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n    group priv(aws:subnet-private)[Private subnet] in vpc\n\n    service users(aws:users)[Employees]\n    service va(aws:aws-verified-access)[Verified Access] in cloud\n    service idc(aws:aws-iam-identity-center)[IAM Identity Center] in cloud\n    service alb(aws:alb)[Internal ALB] in priv\n    service app(aws:ec2)[App EC2] in priv\n    service cwl(aws:cloudwatch)[Access Logs] in cloud\n\n    users:R --> L:va\n    va:T --> B:idc\n    va:R --> L:alb\n    alb:R --> L:app\n    va:B --> T:cwl\n```\n\n社員は Verified Access に接続し、Verified Access は Identity Center で本人を確かめ、ポリシーで許可した要求だけを、インターネットに公開していない内部の ALB へ転送します。すべての試みはアクセスログに残ります。\n\n### 実務での使い方と判断\n#### ネットワークの守りの道具の比較\n| 道具 | 見るもの | 置き場所 | 向いている用途 | コストの考え方 |\n|---|---|---|---|---|\n| SG | IP・ポート・相手の SG | ENI | 日常の細かい許可 | 無料 |\n| NACL | IP・ポート | サブネット | 粗い拒否・緊急の遮断 | 無料 |\n| Network Firewall | 中身・ドメイン・シグネチャ | 検査用サブネット(ルートで通す) | 外向きのドメイン制限、IPS、VPC 間の検査 | エンドポイントの時間料金 + 処理データ量 |\n| Route 53 Resolver DNS Firewall(L11) | DNS の問い合わせの名前 | VPC の DNS | 悪いドメインの名前解決を止める | 問い合わせ数などで課金 |\n| AWS WAF(L11) | HTTP の要求の中身 | CloudFront・ALB・API Gateway の前 | Web アプリへの攻撃(SQL インジェクションなど) | ルールと要求数で課金 |\n\n#### 社員のアクセス手段の比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. Client VPN | PC から VPC へ暗号化した通り道 | 何でも通せる。昔からの方式で分かりやすい | つながるとネットワークとして広く届く。端末の状態は見ない | 中 | 接続数と時間の料金 |\n| B. Verified Access | アプリごとに要求のたびに本人と端末を評価 | 最小の範囲だけ許可。端末の状態も条件にできる。すべての試みが記録される | アプリごとの設定。HTTP 以外は専用のクライアントが要る | 中 | アプリごとの時間料金 + データ量 |\n| C. Session Manager(L12) | EC2 のエージェント経由でシェルに入る | ポートを開けない。操作を記録できる | サーバーの管理用。業務アプリの利用には向かない | 低い | 追加料金なし(一部機能を除く) |\n\n#### よくある事故\n- **ルートを変えずに Network Firewall を作る**: 何も通らないので、何も検査されません\n- **ファイアウォール用サブネットにアプリを置く**: そのサーバーの通信は検査されません\n- **ドメインの許可リストだけで安心する**: HTTP・HTTPS 以外は対象外で、SNI は偽れます\n- **集約構成で `HOME_NET` を直さない**: 他の VPC の通信にルールが効きません\n- **Verified Access のポリシーをグループに書かない**: ポリシーがないうちは全拒否なので、公開しても誰も使えません(安全側に倒れる設計です)\n\n#### プロならどう決めるか\n外向きの通信は、まず ch03 のエンドポイントで AWS のサービス向けを内側に閉じ、残ったインターネット向けを Network Firewall のドメインの許可リストで絞ります。複数のアカウントがあるなら、AWS Firewall Manager(組織全体のファイアウォールの設定を一元管理するサービス)で同じポリシーを配ります。社員のアクセスは、Web アプリなら Verified Access、サーバーの管理なら Session Manager にし、VPN は必要な場面だけに残します。\n\n### 試験ではこう問われる\n「外向きの HTTPS を特定の FQDN(`www.example.com` のような完全な名前)にだけ許可」は Network Firewall のドメインリストです(SG・NACL では名前を書けない)。「既知の攻撃のシグネチャで検査・遮断」「Suricata 互換のルール」も Network Firewall です。「VPN を使わずに、本人と端末の状態を確かめて社内アプリへアクセスさせる」は Verified Access です。「多数のアカウントのファイアウォールを一元管理」は Firewall Manager、「DNS の問い合わせ自体を止める」は DNS Firewall(L11)です。\n\n### まとめ\n- Network Firewall は、通信の中身・ドメイン・シグネチャまで見て止める IPS です。ルートテーブルでファイアウォールエンドポイントを通さないと検査されません\n- Classic ポリシーではステートレス → ステートフルの順に検査し、ステートフルは Suricata の書式で書きます。ドメインリストは SNI と Host を見るので、偽装と HTTP 以外に注意します\n- Verified Access は、要求のたびに IdP の本人情報と端末の状態を Cedar のポリシーで評価し、アプリ単位で通すゼロトラストの入口です\n- SG・NACL・Network Firewall・DNS Firewall・WAF は見るものが違うので、要件に合わせて重ねて使います\n",
+  "quiz": [
+    {
+      "question": "プライベートサブネットのアプリが、NAT ゲートウェイ経由でインターネットへ出ている。外向きの HTTPS を `api.partner.example` と AWS のサービスのドメインにだけ許可し、それ以外を拒否したい。相手の IP アドレスは頻繁に変わる。最も適切なものはどれか。",
+      "choices": [
+        "アプリの SG の送信ルールに、`api.partner.example` を宛先とする 443 の許可を書く",
+        "NACL の送信ルールに、`api.partner.example` の現在の IP アドレスを許可するルールを書き、毎日更新する",
+        "Network Firewall をファイアウォール用サブネットに置いてルートで通し、TLS_SNI のドメインリストを許可リスト(ALLOWLIST)にする",
+        "S3 のゲートウェイ型エンドポイントを作り、エンドポイントポリシーで `api.partner.example` を許可する"
+      ],
+      "correct": 2,
+      "explanation": "名前で外向きの行き先を絞るには、SNI や Host を見る Network Firewall のドメインリストを使います。SG と NACL には名前を書けず、IP の手動更新は運用負荷が高く漏れも出ます。エンドポイントポリシーは AWS のサービスへの要求を絞るもので、外部のサイトには関係しません。"
+    },
+    {
+      "question": "Network Firewall のファイアウォールとポリシーを作ったが、フローログを見ると外向きの通信がまったく検査されていない。最も考えられる原因はどれか。",
+      "choices": [
+        "ステートレスの既定の動作が「ステートフルへ回す」になっている",
+        "ルートテーブルが変更されておらず、通信がファイアウォールエンドポイントを通っていない",
+        "ファイアウォールポリシーに Suricata 互換のルールが 1 つもない",
+        "VPC Flow Logs が有効になっていない"
+      ],
+      "correct": 1,
+      "explanation": "Network Firewall は、ルートテーブルでファイアウォールエンドポイントを通した通信だけを検査します。作っただけでは道が変わりません。既定の動作を「ステートフルへ回す」にするのは普通の設定です。ルールがなくても通信はエンドポイントを通り、既定の動作で処理されます。VPC Flow Logs は記録の機能で、検査の有無には関係しません。"
+    },
+    {
+      "question": "Transit Gateway で 3 つの VPC(10.1.0.0/16・10.2.0.0/16・10.3.0.0/16)の外向き通信を、検査用 VPC(192.0.2.0/24)の Network Firewall に集めた。`$HOME_NET` を送信元にしたドメインのルールが、検査用 VPC 以外からの通信に効かない。最も適切な対応はどれか。",
+      "choices": [
+        "ルールの送信元を `$EXTERNAL_NET` に書き換える",
+        "各 VPC にも Network Firewall を作り、集約をやめる",
+        "ステートレスのルールグループで、3 つの VPC の通信を「通す」にする",
+        "ルールグループの `HOME_NET` に 3 つの VPC の CIDR を検査用 VPC の範囲と一緒に設定する"
+      ],
+      "correct": 3,
+      "explanation": "`HOME_NET` の既定は、ファイアウォールを置いた VPC の範囲です。集約構成では、ほかの VPC の範囲を足さないと送信元が `$HOME_NET` に当たりません。`$EXTERNAL_NET` は `HOME_NET` の外を表すので、意味が逆になります。各 VPC に置き直すのは運用負荷が上がり、ステートレスで「通す」にするとステートフルの検査を飛ばしてしまいます。"
+    },
+    {
+      "question": "社員が社内の Web アプリを使うときに VPN をやめたい。要件は「IAM Identity Center で本人を確かめる」「会社の端末管理で健全と判定された PC からだけ許可」「アクセスの試みをすべて記録」。最も適切なサービスはどれか。",
+      "choices": [
+        "AWS Verified Access",
+        "AWS Client VPN",
+        "AWS Network Firewall",
+        "Route 53 Resolver DNS Firewall"
+      ],
+      "correct": 0,
+      "explanation": "Verified Access は、IdP の本人情報と端末管理の情報を信頼プロバイダーから受け取り、要求のたびに Cedar のポリシーで評価して、すべての試みを記録します。Client VPN は VPN そのもので、端末の状態は条件にしません。Network Firewall と DNS Firewall は通信を検査する道具で、利用者の本人確認はしません。"
+    },
+    {
+      "question": "Verified Access のグループに次のポリシーを付けた。`permit(principal, action, resource) when { context.idc.groups has \"a1b2c3d4-1111-2222-3333-444455556666\" && context.crwd.assessment.overall > 50 };` この結果として正しいものはどれか。",
+      "choices": [
+        "グループに入っている利用者は、端末の評価に関係なく許可される",
+        "グループに入っていて、かつ端末の総合評価が 50 より上のときだけ許可される",
+        "端末の総合評価が 50 より上なら、グループに入っていなくても許可される",
+        "permit の文には principal の指定がないので、すべての要求が許可される"
+      ],
+      "correct": 1,
+      "explanation": "`&&` は「かつ」なので、グループの所属と端末の評価の両方を満たすときだけ許可されます。principal・action・resource を限定していなくても、when の条件で絞られます。条件を満たさない要求は、許可がないので拒否されます。"
+    },
+    {
+      "question": "Network Firewall の Classic ポリシーで、ステートレスのルールグループのどれにも当たらなかったパケットの既定の動作として、一般に勧められる設定はどれか。",
+      "choices": [
+        "すべて通す(Pass)にして、ステートフルの検査を省いて速くする",
+        "すべて落とす(Drop)にして、ステートレスのルールで許可を書いたものだけを通す",
+        "ステートフルのルールグループへ回す(Forward)にして、通信の流れ全体を見る検査とログに使う",
+        "送信元に通知して切る(Reject)にして、相手に拒否を知らせる"
+      ],
+      "correct": 2,
+      "explanation": "ステートレスは 1 パケットずつしか見ないので、普通は既定でステートフルへ回し、Suricata のルールやドメインリストで流れ全体を検査します。Network Firewall のログもステートフルへ回した通信についてだけ出ます。Pass はステートフルの検査とログを飛ばします。ステートレスで全部を書くと、戻りのパケットまで書く必要があり管理が難しくなります。"
+    },
+    {
+      "kind": "essay",
+      "question": "侵入されたサーバーからの持ち出しを防ぐため、プライベートサブネットのアプリの「出口」を設計します。アプリは S3・Secrets Manager と、外部の決済 API(`pay.example.com`)だけを使います。VPC エンドポイント、Network Firewall、SG を組み合わせた設計と、それぞれを選んだ理由を説明してください(300〜500 字)。",
+      "answer": "AWS のサービスへの通信はインターネットに出さないようにします。S3 は無料のゲートウェイ型エンドポイントを作り、アプリのルートテーブルを関連付けます。エンドポイントポリシーで `aws:ResourceAccount` を自社に限り、他社のバケットへの持ち出しを防ぎます。Secrets Manager はインターフェース型エンドポイントを作り、プライベート DNS を有効にし、エンドポイントの SG はアプリの SG からの 443 だけを許可します。残る外部の決済 API への通信は NAT ゲートウェイから出しますが、その間に Network Firewall を置き、ルートテーブルで NAT のサブネットの 0.0.0.0/0 をファイアウォールエンドポイントへ、IGW のエッジ関連付けで戻りもファイアウォールへ通します。ポリシーは TLS_SNI のドメインリストを許可リストにして `pay.example.com` だけを通し、HTTP・HTTPS 以外の外向きは別のルールで落とします。SNI の偽装に備え、解決済み IP の検証も使います。アプリの SG の送信は、VPC エンドポイントと NAT への 443 に絞ります。SG・NACL は名前を書けないため名前の制限は Network Firewall に任せ、ログを S3 に残して持ち出しの試みを後から追えるようにします。",
+      "rubric": [
+        "S3・Secrets Manager の通信を VPC エンドポイントで閉じ、エンドポイントポリシー(自社のリソースに限る)に触れている",
+        "外部 API への通信を Network Firewall のドメインの許可リストで絞り、ルートテーブルで両方向を通すことを述べている",
+        "SG では名前を書けないなど、道具ごとの役割分担の理由を説明している",
+        "HTTP・HTTPS 以外の通信の扱い、SNI の偽装、ログの保存などの注意点に 1 つ以上触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "出口の設計は「AWS のサービス向けはエンドポイントで閉じる → 残りのインターネット向けを名前で絞る → SG で細かく絞る」の順に重ねます。どれか 1 つでは、ほかの道が残ります。"
+    }
+  ]
+}
