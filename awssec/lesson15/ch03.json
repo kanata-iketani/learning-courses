@@ -1,0 +1,92 @@
+{
+  "lesson": 15,
+  "chapter": 3,
+  "title": "検出結果が出ない・ルールが動かない",
+  "priority": "🔴",
+  "text": "### 基礎: 「何も出ていない」は安全の印ではない\nL14 で、GuardDuty(脅威を検知するサービス)や Security Hub CSPM(AWS の推奨設定に沿っているかを点検し、検出結果を集めるサービス)の検出結果を EventBridge(イベントをルールで振り分けて届けるサービス)で拾い、通知や自動対応につなげました。次のような事故は、どれも「何も出ていなかった」から始まります。\n\n- 請求額が急に増えた。調べると、普段使っていない南米のリージョンで、盗まれたアクセスキーから大量の EC2 が作られ、暗号資産の採掘に使われていた。GuardDuty は東京リージョンでしか有効になっておらず、検出結果は 1 件もなかった\n- Security Hub CSPM のダッシュボードが「重大な指摘 0 件」だった。実は AWS Config(リソースの設定を記録するサービス)の記録が止まっていて、点検そのものが行われていなかった\n- GuardDuty は検出していたのに、通知が来なかった。EventBridge のルールの `source` を `guardduty` と書いていて、1 回も当たっていなかった\n\n検知の仕組みでは、**出ないこと** と **起きていないこと** を見分けられません。この章では、「検出結果が出ない」と「出ているのに届かない」を分けて、一段ずつ確かめる型を学びます。\n\n| 段 | 確かめること | よくある原因 |\n|---|---|---|\n| 1. 有効化 | そのリージョン・そのアカウントでサービスが有効か | 一部のリージョンだけ有効。新しいアカウントが対象外 |\n| 2. 前提 | サービスが頼る仕組みや機能が動いているか | Config の記録が止まっている。保護プランが無効 |\n| 3. 見る場所 | 見ているリージョン・アカウントが正しいか | 集約先のリージョンや管理者アカウントで見ていない |\n| 4. 抑制 | 自分で隠していないか | 抑制ルールで自動アーカイブされている |\n| 5. ルール | EventBridge のルールのパターンが当たるか | `source` や `detail-type` の書き間違い。数値と文字列の取り違え |\n| 6. ターゲット | ルールからターゲットへ届ける許可があるか | Lambda のリソースポリシー、SNS のトピックポリシー、KMS |\n\n### GuardDuty が検出しない(1〜4 段目)\n#### 1 段目: どのリージョンで有効かを一度に見る\nGuardDuty はリージョンごとのサービスです。有効にしたリージョンでしか検知しません。全リージョンを一度に確かめます。\n\n```bash\nfor r in $(aws ec2 describe-regions --query \"Regions[].RegionName\" --output text); do\n  echo \"$r $(aws guardduty list-detectors --region $r --query 'DetectorIds' --output text)\"\ndone\n```\n\n| 部分 | 意味 |\n|---|---|\n| `aws ec2 describe-regions --query \"Regions[].RegionName\" --output text` | このアカウントで使えるリージョンの名前を、空白区切りで並べる |\n| `for r in $( ... ); do ... done` | その名前を 1 つずつ変数 `r` に入れて、間の処理をくり返す(シェルのくり返し) |\n| `aws guardduty list-detectors --region $r` | そのリージョンのディテクター(GuardDuty の本体。有効にすると 1 つできる)の ID を返す |\n| `echo \"$r ...\"` | リージョン名と ID を 1 行に表示する |\n\n```text\nap-northeast-1 12abc34d567e8fa901bc2d34e56789f0\nap-northeast-3\nus-east-1 7a1b2c3d4e5f60718293a4b5c6d7e8f9\nsa-east-1\neu-west-1\n```\n\nID がないリージョン(`ap-northeast-3`、`sa-east-1`、`eu-west-1`)では GuardDuty が有効になっていません。冒頭の事故は、ここで見つかります。**使っていないリージョンこそ有効にする** のが鉄則です。攻撃者は、見張られていない場所を選ぶからです。\n\n#### 2 段目: 機能(保護プラン)が有効か\nGuardDuty は、基本のログ(CloudTrail の管理イベント、VPC Flow Logs、DNS のログ)に加えて、S3 のデータイベントや EKS、実行時の監視などを **保護プラン** として個別に有効にします。無効のプランに関する検出結果は出ません。\n\n```bash\naws guardduty get-detector --detector-id 12abc34d567e8fa901bc2d34e56789f0 --region ap-northeast-1\n```\n\n```json\n{\n    \"Status\": \"ENABLED\",\n    \"FindingPublishingFrequency\": \"SIX_HOURS\",\n    \"Features\": [\n        { \"Name\": \"CLOUD_TRAIL\",        \"Status\": \"ENABLED\" },\n        { \"Name\": \"DNS_LOGS\",           \"Status\": \"ENABLED\" },\n        { \"Name\": \"FLOW_LOGS\",          \"Status\": \"ENABLED\" },\n        { \"Name\": \"S3_DATA_EVENTS\",     \"Status\": \"DISABLED\" },\n        { \"Name\": \"RUNTIME_MONITORING\", \"Status\": \"DISABLED\" }\n    ]\n}\n```\n\n| 項目 | この値 | 意味 |\n|---|---|---|\n| Status | ENABLED | ディテクターは動いている |\n| FindingPublishingFrequency | SIX_HOURS | 同じ検出結果がくり返し起きたとき、その更新を EventBridge に送る間隔。15 分・1 時間・6 時間(既定)から選べ、変えられるのは管理者アカウントだけ。新しい検出結果はこの値に関係なくほぼすぐ送られる |\n| S3_DATA_EVENTS | DISABLED | S3 のオブジェクトへの不審な読み出しなどは検知されない |\n| RUNTIME_MONITORING | DISABLED | EC2 やコンテナの中のプロセスの動きは検知されない |\n\n「S3 から大量にデータを持ち出されたのに検出結果がない」なら、まずここを見ます。\n\n#### 1 段目(組織): 新しいアカウントが対象外\n組織では、委任された管理者アカウント(管理アカウントから GuardDuty の管理を任されたアカウント。L18)がメンバーを管理します。公式ドキュメントにある注意点は次のとおりです。\n\n| 注意点 | 何が起きるか |\n|---|---|\n| 委任された管理者はリージョンごとに指定する | 東京でだけ指定すると、ほかのリージョンのメンバーは管理されない |\n| 自動有効化の設定が `NEW` | 設定した後に組織に入ったアカウントだけが自動で有効になる。既存のアカウントは対象外 |\n| 自動有効化の設定が `ALL` | 新しいアカウントも既存のアカウントも有効になる |\n\nメンバーの状態は `aws guardduty list-members` の `RelationshipStatus` で見ます。`Enabled` 以外(`Created`、`Removed` など)のアカウントは、管理者から見えていません。\n\n#### 3 段目: 見る場所\n管理者アカウントでは、メンバーの検出結果も一緒に見られます。検出結果の `accountId` で、どのアカウントで起きたかが分かります。逆に、メンバーアカウントで EventBridge のルールを作っても、ほかのアカウントの検出結果は来ません。組織全体の通知は管理者アカウントのルールで作ります。\n\n#### 4 段目: 抑制ルール\n抑制ルール(条件に合う検出結果を自動でアーカイブする設定)で自動アーカイブされた検出結果は、**EventBridge に送られません**。手でアーカイブしたものは送られます。誤報を減らすつもりで広く作った抑制ルールが、本物の攻撃まで隠していないかを確かめます。\n\n#### 通しで試す: サンプルの検出結果\nGuardDuty には、試験用の検出結果を作るコマンドがあります。\n\n```bash\naws guardduty create-sample-findings --detector-id 12abc34d567e8fa901bc2d34e56789f0 \\\n  --finding-types \"UnauthorizedAccess:EC2/SSHBruteForce\"\n```\n\nタイトルに `[SAMPLE]` の付いた検出結果ができ、本物と同じように EventBridge に送られます。通知や自動対応までの鎖を通しで試せます。\n\n### Security Hub CSPM の点検が出ない(2 段目)\nSecurity Hub CSPM のコントロール(1 つずつの点検項目)の多くは、AWS Config のルールで評価されます。公式ドキュメントでは、Security Hub CSPM を有効にした **各リージョン** で Config を有効にし、点検するリソースの種類を記録していることが前提です(新しい Security Hub も一緒に有効にしていれば、Security Hub CSPM が専用の記録の設定を自動で作ります)。\n\n```bash\naws configservice describe-configuration-recorder-status --region ap-northeast-1\n```\n\n```json\n{\n    \"ConfigurationRecordersStatus\": [\n        {\n            \"name\": \"default\",\n            \"recording\": false,\n            \"lastStatus\": \"Failure\",\n            \"lastErrorCode\": \"AccessDenied\",\n            \"lastStopTime\": \"2026-10-02T11:20:31+09:00\"\n        }\n    ]\n}\n```\n\n| 項目 | この値 | 意味 |\n|---|---|---|\n| recording | false | 記録が止まっている |\n| lastStatus | Failure | 最後の記録が失敗 |\n| lastErrorCode | AccessDenied | 記録に使うロールの権限が足りない、または組織のポリシー(SCP)が止めている |\n| lastStopTime | 2026-10-02 | この日から点検の前提が崩れている |\n\nこのとき Security Hub CSPM では、Config の状態を点検する `Config.1` が `FAILED` になり、記録されていない種類のリソースを点検するコントロールは `WARNING` になります。**ダッシュボードの「FAILED が少ない」は、点検ができていないだけかもしれない**ので、`Config.1` と `WARNING` の多さを先に見ます。\n\n複数のリージョンをまとめて見るリージョン間の集約を使っているときは、集約先のリージョンのイベントの流れに、つながったリージョンの検出結果も含まれます。通知のルールは集約先のリージョンに作ります(3 段目)。\n\n### EventBridge のルールが動かない(5・6 段目)\n#### イベントがこのバスに来ているか\n| 確かめること | 注意点 |\n|---|---|\n| イベントバス | AWS のサービスのイベントは **既定のイベントバス(default)** に来る。自分で作ったバスにルールを作っても当たらない |\n| リージョン | イベントは起きたリージョンのバスに来る。IAM などグローバルなサービスの API 呼び出しのイベントは us-east-1 だけに来る |\n| CloudTrail 経由のイベント | `AWS API Call via CloudTrail` などを受けるには、記録中の証跡が要る |\n| 読み取りの API | `Get`・`List`・`Describe` などの読み取りだけの管理イベントは、ルールの状態を `ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS` にしないと当たらない。既定の `ENABLED` は書き込みの操作だけ |\n\n#### パターンを 1 行ずつ直す\n深刻度 7 以上の GuardDuty の検出結果を拾うつもりで、次のパターンを書きました。1 回も当たっていません。\n\n```json\n{\n  \"source\": [\"guardduty\"],\n  \"detail-type\": [\"GuardDuty finding\"],\n  \"severity\": [\"7\", \"8\"]\n}\n```\n\nGuardDuty のイベントの実物は次の形です。\n\n```json\n{\n  \"version\": \"0\",\n  \"detail-type\": \"GuardDuty Finding\",\n  \"source\": \"aws.guardduty\",\n  \"account\": \"111122223333\",\n  \"region\": \"ap-northeast-1\",\n  \"detail\": {\n    \"accountId\": \"222233334444\",\n    \"type\": \"UnauthorizedAccess:EC2/SSHBruteForce\",\n    \"severity\": 8\n  }\n}\n```\n\n| 間違い | 実物 | 何がずれているか |\n|---|---|---|\n| `\"source\": [\"guardduty\"]` | `\"source\": \"aws.guardduty\"` | AWS のサービスの source は `aws.` で始まる |\n| `\"GuardDuty finding\"` | `\"GuardDuty Finding\"` | 大文字と小文字は区別される。完全一致で比べる |\n| `\"severity\"` を一番上に書いた | `detail` の中にある | パターンはイベントの JSON と同じ入れ子で書く |\n| `[\"7\", \"8\"]` | `8`(数値) | 文字列の `\"8\"` と数値の `8` は別物。しかも 7.5 などの小数は列挙できていない |\n\n直したパターンです。\n\n```json\n{\n  \"source\": [\"aws.guardduty\"],\n  \"detail-type\": [\"GuardDuty Finding\"],\n  \"detail\": {\n    \"severity\": [{ \"numeric\": [\">=\", 7] }]\n  }\n}\n```\n\n`{ \"numeric\": [\">=\", 7] }` は「数値として 7 以上」を表す書き方です。パターンの値は必ず配列 `[ ]` で書き、配列の中のどれかに合えば当たり(OR)、別々のキーはすべて合ったときだけ当たり(AND)です。\n\nパターンは、本番を待たずに試せます。\n\n```bash\naws events test-event-pattern \\\n  --event-pattern file://pattern.json \\\n  --event file://sample-guardduty-event.json\n```\n\n```json\n{\n    \"Result\": true\n}\n```\n\n`pattern.json` にパターン、`sample-guardduty-event.json` に実物の形のイベント(`id`・`time`・`resources` などの必須の項目も含めたもの)を入れます。`true` なら当たり、`false` なら外れです。コンソールのサンドボックス(パターンを試す画面)でも同じことができます。\n\n#### メトリクスで「どこで止まったか」を読む\nEventBridge は、ルールごとに CloudWatch のメトリクスを出します。\n\n| メトリクス | 意味 |\n|---|---|\n| TriggeredRules | ルールにイベントが当たった回数 |\n| Invocations | ターゲットを呼んだ回数 |\n| FailedInvocations | ターゲットを呼ぶのに最終的に失敗した回数 |\n\n| 見え方 | どこを疑うか |\n|---|---|\n| TriggeredRules が 0 | イベントが来ていない(バス・リージョン・証跡)か、パターンが外れている |\n| TriggeredRules はあるが FailedInvocations も同じだけある | ターゲットへの許可(6 段目) |\n| Invocations はあるが通知が来ない | ターゲットの先(SNS の購読の確認など。ch02) |\n\n#### 6 段目: ターゲットへの許可\n| ターゲット | 要るもの |\n|---|---|\n| Lambda | 関数のリソースベースのポリシーで、`events.amazonaws.com` に `lambda:InvokeFunction` を許す。`--source-arn` でこのルールに限る |\n| SNS | トピックポリシーで、`events.amazonaws.com` に `sns:Publish` を許す |\n| 暗号化した SNS・SQS | カスタマー管理キーのキーポリシーで、`events.amazonaws.com` に `kms:Decrypt` と `kms:GenerateDataKey` を許す。EventBridge から暗号化したトピックへの場合、キーポリシーに `aws:SourceArn` などの条件を付けるのはサポートされていないと公式ドキュメントにある |\n\nLambda の許可は、次のコマンドで確かめます。\n\n```bash\naws lambda get-policy --function-name isolate-instance\n```\n\n`ResourceNotFoundException` が返るか、出力に `events.amazonaws.com` がなければ、EventBridge は関数を呼べません。EventBridge は届けられないイベントを最大 24 時間再試行し、それでも届かなければ捨てます。**デッドレターキュー**(届けられなかったイベントを置いておく SQS のキュー)をターゲットに設定しておくと、後から何が失われたかを調べられます。\n\n### 構成図: 検出結果から通知までの道\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group admin(aws:account)[Security Admin Account] in cloud\n\n    service gd(aws:guardduty)[GuardDuty] in admin\n    service sh(aws:aws-security-hub)[Security Hub CSPM] in admin\n    service cfg(aws:aws-config)[AWS Config] in admin\n    service eb(aws:eventbridge)[Default Event Bus] in admin\n    service sns(aws:sns)[SNS Topic] in admin\n    service fn(aws:lambda)[Response Lambda] in admin\n    service dlq(aws:sqs)[DLQ] in admin\n\n    gd:R --> L:eb\n    cfg:R --> L:sh\n    sh:B --> T:eb\n    eb:R --> L:sns\n    eb:B --> T:fn\n    fn:R --> L:dlq\n```\n\nセキュリティの管理者アカウントで、GuardDuty の検出結果と、AWS Config の記録をもとにした Security Hub CSPM の検出結果が、既定のイベントバス(Default Event Bus)に入ります。ルールに当たったイベントは SNS トピックで人に知らせ、Lambda で自動対応します。届けられなかったイベントはデッドレターキュー(DLQ)に残します。図の左側(検知の有効化と前提)が 1〜4 段目、右側(ルールとターゲット)が 5・6 段目です。\n\n### 実務での使い方と判断\n#### 検知の鎖をどう試すか\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. パターンだけ試す | `test-event-pattern` やサンドボックス | すぐ・安全に試せる | ターゲットの許可や有効化は確かめられない | 低い | 無料 |\n| B. サンプルの検出結果 | `create-sample-findings` で `[SAMPLE]` を作る | 検出結果から通知・自動対応まで通しで試せる | 自動対応が本物のリソースに働かないよう注意が要る | 低い | ほぼ無料 |\n| C. 本物に近い操作をする | 検証用アカウントで、検知されるはずの操作を実際にする | 有効化や保護プランの漏れまで分かる | 準備が要る。本番では行えない | 高い | 検証環境の費用 |\n\nプロは、ルールを作ったら A、構成を変えたら B、四半期ごとの演習(L16)で C、と使い分けます。加えて、**全リージョンで有効かを定期的に点検する** 仕組みを入れます。組織では、委任された管理者アカウントで自動有効化を `ALL` にし、Security Hub CSPM の `Config.1` を見張ります。\n\n#### よくある事故\n- **使っていないリージョンを無効のままにする**: 攻撃者はそこを使います\n- **自動有効化が `NEW` のまま**: 既存のアカウントだけが見張られていない\n- **広すぎる抑制ルール**: 本物の検出結果まで EventBridge に送られなくなる\n- **source や detail-type の書き間違い、数値を文字列で書く**: パターンが 1 回も当たらない\n- **自作のイベントバスにルールを作る**: AWS のサービスのイベントは既定のバスにしか来ない\n- **Lambda の許可を消してしまう**: 関数を作り直したときにリソースベースのポリシーが消え、FailedInvocations だけが増える\n\n### 試験ではこう問われる\n「GuardDuty が攻撃を検出しなかった」は、そのリージョンで有効か、保護プランが有効かを問います。「Security Hub CSPM のコントロールが評価されない」は AWS Config の記録です。「EventBridge のルールが動かない」は、パターン(`aws.` の source、大文字小文字、数値)、既定のバス、us-east-1(IAM)、ターゲットのリソースベースのポリシー、暗号化したトピックのカスタマー管理キーのどれかです。「最も運用負荷が低い」なら、組織の自動有効化や `create-sample-findings` を選びます。\n\n### まとめ\n- 検出結果が出ないときは「有効化・前提・見る場所・抑制」、出ているのに届かないときは「ルール・ターゲット」と分けて確かめます\n- GuardDuty はリージョンごとです。全リージョンで有効にし、保護プランと組織の自動有効化(`ALL`)を確かめます。抑制ルールで自動アーカイブしたものは EventBridge に送られません\n- Security Hub CSPM の点検は AWS Config の記録が前提です。`Config.1` の FAILED と WARNING の多さを先に見ます\n- EventBridge のパターンは実物のイベントと同じ入れ子・同じ大文字小文字・同じ型で書き、`test-event-pattern` で試します。TriggeredRules と FailedInvocations で、パターンとターゲットのどちらで止まったかを読みます\n",
+  "quiz": [
+    {
+      "question": "ある会社は東京リージョンだけで GuardDuty を有効にしている。盗まれたアクセスキーで、普段使わない南米のリージョンに大量の EC2 が作られたが、検出結果は出なかった。今後、同じことを最も確実に検知できる対策はどれか。",
+      "choices": [
+        "東京リージョンの GuardDuty で Runtime Monitoring を有効にする",
+        "東京リージョンの EventBridge のルールに南米のリージョン名を加える",
+        "使っていないリージョンを含む全リージョンで GuardDuty を有効にする",
+        "東京リージョンの CloudTrail のイベント履歴を毎日確認する"
+      ],
+      "correct": 2,
+      "explanation": "GuardDuty はリージョンごとのサービスで、有効にしたリージョンでしか検知しません。使っていないリージョンほど攻撃者に狙われるので、全リージョンで有効にします。東京の機能を増やしても、東京の EventBridge のルールを直しても、南米の活動は見えません。イベント履歴もリージョンごとで、手作業では遅れます。"
+    },
+    {
+      "question": "Security Hub CSPM のダッシュボードで FAILED のコントロールがほとんどない。しかし `Config.1` が FAILED で、多くのコントロールが WARNING になっている。最も適切な判断はどれか。",
+      "choices": [
+        "設定はほぼ推奨どおりなので、対応は不要である",
+        "AWS Config の記録が止まっているか不足していて、点検そのものが行われていない可能性が高い",
+        "GuardDuty が無効になっているので、GuardDuty を有効にする",
+        "Security Hub CSPM の検出結果は 90 日で消えるので、古いものが消えただけである"
+      ],
+      "correct": 1,
+      "explanation": "Security Hub CSPM の多くのコントロールは AWS Config の記録を前提にしています。`Config.1` の FAILED と WARNING の多さは、記録が止まっているか、点検するリソースの種類を記録していないことを示します。FAILED が少ないのは点検できていないだけかもしれません。GuardDuty の有効化とは別の話です。"
+    },
+    {
+      "question": "深刻度 7 以上の GuardDuty の検出結果を拾うため、ルールのパターンを `{\"source\":[\"aws.guardduty\"],\"detail-type\":[\"GuardDuty Finding\"],\"detail\":{\"severity\":[\"7\",\"8\"]}}` とした。深刻度 8 の検出結果が出ても当たらない。最も適切な修正はどれか。",
+      "choices": [
+        "`\"severity\"` を `detail` の外の一番上に移す",
+        "`\"source\"` を `[\"guardduty\"]` に変える",
+        "ルールを自作のイベントバスに移す",
+        "`\"severity\": [{\"numeric\": [\">=\", 7]}]` のように数値の条件で書く"
+      ],
+      "correct": 3,
+      "explanation": "イベントの `detail.severity` は数値の 8 なので、文字列の \"8\" とは一致しません。数値の条件で 7 以上と書けば、7.5 のような小数も含めて当たります。severity は `detail` の中にあるので外へ移すと外れ、source は `aws.guardduty` が正しく、AWS のサービスのイベントは既定のバスにしか来ません。"
+    },
+    {
+      "question": "EventBridge のルールで GuardDuty の検出結果を Lambda に送っている。CloudWatch のメトリクスでは、このルールの TriggeredRules と FailedInvocations が同じ数ずつ増えている。最も可能性が高い原因はどれか。",
+      "choices": [
+        "Lambda 関数のリソースベースのポリシーに、`events.amazonaws.com` からの `lambda:InvokeFunction` の許可がない",
+        "パターンの `detail-type` が間違っている",
+        "GuardDuty がそのリージョンで有効になっていない",
+        "抑制ルールで検出結果が自動アーカイブされている"
+      ],
+      "correct": 0,
+      "explanation": "TriggeredRules が増えているので、イベントは届いてパターンにも当たっています。それでも FailedInvocations が同じだけあるのは、ターゲットを呼べていないからで、Lambda のリソースベースのポリシーが典型です。パターンの誤り・GuardDuty の無効・抑制ルールなら、そもそもルールに当たらず TriggeredRules が増えません。"
+    },
+    {
+      "question": "組織で GuardDuty の委任された管理者アカウントを設定し、自動有効化を `NEW` にした。後日、以前から組織にいたアカウントで不審な活動があったが、管理者アカウントに検出結果が出なかった。運用負荷が最も低い対策はどれか。",
+      "choices": [
+        "既存のアカウントごとに、担当者が手で GuardDuty を有効にする",
+        "自動有効化の設定を `ALL` にして、既存のアカウントも対象にする",
+        "各アカウントに EventBridge のルールを作り、管理者アカウントに転送する",
+        "既存のアカウントを一度組織から外して入れ直す"
+      ],
+      "correct": 1,
+      "explanation": "`NEW` は設定の後に組織に入ったアカウントだけを自動で有効にします。`ALL` にすれば既存のアカウントも含めて有効になり、手作業が要りません。手で有効にする方法やアカウントを入れ直す方法は手間がかかり、EventBridge の転送は GuardDuty が無効なアカウントの検出結果を生み出しません。"
+    },
+    {
+      "question": "`ListBuckets` や `DescribeInstances` などの読み取りの API 呼び出しを EventBridge のルールで拾いたい。記録中の証跡はあり、パターンは `test-event-pattern` で `true` になるのに、ルールが当たらない。最も適切な対応はどれか。",
+      "choices": [
+        "ルールを us-east-1 に作り直す",
+        "証跡でデータイベントを有効にする",
+        "ルールの状態を `ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS` にする",
+        "パターンの `source` を `aws.cloudtrail` に変える"
+      ],
+      "correct": 2,
+      "explanation": "読み取りだけの管理イベントは、既定の `ENABLED` のルールには当たりません。ルールの状態を `ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS` にする必要があります。これらは管理イベントなのでデータイベントは関係なく、IAM のようなグローバルなサービスではないので us-east-1 に移す必要もありません。CloudTrail 経由のイベントの source は、呼ばれたサービス(`aws.s3` や `aws.ec2`)です。"
+    },
+    {
+      "kind": "essay",
+      "question": "「GuardDuty の深刻度の高い検出結果が出たら、Slack に通知が届くはずなのに、一度も届いたことがない」と相談されました。検出結果が出ていないのか、出ているのに届いていないのかを切り分け、原因を突き止める手順を説明してください。使うコマンドやメトリクスも挙げてください(250〜450 字)。",
+      "answer": "まず GuardDuty のコンソールか list-findings で、対象のリージョンとアカウントに検出結果があるかを見ます。なければ、全リージョンで list-detectors を回して有効化を確かめ、get-detector で保護プランの状態を、組織なら list-members と自動有効化の設定を、さらに抑制ルールで自動アーカイブされていないかを確かめます。検出結果があるのに届かない場合は、EventBridge のルールのメトリクスを見ます。TriggeredRules が 0 なら、ルールが既定のイベントバスと正しいリージョン・管理者アカウントにあるか、パターンの source が aws.guardduty、detail-type が GuardDuty Finding、severity が数値の条件になっているかを、test-event-pattern で実物の形のイベントに当てて確かめます。TriggeredRules があり FailedInvocations も増えていれば、SNS のトピックポリシーや暗号化キーのキーポリシーで events.amazonaws.com が許されているかを確かめます。Invocations が成功しているなら、SNS の先(購読やチャット連携)を見ます。最後に create-sample-findings で通しで試します。",
+      "rubric": [
+        "検出結果が出ていない場合と、出ているのに届かない場合を分けている",
+        "出ていない場合に、リージョンごとの有効化・保護プラン・組織のメンバー・抑制ルールのいずれかを確かめている",
+        "届かない場合に、TriggeredRules・FailedInvocations などのメトリクスでパターンとターゲットのどちらで止まったかを判断している",
+        "パターンの具体的な誤り(source・detail-type・数値)や test-event-pattern、create-sample-findings による確認に触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "検知の仕組みでは「出ないこと」と「起きていないこと」を区別できません。上流(検知)と下流(配送)に分けて、それぞれ一段ずつ確かめるのが型です。"
+    }
+  ]
+}
