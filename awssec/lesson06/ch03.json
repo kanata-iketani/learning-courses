@@ -1,0 +1,92 @@
+{
+  "lesson": 6,
+  "chapter": 3,
+  "title": "クロスアカウントと組織のデータ境界",
+  "priority": "🔴",
+  "text": "### 基礎: アカウントをまたぐと「2 人の門番」になる\nL2 で見たとおり、AWS アカウントは権限の壁です。会社が大きくなると、本番・開発・ログ・データ分析とアカウントを分けます。すると「分析アカウントのプログラムが、データアカウントの S3 を読む」「取引先のアカウントが、自社のバケットにファイルを置く」のように、アカウントをまたぐアクセス(クロスアカウントアクセス)が必ず出てきます。\n\nここで起きる事故は 2 方向です。\n\n- **入ってくる側**: バケットポリシーで取引先を許可するつもりが、`\"Principal\": \"*\"` と書いて全世界に開いた。あるいは、契約が終わった取引先の許可が残っている\n- **出ていく側**: 社内のロールが、攻撃者や退職者が用意した**社外のバケット**にデータを書き出した。社外のバケットのポリシーは「だれでも書き込める」になっていて、自社のアカウントの中では止める人がいない\n\nアカウントをまたぐ依頼では、依頼する側のアカウントと、リソースを持つ側のアカウントの**両方**が門番になります。そして組織の SCP と RCP を使うと、自社の外との境目に線を引けます。この線をデータ境界(自社の ID と自社のリソースだけでやりとりさせる線)と呼びます。\n\n### AWS での仕組み: 評価は 2 回、両方が許可で通る\nアカウント A のロールが、アカウント B のバケットのオブジェクトを読むとき、AWS は評価を 2 回行います。\n\n| 評価 | どのアカウントの目で | 見るポリシー |\n|---|---|---|\n| 依頼する側 | A(依頼者がいるアカウント) | A のアイデンティティベースのポリシー、権限境界、セッションポリシー、**A に効く SCP** |\n| リソースを持つ側 | B(リソースがあるアカウント) | B のリソースベースのポリシー、**B に効く RCP** |\n\n両方が許可したときだけ許可です。どちらかで Deny があれば拒否、どちらかで Allow がなければ拒否です。ch2 の 8 段を、それぞれのアカウントで回すと考えてください。\n\n同じアカウントの中との一番の違いは、「どちらか一方の Allow で足りる」が通用しないことです。\n\n| 状況 | 同じアカウント | アカウントをまたぐ |\n|---|---|---|\n| アイデンティティベースだけが許可 | 許可 | 拒否(B の許可がない) |\n| リソースベースだけが許可 | 許可 | 拒否(A の許可がない) |\n| 両方が許可 | 許可 | 許可 |\n\nどの SCP と RCP が効くかも大事です。SCP は**依頼者がいるアカウント**の組織のものが効きます。RCP は**リソースがあるアカウント**の組織のものが効きます。社外の取引先から自社のバケットへの依頼では、自社の SCP は取引先に効きませんが、自社の RCP は効きます。\n\n### 例題: データアカウントと取引先\n登場するアカウントは 4 つです。\n\n| アカウント | 役割 | 組織 |\n|---|---|---|\n| 111122223333 | 分析アカウント。ロール analytics-role がある | 自社の組織 o-a1b2c3d4e5 |\n| 444455556666 | データアカウント。バケット example-datalake と example-trail-logs がある | 自社の組織 |\n| 777788889999 | 取引先。ロール vendor-etl がある | 組織の外 |\n| 123456789012 | 見知らぬアカウント。バケット evil-drop がある | 組織の外 |\n\n```mermaid\narchitecture-beta\n    group org(aws:organizations)[Our Organization]\n    group acctA(aws:account)[Analytics 111122223333] in org\n    group acctB(aws:account)[Data 444455556666] in org\n    group vendor(aws:account)[Vendor 777788889999]\n    group unknown(aws:account)[Unknown 123456789012]\n\n    service role(aws:iam)[analytics role] in acctA\n    service lake(aws:s3)[example datalake] in acctB\n    service trail(aws:cloudtrail)[CloudTrail] in acctB\n    service logs(aws:s3)[example trail logs] in acctB\n    service etl(aws:iam)[vendor etl] in vendor\n    service evil(aws:s3)[evil drop] in unknown\n\n    role:R --> L:lake\n    trail:B --> T:logs\n    etl:L --> R:lake\n    role:B --> T:evil\n```\n\n図の左上が分析アカウントのロール、中央がデータアカウントのバケットです。右の取引先のロールも、同じバケットに書き込みに来ます。左下の見知らぬアカウントのバケットは、社内のロールが書き出してはいけない先です。データアカウントの中では、CloudTrail(AWS のサービス)がログ用のバケットに書き込みます。\n\nポリシーは次の 4 つです。\n\n**ID-A(analytics-role のアイデンティティベースのポリシー)** わざと広く書いてあります。\n\n```json\n{ \"Effect\": \"Allow\",\n  \"Action\": [\"s3:GetObject\", \"s3:PutObject\"],\n  \"Resource\": \"arn:aws:s3:::*/*\" }\n```\n\n`arn:aws:s3:::*/*` は「どのバケットのどのオブジェクトでも」です。S3 のバケットの ARN にはアカウント ID が入らない(L2)ので、社外のバケットにも当てはまります。\n\n**SCP-W(自社のワークロード用 OU に付けた SCP)**\n\n```json\n{ \"Sid\": \"NoWriteOutsideOrg\", \"Effect\": \"Deny\",\n  \"Action\": \"s3:PutObject\",\n  \"Resource\": \"*\",\n  \"Condition\": { \"StringNotEqualsIfExists\": {\n    \"aws:ResourceOrgID\": \"o-a1b2c3d4e5\" } } }\n```\n\n- `aws:ResourceOrgID`: 依頼の対象のリソースを持つアカウントが入っている組織の ID です\n- `StringNotEqualsIfExists`: キーがあって値が一致しないとき、または**キーがないとき**に条件を満たします。組織に入っていないアカウントのバケットにはこのキーがないので、条件を満たします\n- つまり「自社の組織の外のバケットへの書き込みは、だれであっても Deny」です。AWS のサービスが持つバケットに書く必要がある場合は、例外の文が要ります(公式の例でも例外を設けています)\n\n**RCP-P(組織のルートに付けた RCP)**\n\n```json\n{ \"Sid\": \"OnlyOrgPrincipals\", \"Effect\": \"Deny\",\n  \"Principal\": \"*\",\n  \"Action\": \"s3:*\",\n  \"Resource\": \"*\",\n  \"Condition\": {\n    \"StringNotEqualsIfExists\": { \"aws:PrincipalOrgID\": \"o-a1b2c3d4e5\" },\n    \"BoolIfExists\": { \"aws:PrincipalIsAWSService\": \"false\" } } }\n```\n\n- RCP は Deny しか書けず、`Principal` は `\"*\"` だけが書けます。相手の絞り込みは `Condition` で行います\n- `aws:PrincipalOrgID`: 依頼者が入っている組織の ID です。組織に入っていない依頼者や匿名の依頼には、このキーがありません\n- `aws:PrincipalIsAWSService`: 依頼者が AWS のサービス自身(`cloudtrail.amazonaws.com` など)なら true です\n- 1 つの `Condition` に書いた 2 つの条件は**両方**満たしたときに当てはまります(AND)。「依頼者が自社の組織の外で、**かつ** AWS のサービスでもない」ときに Deny です。匿名の依頼(公開アクセス)も止まります\n\n**RB-L(example-datalake のバケットポリシー)**\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    { \"Sid\": \"AnalyticsRead\", \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:role/analytics-role\" },\n      \"Action\": \"s3:GetObject\",\n      \"Resource\": \"arn:aws:s3:::example-datalake/*\" },\n    { \"Sid\": \"VendorInbound\", \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::777788889999:role/vendor-etl\" },\n      \"Action\": \"s3:PutObject\",\n      \"Resource\": \"arn:aws:s3:::example-datalake/inbound/*\" }\n  ]\n}\n```\n\n#### リクエスト 1: analytics-role が example-datalake/sales/2026-11.csv を GetObject\n| 評価 | 段 | 見た文 | 判定 |\n|---|---|---|---|\n| A 側 | Deny | SCP-W は PutObject だけ | Deny なし |\n| A 側 | SCP の Allow | FullAWSAccess | 通過 |\n| A 側 | アイデンティティ | ID-A の GetObject と `*/*` が合う | **A は許可** |\n| B 側 | Deny | RCP-P: 依頼者は自社の組織(PrincipalOrgID が一致)なので条件を満たさない | Deny なし |\n| B 側 | RCP の Allow | RCPFullAWSAccess | 通過 |\n| B 側 | リソースベース | RB-L の AnalyticsRead が合う | **B は許可** |\n| 最終 | — | 両方が許可 | **許可** |\n\n#### リクエスト 2: analytics-role が example-datalake/sales/x.csv を PutObject\n| 評価 | 段 | 見た文 | 判定 |\n|---|---|---|---|\n| A 側 | Deny | SCP-W: example-datalake は自社の組織のバケットなので ResourceOrgID が一致し、条件を満たさない | Deny なし |\n| A 側 | アイデンティティ | ID-A の PutObject が合う | **A は許可** |\n| B 側 | Deny | RCP-P は自社の依頼者なので当てはまらない | Deny なし |\n| B 側 | リソースベース | AnalyticsRead は GetObject だけ。VendorInbound は取引先のロールだけ | **B は拒否(暗黙)** |\n| 最終 | — | B が許可していない | **拒否** |\n\n同じアカウントなら ID-A だけで書けますが、アカウントをまたぐと B のバケットポリシーの許可が要ります。エラーの末尾は `because no resource-based policy allows the s3:PutObject action` です。\n\n#### リクエスト 3: analytics-role が evil-drop/dump.csv を PutObject\nevil-drop のバケットポリシーは「だれでも PutObject できる」と書かれているとします。\n\n| 評価 | 段 | 見た文 | 判定 |\n|---|---|---|---|\n| A 側 | Deny | SCP-W: 対象は組織の外のバケットで、ResourceOrgID がない。IfExists により条件を満たす | **A は拒否(SCP の明示的な拒否)** |\n| 最終 | — | A 側で決着 | **拒否** |\n\n社外のバケットのポリシーがどれだけ開いていても、自社の SCP で出口をふさげます。社外のアカウントには自社の RCP は効かない(RCP はリソースを持つ側の組織のもの)ので、出口を守るのは SCP の役目です。\n\n#### リクエスト 4: vendor-etl が example-datalake/inbound/2026-11-22.csv を PutObject\n取引先のアカウントの中では、vendor-etl のアイデンティティベースのポリシーが PutObject を許可しているとします。\n\n| 評価 | 段 | 見た文 | 判定 |\n|---|---|---|---|\n| 取引先側 | アイデンティティ | 取引先のポリシーが許可。自社の SCP は取引先には効かない | **取引先は許可** |\n| B 側 | Deny | RCP-P: 取引先は自社の組織の外なので PrincipalOrgID が一致しない。AWS のサービスでもない。両方の条件を満たす | **B は拒否(RCP の明示的な拒否)** |\n| 最終 | — | — | **拒否** |\n\nバケットポリシーの VendorInbound は、段 1 の Deny に負けて使われません。エラーの末尾は `with an explicit deny in a resource control policy` です。\n\n取引先を正式に認めるには、RCP の条件に例外を足します。\n\n```json\n\"Condition\": {\n  \"StringNotEqualsIfExists\": {\n    \"aws:PrincipalOrgID\": \"o-a1b2c3d4e5\",\n    \"aws:PrincipalAccount\": [\"777788889999\"] },\n  \"BoolIfExists\": { \"aws:PrincipalIsAWSService\": \"false\" } }\n```\n\n`aws:PrincipalAccount` は依頼者のアカウント ID です。同じ演算子の中の 2 つのキーも AND なので、「自社の組織でもなく、**かつ**取引先のアカウントでもない」ときだけ Deny になります。直したあとのリクエスト 4 は、B 側で RCP-P が当てはまらず、VendorInbound が許可するので、最終的に**許可**です。\n\n#### リクエスト 5: CloudTrail が example-trail-logs にログを書く\nCloudTrail はサービスとして、自分の ID(サービスプリンシパル `cloudtrail.amazonaws.com`)でバケットに書きます。example-trail-logs のバケットポリシーは次のとおりです。\n\n```json\n{ \"Sid\": \"TrailWrite\", \"Effect\": \"Allow\",\n  \"Principal\": { \"Service\": \"cloudtrail.amazonaws.com\" },\n  \"Action\": \"s3:PutObject\",\n  \"Resource\": \"arn:aws:s3:::example-trail-logs/AWSLogs/444455556666/*\",\n  \"Condition\": { \"StringEquals\": {\n    \"aws:SourceArn\": \"arn:aws:cloudtrail:ap-northeast-1:444455556666:trail/main-trail\" } } }\n```\n\n| 段 | 見た文 | 判定 |\n|---|---|---|\n| Deny | RCP-P: PrincipalOrgID はない(IfExists で満たす)が、PrincipalIsAWSService は true なので BoolIfExists の false に合わない。AND なので当てはまらない | Deny なし |\n| リソースベース | TrailWrite: サービス・操作・場所が合い、aws:SourceArn が自社の証跡と一致 | **許可** |\n\nRCP-P の 2 つ目の条件は、このような AWS のサービスからの書き込みを壊さないためのものです。\n\nTrailWrite の `aws:SourceArn` は、**混乱した代理**(confused deputy)を防ぐ条件です。CloudTrail はたくさんの顧客のために動くサービスです。この条件がないと、ほかの顧客が自分の証跡の出力先にこのバケットを指定したとき、CloudTrail がその顧客の代わりに書き込めてしまいます。「どの証跡のための書き込みか」を `aws:SourceArn`(または `aws:SourceAccount`)で限ると、自社の証跡の書き込みだけが通ります。\n\n#### 5 つのまとめ\n| # | 依頼者 | 操作と対象 | 決め手 | 結果 |\n|---|---|---|---|---|\n| 1 | analytics-role | GetObject example-datalake | A の ID-A と B の RB-L | 許可 |\n| 2 | analytics-role | PutObject example-datalake | B のバケットポリシーに許可がない | 拒否(暗黙) |\n| 3 | analytics-role | PutObject evil-drop | A の SCP-W | 拒否(明示) |\n| 4 | vendor-etl | PutObject example-datalake/inbound | B の RCP-P(例外を足すと許可) | 拒否(明示) |\n| 5 | CloudTrail | PutObject example-trail-logs | RCP-P は AWS のサービスを除外。RB の SourceArn が一致 | 許可 |\n\n### ロールを引き受けてまたぐ場合\nバケットポリシーで許可する代わりに、B の中にロールを作り、A から引き受ける方法もあります。L5 で見た `AssumeRole` を別アカウントのロールに対して呼びます。このときの `sts:AssumeRole` も 2 回評価されます。A 側では A のポリシーがそのロールの `AssumeRole` を許可しているか、B 側ではロールの信頼ポリシーが A のロールを許可しているかを見ます。STS は RCP の対応サービスなので、B の RCP も効きます。\n\n引き受けたあとは、依頼者は **B のロールのセッション**です。A のポリシーも A の SCP も関係なくなり、B のロールの権限と B に効く SCP で評価されます。\n\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 |\n|---|---|---|---|---|\n| リソースベースのポリシーで許可 | B のバケットポリシーで A のロールを名指し | A の権限を持ったまま使える。両方の門番で守れる | リソースベースのポリシーがないサービスでは使えない | 中 |\n| B のロールを引き受ける | B に信頼ポリシー付きのロールを作る | どのサービスにも使える。B 側で権限を一元管理 | 引き受けている間は A の権限が使えない | 中 |\n| AWS RAM で共有 | サブネットなど対応リソースを組織や OU に共有 | ポリシーを個別に書かずに済む | 対応リソースが限られる | 低い |\n\n信頼ポリシーやバケットポリシーで `\"Principal\": {\"AWS\": \"arn:aws:iam::111122223333:root\"}` と書くと、「アカウント 111122223333 に任せる」という意味になります。そのアカウントのだれが使えるかは、A の管理者が A のアイデンティティベースのポリシーで決めます。ルートユーザーだけを指すわけではありません。広く任せすぎないよう、特定のロールの ARN を書くのが基本です。\n\n### 実務での使い方と判断\nデータ境界は、次の 3 つの線を組み合わせて引きます。\n\n| 線 | 守ること | 主な道具と条件キー |\n|---|---|---|\n| 自社の ID だけ | 自社のリソースに社外の ID が来ない | RCP やバケットポリシーで `aws:PrincipalOrgID` |\n| 自社のリソースだけ | 自社の ID が社外のリソースを使わない | SCP で `aws:ResourceOrgID` |\n| 想定したネットワークだけ | 盗まれた鍵を社外のネットワークから使わせない | `aws:SourceIp`、`aws:SourceVpce` など(L10) |\n\nよくある設定ミスです。\n\n- RCP や SCP の Deny に `aws:PrincipalIsAWSService` の例外を入れず、AWS のサービスからの書き込み(ログの配送など)を止めてしまう\n- テストせずに組織のルートへ付けて、全アカウントの業務を止める。公式も、テスト用のアカウントや OU から段階的に広げることを強く勧めています\n- 取引先の許可を `arn:aws:iam::777788889999:root` で広く書き、取引先のだれでも使える状態にする\n- サービスが書き込むバケットのポリシーに `aws:SourceArn` や `aws:SourceAccount` を書かず、混乱した代理の穴を残す\n\nプロは、まず IAM Access Analyzer(ch4)で「いま社外に開いているもの」を洗い出し、意図した共有を例外として書き出してから RCP と SCP を付けます。\n\n### 試験ではこう問われる\n- 「別アカウントの S3 にアクセスできない。IAM ポリシーは許可している」→ 相手のバケットポリシー(と KMS を使うならキーポリシー)にも許可が要る\n- 「組織外のプリンシパルからのアクセスを、全アカウントのリソースで一括して防ぐ」→ RCP と `aws:PrincipalOrgID`。バケットポリシーを 1 つずつ書き換える案は運用負荷が高い\n- 「社員が社外のバケットにデータを持ち出すのを防ぐ」→ SCP と `aws:ResourceOrgID`\n- 「サービスがバケットに書き込む設定で、ほかの顧客に悪用されないように」→ `aws:SourceArn` または `aws:SourceAccount`\n\n### まとめ\n- アカウントをまたぐ依頼は、依頼する側とリソースを持つ側で 2 回評価され、両方の許可が要る\n- SCP は依頼者のアカウントの組織のものが、RCP はリソースのアカウントの組織のものが効く\n- データ境界は、RCP で「自社の ID だけ」、SCP で「自社のリソースだけ」を守る。AWS のサービスの例外を忘れない\n- サービスに書き込ませるときは `aws:SourceArn` などで混乱した代理を防ぐ\n",
+  "quiz": [
+    {
+      "question": "アカウント A のロールが、アカウント B のバケットのオブジェクトを GetObject したい。A のロールのアイデンティティベースのポリシーは、そのバケットの GetObject を許可している。B のバケットポリシーには何も書かれていない。結果と理由として正しいものはどれか。",
+      "choices": [
+        "許可される。アイデンティティベースのポリシーで許可していれば十分だから",
+        "拒否される。アカウントをまたぐ依頼では、B 側のリソースベースのポリシーの許可も必要だから",
+        "許可される。B 側に Deny がないので、暗黙の許可になるから",
+        "拒否される。アカウントをまたぐ S3 の読み取りは、必ず AWS RAM で共有する必要があるから"
+      ],
+      "correct": 1,
+      "explanation": "アカウントをまたぐ依頼は、A と B でそれぞれ評価され、両方が許可したときだけ許可です。B のバケットポリシーに許可がないので B 側が暗黙の拒否になります。暗黙の許可という考え方はありません。S3 の共有はバケットポリシーで行え、RAM は必須ではありません。"
+    },
+    {
+      "question": "ある会社は、社内のロールが組織の外の S3 バケットにデータを書き出すことを、全メンバーアカウントで防ぎたい。社外のバケットのポリシーは攻撃者が自由に書ける前提とする。最も適切な対策はどれか。",
+      "choices": [
+        "全アカウントに RCP を付け、aws:PrincipalOrgID が自社の組織でない依頼を Deny する",
+        "全アカウントのバケットポリシーに、aws:PrincipalOrgID の条件で Deny を書く",
+        "全メンバーアカウントに SCP を付け、aws:ResourceOrgID が自社の組織でないリソースへの s3:PutObject を Deny する",
+        "IAM Access Analyzer の外部アクセス分析を有効にする"
+      ],
+      "correct": 2,
+      "explanation": "持ち出し先は社外のバケットなので、リソース側(RCP やバケットポリシー)では止められません。RCP はリソースを持つ側の組織のものだけが効きます。依頼する側の自社のプリンシパルを制限する SCP で、対象のリソースの組織(aws:ResourceOrgID)を条件にするのが適切です。Access Analyzer は自社のリソースが社外に開いているかを見つける道具で、持ち出しの予防にはなりません。"
+    },
+    {
+      "question": "組織のルートに、aws:PrincipalOrgID が自社の組織と一致しないプリンシパルからの s3:* を Deny する RCP を付けた。aws:PrincipalIsAWSService の条件は入れていない。その後に起こりうる問題として最も可能性が高いものはどれか。",
+      "choices": [
+        "自社の組織のロールが、自社のバケットを読めなくなる",
+        "管理アカウントのバケットに、社外の取引先が書き込めなくなる",
+        "社外のバケットへの書き出しが防げなくなる",
+        "CloudTrail などの AWS のサービスがサービスプリンシパルとして行うバケットへの書き込みが拒否される"
+      ],
+      "correct": 3,
+      "explanation": "サービスプリンシパルには aws:PrincipalOrgID がないため、例外がないと Deny の条件を満たし、ログの配送などが止まります。自社の組織のロールは条件を満たさないので影響しません。RCP は管理アカウントのリソースには効きません。社外のバケットへの書き出しは、もともと RCP では防げません。"
+    },
+    {
+      "question": "CloudTrail の証跡の出力先にするバケットのポリシーで、サービスプリンシパル cloudtrail.amazonaws.com に s3:PutObject を許可した。ほかの AWS 顧客の証跡がこのバケットに書き込むのを防ぐために、最も適切に加える条件はどれか。",
+      "choices": [
+        "aws:SourceArn に自社の証跡の ARN を指定する",
+        "aws:PrincipalOrgID に自社の組織 ID を指定する",
+        "aws:SecureTransport を true にする",
+        "aws:MultiFactorAuthPresent を true にする"
+      ],
+      "correct": 0,
+      "explanation": "サービスがほかの顧客の代わりに書き込んでしまう混乱した代理を防ぐには、どのリソースのための依頼かを aws:SourceArn(または aws:SourceAccount)で限ります。サービスプリンシパルには aws:PrincipalOrgID がないので、それを必須にするとサービスの書き込み自体が止まります。TLS や MFA の条件は、別の顧客の書き込みを区別できません。"
+    },
+    {
+      "question": "アカウント A の開発者が、アカウント B のロール deploy-role を AssumeRole で引き受けて作業している。A には「ec2:TerminateInstances を Deny」する SCP、B にはその SCP はない。deploy-role は ec2:TerminateInstances を許可している。引き受けたセッションで B のインスタンスを終了させた結果はどれか。",
+      "choices": [
+        "拒否される。依頼者はもともと A の開発者なので、A の SCP が引き継がれるから",
+        "拒否される。アカウントをまたぐ依頼は、必ず両方のアカウントの SCP で評価されるから",
+        "許可される。引き受けたあとの依頼者は B のロールのセッションで、B のポリシーと B に効く SCP で評価されるから",
+        "許可される。SCP は AssumeRole で得た一時的な認証情報には効かないから"
+      ],
+      "correct": 2,
+      "explanation": "ロールを引き受けたあとの依頼者は B のロールのセッションで、そのプリンシパルは B のものです。A の SCP は関係なくなり、B に効く SCP と deploy-role の権限で評価されます。A の SCP が効くのは、A のプリンシパルとして AssumeRole を呼ぶ段階です。一時的な認証情報にも、そのアカウントの SCP は効きます。"
+    },
+    {
+      "question": "取引先アカウントのロールが、自社のバケットに書き込もうとして with an explicit deny in a resource control policy で拒否された。バケットポリシーは取引先のロールに s3:PutObject を許可している。この取引先だけを、ほかの社外アカウントは拒否したまま許可したい。最も適切な対応はどれか。",
+      "choices": [
+        "バケットポリシーに、取引先のロールへの Allow をもう 1 つ書き足す",
+        "RCP の Deny の条件に、aws:PrincipalAccount が取引先のアカウント ID でないことを AND で加え、取引先を例外にする",
+        "取引先のアカウントに付いている SCP を変更してもらう",
+        "RCP を組織のルートから外す"
+      ],
+      "correct": 1,
+      "explanation": "明示的な Deny は Allow をいくつ足しても覆りません。Deny の条件に例外を加え、取引先のアカウントからの依頼では条件を満たさないようにします。取引先の SCP は取引先のプリンシパルの上限で、自社の RCP の Deny とは関係しません。RCP を外すと、ほかの社外アカウントへの守りも消えます。"
+    },
+    {
+      "kind": "essay",
+      "question": "社外の取引先(組織の外のアカウント 777788889999)のロール vendor-etl が、自社のデータアカウントのバケット example-datalake の inbound/ に PutObject するとき、許可されるために必要なものを、取引先側の評価と自社側の評価に分けて説明してください。本文の RCP-P(自社の組織外のプリンシパルを Deny する RCP)を前提に、何をどう変える必要があるかも述べてください。",
+      "answer": "アカウントをまたぐ依頼なので、取引先側と自社側の 2 回の評価の両方が許可である必要があります。取引先側では、vendor-etl のアイデンティティベースのポリシーが、example-datalake/inbound/* への s3:PutObject を許可している必要があります。取引先の権限境界や SCP があれば、それらでも外れていないことが必要です。自社の SCP は取引先のプリンシパルには効きません。自社側では、まず Deny がないことが必要です。RCP-P は、aws:PrincipalOrgID が自社の組織でなく、AWS のサービスでもない依頼を Deny するので、そのままでは取引先は段 1 で明示的に拒否されます。そこで RCP-P の StringNotEqualsIfExists に aws:PrincipalAccount 777788889999 を加え、自社の組織でも取引先でもないときだけ Deny になるように直します。そのうえで、バケットポリシーが Principal に vendor-etl のロールの ARN を書いて、inbound/* への PutObject を許可している必要があります。アカウント全体の root ではなくロールを名指しし、場所も inbound/ に絞ります。",
+      "rubric": [
+        "取引先側と自社側の 2 回の評価があり、両方の許可が必要だと述べている",
+        "取引先側では取引先のアイデンティティベースのポリシーの許可が必要で、自社の SCP は効かないことに触れている",
+        "自社の RCP-P がそのままでは明示的に拒否すること、aws:PrincipalAccount などで取引先を例外にする変更を述べている",
+        "自社のバケットポリシーで vendor-etl のロールを名指しし、inbound/ への PutObject に絞って許可することを述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "2 回の評価、効く SCP と RCP の持ち主の違い、RCP の Deny を例外で直すこと、バケットポリシーの最小の許可の 4 点がそろえば合格です。"
+    }
+  ]
+}
