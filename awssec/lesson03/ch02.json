@@ -1,0 +1,92 @@
+{
+  "lesson": 3,
+  "chapter": 2,
+  "title": "ポリシー JSON を1行ずつ読む",
+  "priority": "🔴",
+  "text": "### 基礎: ポリシーの 1 行が事故を決める\nポリシーは「何をしてよいか」を書いた JSON の文書です(JSON の読み方は L2 で見ました)。数行の違いで、守られる範囲が大きく変わります。\n\n- `\"Resource\": \"arn:aws:s3:::example-reports/*\"` と書くつもりが `\"Resource\": \"*\"` になっていた。報告書のバケットだけのはずが、アカウント内の全バケットの中身を読めるようになる\n- `\"Action\": \"s3:GetObject\"` で足りるのに `\"Action\": \"s3:*\"` と書いた。読むだけのはずが、オブジェクトの削除やバケットポリシーの書き換えまでできる\n\nポリシーは、書いたとおりにしか動きません。この章では、ポリシーを 1 行ずつ読み、「どの依頼が通るか」を表にできるようにします。\n\n### ポリシーの骨組み\n次のポリシーは「バケット example-reports の一覧を見て、中のファイルを読める」という内容です。\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Sid\": \"ListReportsBucket\",\n      \"Effect\": \"Allow\",\n      \"Action\": \"s3:ListBucket\",\n      \"Resource\": \"arn:aws:s3:::example-reports\"\n    },\n    {\n      \"Sid\": \"ReadReports\",\n      \"Effect\": \"Allow\",\n      \"Action\": [\"s3:GetObject\"],\n      \"Resource\": \"arn:aws:s3:::example-reports/*\"\n    }\n  ]\n}\n```\n\n1 行ずつ見ていきます。\n\n- `\"Version\": \"2012-10-17\"`: ポリシーの文法のバージョンです。日付ですが「作った日」ではありません。必ずこの値を書きます。古い `2008-10-17` では、後で使う変数などの機能が使えません\n- `\"Statement\": [ … ]`: 文(ステートメント)の並びです。角かっこ `[ ]` は配列(複数の要素の並び)を表し、ここでは 2 つの文が入っています\n- `\"Sid\": \"ListReportsBucket\"`: 文の名前です。省略できます。人が読むための見出しで、判定には使われません\n- `\"Effect\": \"Allow\"`: この文が「許可」か「拒否」かです。値は `Allow` か `Deny` のどちらかだけです\n- `\"Action\": \"s3:ListBucket\"`: 対象の操作です。`サービス名:操作名` の形で、ここでは S3 の「バケットの中身の一覧を取る」操作です\n- `\"Resource\": \"arn:aws:s3:::example-reports\"`: 対象のリソースを ARN で書きます。末尾に何も付かないので「バケットそのもの」です\n- 2 つ目の文の `\"Action\": [\"s3:GetObject\"]`: 配列でも書けます。1 つだけなら配列でなくても同じ意味です。GetObject はオブジェクト(S3 に置いたファイル)を読む操作です\n- `\"Resource\": \"arn:aws:s3:::example-reports/*\"`: `/*` は「バケットの中のすべてのオブジェクト」です\n\n### バケットとオブジェクトは別のリソース\nS3 では、バケットの ARN とオブジェクトの ARN が違います。操作によって、対象になる ARN が決まっています。\n\n| 操作 | 何をするか | 対象のリソース | このポリシーでの結果 |\n|---|---|---|---|\n| s3:ListBucket | バケットの中身の一覧 | arn:aws:s3:::example-reports | 許可(1 つ目の文) |\n| s3:GetObject | ファイルを読む | arn:aws:s3:::example-reports/2026/sales.csv | 許可(2 つ目の文) |\n| s3:PutObject | ファイルを置く | arn:aws:s3:::example-reports/2026/sales.csv | 拒否(どの文にも書いていない) |\n| s3:GetObject | 別バケットのファイルを読む | arn:aws:s3:::example-hr/salary.csv | 拒否(Resource が合わない) |\n| s3:ListAllMyBuckets | アカウントのバケット一覧 | * | 拒否(どの文にも書いていない) |\n\nよくある失敗は、ListBucket の Resource に `/*` を付けてしまうことです。そうすると「オブジェクトに対する ListBucket」という存在しない組み合わせになり、一覧が取れません。逆に GetObject の Resource に `/*` を付け忘れると、ファイルが読めません。\n\n「どの文にも書いていない」操作が拒否になる仕組みは、次の ch3 で詳しく見ます。\n\n### ワイルドカードと Condition\nAction と Resource では `*`(何文字でも合う)と `?`(1 文字だけ合う)が使えます。\n\n| 書き方 | 合うもの | 注意 |\n|---|---|---|\n| s3:Get* | GetObject、GetBucketPolicy など Get で始まる全操作 | 思ったより多くの操作に合う |\n| s3:* | S3 のすべての操作 | 削除・ポリシー変更も含む |\n| * (Action) | すべてのサービスのすべての操作 | 管理者と同じ |\n| arn:aws:s3:::example-* | example- で始まる全バケット | 後から作ったバケットにも効く |\n\nAction の名前は大文字・小文字を区別しません。一方、Resource の ARN の中の名前(バケット名など)は区別します。\n\n文には `Condition`(条件)も書けます。条件に合うときだけ、その文が効きます。\n\n```json\n{\n  \"Effect\": \"Allow\",\n  \"Action\": \"s3:GetObject\",\n  \"Resource\": \"arn:aws:s3:::example-reports/*\",\n  \"Condition\": {\n    \"IpAddress\": { \"aws:SourceIp\": \"203.0.113.0/24\" }\n  }\n}\n```\n\n- `\"IpAddress\"`: 条件の比べ方(条件演算子)です。IP アドレスの範囲に入るかを比べます\n- `\"aws:SourceIp\"`: 比べる対象(条件キー)です。依頼を送ってきた IP アドレスが入ります\n- `\"203.0.113.0/24\"`: CIDR(IP アドレスの範囲の書き方)で、203.0.113.0〜203.0.113.255 の 256 個です\n\n依頼元が 203.0.113.10 なら条件に合うのでこの文は効き、198.51.100.7 なら合わないのでこの文は無いのと同じになります。条件キーの種類と使い分けは L6 で扱います。\n\n### ポリシーをどこに付けるか\nポリシーは付け先で 2 つに分かれます。\n\n| 種類 | 付け先 | Principal 要素 | 例 |\n|---|---|---|---|\n| アイデンティティベースのポリシー | ユーザー・グループ・ロール | 書かない(付けた相手が主語) | 上の example-reports 読み取り |\n| リソースベースのポリシー | S3 バケット・SQS キューなど | 必ず書く(誰に許すか) | バケットポリシー、ロールの信頼ポリシー |\n\nリソースベースのポリシーの例です。バケット example-reports に付けます。\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:role/report-batch\" },\n      \"Action\": \"s3:PutObject\",\n      \"Resource\": \"arn:aws:s3:::example-reports/*\"\n    }\n  ]\n}\n```\n\n- `\"Principal\"`: 誰に許すかです。ここではロール report-batch です\n- 残りは前と同じ読み方で、「report-batch はこのバケットにファイルを置いてよい」という意味です\n\nほかにも SCP・権限境界・セッションポリシーなどの種類があり、L6 でまとめて扱います。\n\n### アイデンティティベースのポリシーの 3 つの形\n| 形 | 作るのは | 良い点 | 悪い点 | 運用負荷 |\n|---|---|---|---|---|\n| AWS 管理ポリシー | AWS(例: ReadOnlyAccess) | すぐ使える。新サービスに AWS が追従 | 範囲が広い。中身が AWS 側で変わる | 低い |\n| カスタマー管理ポリシー | 自分たち | 必要な範囲だけに絞れる。複数の相手に付けられ、版を残せる | 自分で書いて保守する | 中 |\n| インラインポリシー | 自分たち(1 つの相手に直接埋め込む) | 相手と 1 対 1 で、相手を消すと一緒に消える | 使い回せない。棚卸しで見落としやすい | 高い |\n\nカスタマー管理ポリシーは CLI で作れます。\n\n```console\n$ aws iam create-policy --policy-name ReportsRead \\\n    --policy-document file://reports-read.json\n{\n    \"Policy\": {\n        \"PolicyName\": \"ReportsRead\",\n        \"PolicyId\": \"ANPAEXAMPLEPOLICY123\",\n        \"Arn\": \"arn:aws:iam::111122223333:policy/ReportsRead\",\n        \"DefaultVersionId\": \"v1\",\n        \"AttachmentCount\": 0,\n        \"IsAttachable\": true\n    }\n}\n$ aws iam attach-group-policy --group-name developers \\\n    --policy-arn arn:aws:iam::111122223333:policy/ReportsRead\n```\n\n- 1 つ目のコマンド: ファイル reports-read.json の中身から、ポリシー ReportsRead を作ります。`\\` は「次の行に続く」という意味です\n- `DefaultVersionId: v1`: 今効いている版です。中身を直すと v2、v3 と版が増え、前の版に戻せます(残せるのは 5 版まで)\n- `AttachmentCount: 0`: まだ誰にも付いていません\n- 2 つ目のコマンド: グループ developers に付けます。成功すると何も表示されません\n\n### プロならどう決めるか\n- 始めは AWS 管理ポリシーで動かし、CloudTrail や IAM の「最終アクセス時刻」で実際に使った操作を確かめてから、カスタマー管理ポリシーに絞る。この手順で最小権限(必要な分だけ許す)に近づける\n- インラインポリシーは「その相手だけに必ず付いていてほしい」特別な場合に限る\n- Resource に `*` を書くときは、その操作が本当にリソースを指定できないものか(ListAllMyBuckets など)を確かめる\n\n### 試験ではこう問われる\n- 「最小権限で」という問題では、Action と Resource が最も狭い選択肢を選びます。`s3:*` や `\"Resource\": \"*\"` を含む選択肢は、まず疑います\n- ListBucket はバケットの ARN、GetObject はオブジェクトの ARN(`/*`)という組み合わせは定番の引っかけです\n- 「複数のロールで同じ権限を使い回し、変更履歴も残したい」ならカスタマー管理ポリシーです\n\n### まとめ\n- ポリシーは Version・Statement の中に Effect・Action・Resource(と Condition)を書く\n- S3 はバケットとオブジェクトで ARN が違い、操作ごとに対象が決まっている\n- アイデンティティベース(Principal なし)とリソースベース(Principal あり)がある\n- AWS 管理は手軽だが広い。カスタマー管理で必要な分に絞るのが基本\n",
+  "quiz": [
+    {
+      "question": "次の文を持つポリシーがある。`{\"Effect\":\"Allow\",\"Action\":\"s3:ListBucket\",\"Resource\":\"arn:aws:s3:::example-logs/*\"}`。このユーザーが `aws s3 ls s3://example-logs/` を実行するとどうなるか。",
+      "choices": [
+        "一覧が表示される。ListBucket を許可しているから",
+        "一覧が表示される。`/*` でバケットの中すべてを許可しているから",
+        "拒否される。ListBucket の対象はバケットの ARN で、`/*` 付きの ARN には合わないから",
+        "拒否される。ListBucket は Resource に `*` しか書けない操作だから"
+      ],
+      "correct": 2,
+      "explanation": "ListBucket の対象はバケットそのもの(`arn:aws:s3:::example-logs`)です。`/*` はオブジェクトを指すので Resource が合わず、どの文にも当てはまらない結果、拒否されます。ListBucket はバケットの ARN を指定できる操作なので、4 つ目も誤りです。"
+    },
+    {
+      "question": "ポリシーの `\"Version\": \"2012-10-17\"` の意味として正しいものはどれか。",
+      "choices": [
+        "ポリシーの文法のバージョンで、常にこの値を書くのが基本である",
+        "ポリシーを作成した日付で、更新するたびに書き換える",
+        "このポリシーが有効になる日付で、それより前は効かない",
+        "ポリシーの版番号で、v1・v2 と同じ意味を持つ"
+      ],
+      "correct": 0,
+      "explanation": "Version はポリシー言語の文法のバージョンで、日付の形をしていますが作成日や有効日ではありません。古い 2008-10-17 では変数などが使えないため、常に 2012-10-17 を書きます。管理ポリシーの v1・v2 という版とも別物です。"
+    },
+    {
+      "question": "開発チームの 10 人と 2 つのロールに、同じ「特定バケットの読み取り」権限を付けたい。変更したら全員に一度に反映し、前の版にも戻せるようにしたい。最も適切なものはどれか。",
+      "choices": [
+        "各ユーザーと各ロールにインラインポリシーを付ける",
+        "AWS 管理ポリシー AmazonS3ReadOnlyAccess を付ける",
+        "バケットポリシーで Principal に `*` を書いて読み取りを許す",
+        "カスタマー管理ポリシーを 1 つ作り、グループと 2 つのロールに付ける"
+      ],
+      "correct": 3,
+      "explanation": "カスタマー管理ポリシーは複数の相手に付けられ、直すと全員に反映し、版を残して戻せます。インラインは使い回せず 12 か所を直す必要があります。AmazonS3ReadOnlyAccess は全バケットが対象で広すぎ、Principal `*` は誰にでも許してしまいます。"
+    },
+    {
+      "question": "`\"Action\": \"s3:Get*\"` について正しいものはどれか。",
+      "choices": [
+        "s3:GetObject だけに合う",
+        "s3:GetObject のほか、s3:GetBucketPolicy など Get で始まる S3 の操作すべてに合う",
+        "S3 以外のサービスの Get で始まる操作にも合う",
+        "ワイルドカードは Resource にしか使えないので、エラーになる"
+      ],
+      "correct": 1,
+      "explanation": "`*` は何文字でも合うので、Get で始まる S3 の操作すべてに合います。バケットポリシーの中身を読む GetBucketPolicy なども含むため、思ったより広くなります。`s3:` が付いているので他サービスには合わず、Action でもワイルドカードは使えます。"
+    },
+    {
+      "question": "リソースベースのポリシーの説明として正しいものはどれか。",
+      "choices": [
+        "ユーザー・グループ・ロールに付け、Principal 要素は書かない",
+        "Organizations の全アカウントに一括で付ける",
+        "S3 バケットなどのリソースに付け、誰に許すかを Principal 要素で書く",
+        "IAM ユーザーにだけ付けられ、ロールには付けられない"
+      ],
+      "correct": 2,
+      "explanation": "リソースベースのポリシーはバケットなどのリソース側に付けるので、「誰に」を Principal で書く必要があります。1 つ目はアイデンティティベースのポリシーの説明です。組織全体に付けるのは SCP などで、L6 と L18 で扱います。"
+    },
+    {
+      "question": "次の文を含むポリシーを付けたユーザーが、IP アドレス 198.51.100.7 から example-reports のファイルを GetObject した。`{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::example-reports/*\",\"Condition\":{\"IpAddress\":{\"aws:SourceIp\":\"203.0.113.0/24\"}}}`。ほかに許可する文はない。結果はどうなるか。",
+      "choices": [
+        "条件に合わないのでこの文は効かず、許可する文がないため拒否される",
+        "Action と Resource が合っているので、条件に関係なく許可される",
+        "条件に合わないので、この文が Deny として扱われ明示的に拒否される",
+        "IP アドレスの条件はバケットポリシーでしか評価されないので、許可される"
+      ],
+      "correct": 0,
+      "explanation": "198.51.100.7 は 203.0.113.0/24(203.0.113.0〜255)に入らないので、この文は無いのと同じになります。ほかに許可がないので結果は拒否です。条件に合わない Allow が Deny に変わるわけではなく、その文が効かないだけです。aws:SourceIp はアイデンティティベースのポリシーでも使えます。"
+    },
+    {
+      "kind": "essay",
+      "question": "次のポリシーを付けた IAM ユーザーについて、(1) s3:ListBucket で example-reports の一覧を取る、(2) example-reports/2026/sales.csv を GetObject する、(3) 同じファイルを DeleteObject する、(4) example-hr/salary.csv を GetObject する、の 4 つの結果と理由を説明してください。ほかにポリシーは付いていません。\n\n```json\n{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:ListBucket\",\"Resource\":\"arn:aws:s3:::example-reports\"},{\"Effect\":\"Allow\",\"Action\":\"s3:Get*\",\"Resource\":\"arn:aws:s3:::example-reports/*\"}]}\n```",
+      "answer": "(1) 許可されます。1 つ目の文が ListBucket をバケットの ARN arn:aws:s3:::example-reports に許しており、ListBucket の対象はバケットそのものなので合います。(2) 許可されます。2 つ目の文の s3:Get* は Get で始まる操作すべてに合うので GetObject を含み、Resource の example-reports/* がこのオブジェクトに合います。(3) 拒否されます。DeleteObject は Get で始まらず、どの文の Action にも合いません。許可する文がないので、何も書いていない操作として拒否になります。(4) 拒否されます。GetObject は Action に合いますが、Resource が example-reports/* なので example-hr のオブジェクトには合いません。なお s3:Get* は GetObject だけでなく GetObjectAcl などにも合うので、読むだけなら s3:GetObject に絞るほうが最小権限に近くなります。",
+      "rubric": [
+        "4 つの結果(許可・許可・拒否・拒否)がすべて正しい",
+        "ListBucket はバケットの ARN、GetObject はオブジェクトの ARN が対象という対応を理由に使っている",
+        "DeleteObject と別バケットが拒否される理由を、Action または Resource が合わず許可する文がないためと説明している",
+        "s3:Get* が GetObject 以外にも合う広さに触れている(加点)"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "Action と Resource の両方が合ったときだけ文が効く、という読み方ができているかを見ます。4 つの結果と理由が正しければ合格で、Get* の広さへの指摘があれば十分です。"
+    }
+  ]
+}

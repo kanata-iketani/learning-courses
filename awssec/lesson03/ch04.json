@@ -1,0 +1,93 @@
+{
+  "lesson": 3,
+  "chapter": 4,
+  "title": "ルートユーザーの守り方と IAM の点検",
+  "priority": "🔴",
+  "text": "### 基礎: ルートユーザーは「アカウントそのもの」\nAWS アカウントを作るときに使ったメールアドレスとパスワードでログインする ID を、ルートユーザーと呼びます。ルートユーザーはアカウントのすべてを操作できます。ch3 で見た「既定は拒否」も、ルートユーザーには当てはまりません。アカウントの中の IAM ポリシーでルートユーザーの権限を狭めることはできません(組織の SCP で制限する方法は L18 で扱います)。\n\nだから、ルートユーザーを奪われると、取り返しのつかない事故になります。\n\n- ルートのメールアドレスが個人の受信箱で、その人の退職後にメールアカウントが乗っ取られる。パスワードを再設定され、アカウントごと奪われる\n- 昔作ったルートユーザーのアクセスキーが古いスクリプトに残っていて、それが漏れる。IAM ポリシーで止める手段がない\n- 攻撃者がルートユーザーで IAM ユーザーを全部消し、CloudTrail を止め、データを消してから身代金を要求する\n\n### ルートユーザーでしかできない作業\n普段の作業は IAM(や L5 の IAM Identity Center)でできます。ルートユーザーが必要なのは、次のような限られた作業です。\n\n| 分類 | 作業の例 |\n|---|---|\n| アカウント | 組織に入っていない単独アカウントで、ルートのメールアドレス・パスワードを変える、アカウントを閉じる・再開する |\n| IAM | ただ 1 人の管理者が自分の権限を消してしまったときに、権限を戻す |\n| 請求 | IAM から請求コンソールを見られるようにする、一部の請求の作業 |\n| S3 | MFA Delete(削除に MFA を求める設定)を有効にする、全員を拒否してしまったバケットポリシーを直す・消す |\n| SQS | 全員を拒否してしまったキューのポリシーを直す・消す |\n\n最新の一覧は公式ドキュメント「Tasks that require root user credentials」で確認してください。S3 の行は ch3 の Deny の怖さとつながっています。Principal を `*` にした Deny を書き間違えると、管理者もそのバケットを触れなくなり、ルートユーザーでしか直せません。\n\n### AWS での仕組み: ルートユーザーの守り方\n| やること | 理由 |\n|---|---|\n| MFA(パスワードに加えるもう 1 つの確認)を付ける | パスワードが漏れてもログインされない。ルートユーザーの MFA は既定で必須になっており、登録を求められる。方式の比較は L5 |\n| アクセスキーを作らない。あれば消す | IAM ポリシーで止められない長期キーは最悪の漏えい源 |\n| 長く推測されにくいパスワードを、保管場所を決めて管理する | 誰がどこで管理しているかを記録しておく |\n| メールアドレスは個人ではなく、複数人が受け取れるアドレスにする | 担当者の退職や異動で取り戻せなくなるのを防ぐ |\n| 代替の連絡先(請求・運用・セキュリティ)を登録する | AWS からの重要な連絡を確実に受け取る |\n| 普段は使わず、使ったら通知が来るようにする | 使われたら必ず誰かが気づく |\n\nいまの状態は CLI で確かめられます。\n\n```console\n$ aws iam get-account-summary\n{\n    \"SummaryMap\": {\n        \"AccountMFAEnabled\": 1,\n        \"AccountAccessKeysPresent\": 0,\n        \"Users\": 12,\n        \"Groups\": 3,\n        \"Roles\": 41,\n        ...\n    }\n}\n```\n\n- `AccountMFAEnabled: 1`: ルートユーザーに MFA が付いています。0 なら付いていません\n- `AccountAccessKeysPresent: 0`: ルートユーザーのアクセスキーはありません。1 ならあるので、すぐ消します\n- `...` は省略した部分です。ほかに IAM ユーザーやロールの数などが並びます\n\n### ルートユーザーが使われたら気づく\nルートユーザーでコンソールにログインすると、CloudTrail(L13)に次のような記録が残ります(主な項目だけ抜き出しています)。\n\n```json\n{\n  \"eventName\": \"ConsoleLogin\",\n  \"userIdentity\": {\n    \"type\": \"Root\",\n    \"arn\": \"arn:aws:iam::111122223333:root\",\n    \"accountId\": \"111122223333\"\n  },\n  \"sourceIPAddress\": \"198.51.100.7\",\n  \"responseElements\": { \"ConsoleLogin\": \"Success\" },\n  \"additionalEventData\": { \"MFAUsed\": \"Yes\" }\n}\n```\n\n- `eventName`: コンソールへのログインです\n- `userIdentity.type: Root`: ルートユーザーによる操作です。IAM ユーザーなら `IAMUser` になります\n- `sourceIPAddress`: どこからログインしたかです\n- `ConsoleLogin: Success`: ログインは成功しました\n- `MFAUsed: Yes`: MFA を使っています\n\nこの記録を EventBridge(イベントを条件で拾って次の処理に渡すサービス)で拾い、SNS(メールなどで通知するサービス)で担当者に知らせます。EventBridge のルールの条件は次の形です。\n\n```json\n{\n  \"detail-type\": [\"AWS Console Sign In via CloudTrail\"],\n  \"detail\": { \"userIdentity\": { \"type\": [\"Root\"] } }\n}\n```\n\n- `detail-type`: コンソールへのサインインの記録を対象にします\n- `detail.userIdentity.type`: その中で、操作した人の種類がルートユーザーのものだけを拾います\n\nサインインの記録がどのリージョンに届くかには注意が要ります。設定の詳細は L14 で扱います。\n\n```mermaid\narchitecture-beta\n    group acct(aws:account)[Account 111122223333]\n\n    service root(aws:user)[Root user]\n    service ct(aws:cloudtrail)[CloudTrail] in acct\n    service eb(aws:eventbridge)[EventBridge rule] in acct\n    service sns(aws:sns)[SNS topic] in acct\n    service team(aws:users)[Security team]\n\n    root:R --> L:ct\n    ct:R --> L:eb\n    eb:R --> L:sns\n    sns:R --> L:team\n```\n\n- 左から: ルートユーザーがログインすると CloudTrail に記録が残り、EventBridge のルールが Root の記録だけを拾い、SNS のトピックからセキュリティ担当へメールが届きます\n\n### 実務での判断: 管理者の作業を何で行うか\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 |\n|---|---|---|---|---|\n| ルートユーザー | アカウント作成時の ID | 何でもできる | IAM で制限できない。操作者を区別できない | 低いが危険 |\n| 管理者権限の IAM ユーザー | 人数分の IAM ユーザーに AdministratorAccess | すぐ作れる | 長期のパスワードとキーが人数分残る | 中(棚卸しが要る) |\n| IAM Identity Center | 会社の ID でログインし、一時的な権限を受け取る(L5) | 長期の認証情報なし。複数アカウントをまとめて管理 | 最初の設定が要る | 低い |\n\nプロは、ルートユーザーを「金庫にしまう鍵」として扱います。MFA を付けてアクセスキーを消し、使ったら通知が来るようにし、普段の管理作業は Identity Center か、少なくとも MFA 付きの IAM ユーザーで行います。複数のアカウントがある組織では、メンバーアカウントのルートユーザーの認証情報そのものを消して、管理アカウントから一元管理する方法もあります(L18)。\n\n### IAM の棚卸し: 認証情報レポート\n使われていない人やキーを見つけるには、認証情報レポート(アカウント内の全ユーザーのパスワード・MFA・アクセスキーの状況の一覧)を使います。\n\n```console\n$ aws iam generate-credential-report\n$ aws iam get-credential-report --query Content --output text | base64 -d\nuser,arn,password_enabled,password_last_used,mfa_active,access_key_1_active,access_key_1_last_used_date\n<root_account>,arn:aws:iam::111122223333:root,not_supported,2026-09-01T02:10:00+00:00,true,false,N/A\nalice,arn:aws:iam::111122223333:user/alice,true,2026-11-20T01:00:00+00:00,true,false,N/A\nold-batch,arn:aws:iam::111122223333:user/old-batch,false,N/A,false,true,2025-03-02T04:00:00+00:00\n```\n\n- 1 つ目のコマンド: レポートを作るよう依頼します\n- 2 つ目のコマンド: 中身は Base64(文字だけで表す符号化)で返るので、`base64 -d` で元の CSV(カンマ区切りの表)に戻します。表示は主な列だけに絞っています\n- `<root_account>` の行: ルートユーザーです。MFA は true、アクセスキーは false で、守れています\n- `old-batch` の行: パスワードはなく MFA もなし。アクセスキーは有効で、最後に使われたのは 1 年以上前です。真っ先に無効化を検討する対象です\n\n### 拒否されたときの調べ方\nch3 の例題で、bob が本番のファイルを消そうとして拒否されたとします。CLI はこう返します。\n\n```console\n$ aws s3api delete-object --bucket example-app --key prod/b.txt\nAn error occurred (AccessDenied) when calling the DeleteObject operation: User: arn:aws:iam::111122223333:user/bob is not authorized to perform: s3:DeleteObject on resource: \"arn:aws:s3:::example-app/prod/b.txt\" with an explicit deny in an identity-based policy\n```\n\n末尾が拒否の種類を教えてくれます。`with an explicit deny in an identity-based policy` なら本人側の Deny、`... in a resource-based policy` ならバケットポリシーなどの Deny、`because no identity-based policy allows the s3:DeleteObject action` なら暗黙の拒否です。どこまで詳しく出るかはサービスによって違います。\n\nポリシーを変える前に結果を確かめるには、IAM ポリシーシミュレーターを使います。\n\n```console\n$ aws iam simulate-principal-policy \\\n    --policy-source-arn arn:aws:iam::111122223333:user/bob \\\n    --action-names s3:DeleteObject \\\n    --resource-arns arn:aws:s3:::example-app/prod/b.txt\n{\n    \"EvaluationResults\": [\n        {\n            \"EvalActionName\": \"s3:DeleteObject\",\n            \"EvalResourceName\": \"arn:aws:s3:::example-app/prod/b.txt\",\n            \"EvalDecision\": \"explicitDeny\",\n            \"MatchedStatements\": [\n                { \"SourcePolicyId\": \"ProtectProd\", \"SourcePolicyType\": \"IAM Policy\" }\n            ]\n        }\n    ]\n}\n```\n\n- `EvalDecision`: `allowed`(許可)、`explicitDeny`(明示的な拒否)、`implicitDeny`(暗黙の拒否)のどれかです\n- `MatchedStatements`: 決め手になったポリシーです。ここでは ch3 のポリシー B(bob のインラインポリシー ProtectProd)です\n- このコマンドが見るのは本人側のポリシーです。バケットポリシーも含めたいときは `--resource-policy` で中身を渡します\n\n\n### 試験ではこう問われる\n- 「ルートユーザーを守る最初の手順」は MFA を付け、アクセスキーを消すこと。「ルートのアクセスキーを定期的に入れ替える」は誤りで、作らないのが正解です\n- 「ルートユーザーの使用を最も早く検知」なら CloudTrail の記録を EventBridge で拾い SNS で通知する構成です\n- 「Allow を付けたのに拒否される理由を調べる」なら、エラーメッセージの拒否の種類と IAM ポリシーシミュレーターを使います\n\n### まとめ\n- ルートユーザーはアカウントの全権を持ち、アカウント内の IAM ポリシーでは制限できない\n- MFA を付け、アクセスキーは作らず、使ったら通知が来るようにする。普段は使わない\n- 認証情報レポートで、使われていないユーザーやキーを見つけて消す\n- 拒否されたら、エラーメッセージの末尾とシミュレーターで、明示的な拒否か暗黙の拒否かを確かめる\n",
+  "quiz": [
+    {
+      "question": "ルートユーザーについて正しいものはどれか。",
+      "choices": [
+        "アカウントの全権を持ち、そのアカウントの IAM ポリシーで権限を狭めることはできない",
+        "AdministratorAccess を外せば、読み取り専用にできる",
+        "IAM ユーザーの一種なので、グループに入れて権限を管理できる",
+        "ルートユーザーにも暗黙の拒否が働くので、ポリシーがなければ何もできない"
+      ],
+      "correct": 0,
+      "explanation": "ルートユーザーは既定でアカウントのすべてを操作でき、アカウント内の IAM ポリシーでは制限できません。IAM ユーザーではないのでグループにも入れられず、ポリシーを外して権限を下げることもできません。暗黙の拒否はルートユーザーには働きません。"
+    },
+    {
+      "question": "`aws iam get-account-summary` の結果に `\"AccountMFAEnabled\": 1` と `\"AccountAccessKeysPresent\": 1` があった。最初に行うべき対応はどれか。",
+      "choices": [
+        "ルートユーザーに MFA をもう 1 台追加する",
+        "ルートユーザーのアクセスキーを使っている処理を洗い出してロールなどに置き換え、キーを削除する",
+        "ルートユーザーのアクセスキーを 90 日ごとに入れ替える運用を始める",
+        "ルートユーザーのパスワードを変えれば、アクセスキーも自動で無効になるので変更する"
+      ],
+      "correct": 1,
+      "explanation": "AccountAccessKeysPresent が 1 なので、ルートユーザーにアクセスキーがあります。IAM で制限できない長期キーなので、使っている処理を置き換えてから削除します。MFA はすでに付いています。キーは入れ替えではなく作らないのが正解で、パスワードを変えてもアクセスキーは無効になりません。"
+    },
+    {
+      "question": "ルートユーザーがコンソールにログインしたら、数分以内にセキュリティ担当へ通知したい。運用負荷が最も低い構成はどれか。",
+      "choices": [
+        "CloudTrail の記録のうち userIdentity.type が Root のサインインを EventBridge のルールで拾い、SNS で通知する",
+        "毎朝、担当者が CloudTrail のコンソールでルートユーザーのログインを目で探す",
+        "ルートユーザーにだけ IAM ポリシーで ConsoleLogin を Deny し、拒否されたらメールが届くようにする",
+        "認証情報レポートを 1 日 1 回作り、password_last_used の変化を比べる"
+      ],
+      "correct": 0,
+      "explanation": "CloudTrail の記録を EventBridge で条件に合うものだけ拾い、SNS で知らせれば、人手をかけず数分で気づけます。目視や 1 日 1 回のレポートでは遅く、手間もかかります。ルートユーザーは IAM ポリシーで制限できず、通知の仕組みにもなりません。"
+    },
+    {
+      "question": "認証情報レポートで、IAM ユーザー old-batch の行が「password_enabled false、mfa_active false、access_key_1_active true、access_key_1_last_used_date 1 年以上前」だった。最も適切な対応はどれか。",
+      "choices": [
+        "MFA を付ければ安全になるので、old-batch に MFA を登録する",
+        "パスワードがないので攻撃には使われない。そのまま残す",
+        "アクセスキーを無効化し、問題が出ないことを確かめたうえで、キーとユーザーを削除する",
+        "アクセスキーをもう 1 本発行して、2 本で負荷を分ける"
+      ],
+      "correct": 2,
+      "explanation": "1 年以上使われていない有効なアクセスキーは、漏れても気づかれにくい入口です。まず無効化して影響を確かめ、問題なければ削除します。アクセスキーでの API 呼び出しにはログイン時の MFA が効かないため、MFA の登録だけでは守れません。パスワードがなくてもキーで API は呼べます。"
+    },
+    {
+      "question": "CLI で次のエラーが出た。`... is not authorized to perform: s3:PutObject on resource: \"arn:aws:s3:::example-shared/x.csv\" because no identity-based policy allows the s3:PutObject action`。最初に疑うべきことはどれか。",
+      "choices": [
+        "バケットポリシーに PutObject を拒否する Deny が書かれている",
+        "本人側のポリシーに PutObject を拒否する Deny が書かれている",
+        "PutObject を example-shared に許可する文が、本人側にもリソース側にも当てはまっていない",
+        "アクセスキーが無効になっていて、認証に失敗している"
+      ],
+      "correct": 2,
+      "explanation": "「no identity-based policy allows」は暗黙の拒否、つまり許可が足りないことを示します。Deny が原因なら「with an explicit deny in …」と出ます。認証の失敗なら User の ARN が特定される前に別のエラーになります。"
+    },
+    {
+      "question": "`aws iam simulate-principal-policy` の結果で `\"EvalDecision\": \"implicitDeny\"` が返った。この意味として正しいものはどれか。",
+      "choices": [
+        "当てはまる Deny の文があり、明示的に拒否された",
+        "当てはまる Allow の文がなく、既定のまま拒否になった",
+        "Allow と Deny の両方が当てはまり、判定できなかった",
+        "条件キーの値が足りず、シミュレーターが判定を中断した"
+      ],
+      "correct": 1,
+      "explanation": "implicitDeny は暗黙の拒否で、許可する文が見つからなかったという意味です。Deny が当てはまれば explicitDeny になります。両方当てはまれば Deny が勝つので explicitDeny です。条件キーの値が足りないときは、結果に足りない値が別に示されます。"
+    },
+    {
+      "kind": "essay",
+      "question": "新しく AWS アカウントを 1 つ作ったところです。ルートユーザーを守るために、最初の 1 日でやることを優先順に挙げ、それぞれの理由を説明してください。普段の管理作業を何で行うかも述べてください。",
+      "answer": "1. ルートユーザーに MFA を付けます。パスワードが漏れてもログインされないようにするためで、ルートユーザーは IAM ポリシーで制限できないので最優先です。2. ルートユーザーのアクセスキーがないことを確かめ、あれば消します。長期のキーは漏れると止める手段がないからです。get-account-summary の AccountAccessKeysPresent が 0 であることで確かめます。3. パスワードを長く推測されにくいものにし、保管場所と管理者を決めます。メールアドレスは個人ではなく複数人が受け取れるアドレスにし、代替の連絡先を登録します。担当者の退職などで取り戻せなくなるのを防ぐためです。4. CloudTrail の記録から userIdentity.type が Root のサインインを EventBridge で拾い、SNS で担当者に通知します。使われたら必ず気づけるようにするためです。普段の管理作業は IAM Identity Center(難しければ MFA 付きの管理用 IAM ユーザー)で行い、ルートユーザーはルートでしかできない作業のときだけ使います。",
+      "rubric": [
+        "MFA を付けることを最優先に挙げ、IAM ポリシーで制限できない点などの理由を述べている",
+        "ルートのアクセスキーを作らない・消すことと、その理由を述べている",
+        "メールアドレス・パスワードの管理や代替の連絡先など、取り戻せなくなる事故への備えに触れている",
+        "使用時に通知する仕組み(CloudTrail と EventBridge と SNS など)を挙げている",
+        "普段の作業は Identity Center や IAM で行い、ルートユーザーは使わないと述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "MFA・アクセスキーの削除・連絡先の管理・使用時の通知・普段は使わない、の 5 点がそろい、それぞれに理由があれば合格です。優先順位で MFA とアクセスキーが先頭にあることが大切です。"
+    }
+  ]
+}

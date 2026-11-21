@@ -1,0 +1,92 @@
+{
+  "lesson": 3,
+  "chapter": 3,
+  "title": "評価ロジック — 許可か拒否かを一段ずつ",
+  "priority": "🔴",
+  "text": "### 基礎: 「書いていない」と「禁止と書いた」は違う\nch2 で、どの文にも書いていない操作は拒否になると見ました。IAM の判定結果は「許可」か「拒否」の 2 つですが、拒否には 2 種類あります。\n\n| 用語 | 意味 | 例 |\n|---|---|---|\n| 暗黙の拒否 | 許可する文がどこにもないので、既定どおり拒否 | 何も付いていない新しいユーザーは何もできない |\n| 明示的な許可 | `\"Effect\": \"Allow\"` の文が当てはまった | ch2 の ReadReports の文 |\n| 明示的な拒否 | `\"Effect\": \"Deny\"` の文が当てはまった | 「本番のファイルは消すな」と書いた文 |\n\nこの 3 つの強さの順番が、評価ロジックのすべてです。**明示的な拒否 > 明示的な許可 > 暗黙の拒否**。Deny が 1 つでも当てはまれば、Allow がいくつあっても拒否です。\n\nこれを知らないと、次のような事故が起きます。「本番データを消せないように Deny を書いたのに、別の人は消せた」「Allow を足したのに、どこかの Deny に負けて動かない」。\n\n### AWS での仕組み: 判定の 5 段\n1 つのアカウントの中で、アイデンティティベースのポリシーとリソースベースのポリシーだけがある場合、AWS は依頼ごとに次の順で判定します。\n\n1. 最初は「拒否」から始める(暗黙の拒否)\n2. この依頼に関係するポリシーをすべて集める。本人に付いた管理ポリシーとインラインポリシー、所属グループのポリシー、対象リソースのポリシー\n3. 当てはまる Deny の文が 1 つでもあれば、そこで **拒否**(明示的な拒否)\n4. 当てはまる Allow の文が 1 つでもあれば **許可**\n5. どれもなければ **拒否**(暗黙の拒否のまま)\n\n「当てはまる」とは、Action・Resource・(リソースベースなら)Principal がすべて合い、Condition があれば条件も満たすことです。ポリシーの並び順や文の順番は関係ありません。\n\n```mermaid\nflowchart TD\n    A[依頼が届く] --> B[既定は拒否]\n    B --> C[関係するポリシーをすべて集める]\n    C --> D{当てはまる Deny がある}\n    D -- はい --> X[拒否 明示的な拒否]\n    D -- いいえ --> E{当てはまる Allow がある}\n    E -- はい --> Y[許可]\n    E -- いいえ --> Z[拒否 暗黙の拒否]\n```\n\n組織の SCP や権限境界など、ほかの種類のポリシーが加わると段が増えます。それは L6 で扱います。この 5 段が土台です。\n\n### 例題: ポリシー 4 つとリクエスト 7 つ\nIAM ユーザー bob と carol は、どちらもグループ developers に入っています。付いているポリシーは次の 4 つです。\n\nポリシー A(グループ developers に付いた管理ポリシー)\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    { \"Sid\": \"AppObjects\", \"Effect\": \"Allow\",\n      \"Action\": [\"s3:GetObject\", \"s3:PutObject\", \"s3:DeleteObject\"],\n      \"Resource\": \"arn:aws:s3:::example-app/*\" },\n    { \"Sid\": \"AppList\", \"Effect\": \"Allow\",\n      \"Action\": \"s3:ListBucket\",\n      \"Resource\": \"arn:aws:s3:::example-app\" }\n  ]\n}\n```\n\nポリシー B(bob だけに付いたインラインポリシー。名前は ProtectProd)\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    { \"Sid\": \"DenyDeleteProd\", \"Effect\": \"Deny\",\n      \"Action\": \"s3:DeleteObject\",\n      \"Resource\": \"arn:aws:s3:::example-app/prod/*\" }\n  ]\n}\n```\n\nポリシー C(バケット example-app のバケットポリシー)\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    { \"Sid\": \"OfficeOnly\", \"Effect\": \"Deny\",\n      \"Principal\": \"*\",\n      \"Action\": \"s3:*\",\n      \"Resource\": [\"arn:aws:s3:::example-app\", \"arn:aws:s3:::example-app/*\"],\n      \"Condition\": { \"NotIpAddress\": { \"aws:SourceIp\": \"203.0.113.0/24\" } } }\n  ]\n}\n```\n- `\"Principal\": \"*\"`: 誰からの依頼にも当てはまります\n- `\"NotIpAddress\"`: 依頼元の IP アドレスが 203.0.113.0/24(会社の回線とします)に**入らない**ときに条件を満たします。つまり「会社の外からは、誰でも S3 の全操作を拒否」です\n\nポリシー D(バケット example-shared のバケットポリシー)\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    { \"Sid\": \"BobRead\", \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:user/bob\" },\n      \"Action\": \"s3:GetObject\",\n      \"Resource\": \"arn:aws:s3:::example-shared/*\" }\n  ]\n}\n```\n\n#### リクエスト 1: bob が会社(203.0.113.10)から example-app/dev/a.txt を GetObject\n| 段 | 確かめること | 見た文 | 判定 |\n|---|---|---|---|\n| 1 | 既定 | — | 拒否から始める |\n| 2 | 関係するポリシー | A、B(bob の本人)、C(対象バケット) | D は別バケットなので関係しない |\n| 3 | 当てはまる Deny | B の DenyDeleteProd は Action が DeleteObject なので合わない。C の OfficeOnly は依頼元が範囲内なので条件を満たさない | Deny なし |\n| 4 | 当てはまる Allow | A の AppObjects が Action・Resource とも合う | **許可** |\n\n#### リクエスト 2: bob が会社から example-app/prod/b.txt を DeleteObject\n| 段 | 確かめること | 見た文 | 判定 |\n|---|---|---|---|\n| 1 | 既定 | — | 拒否から始める |\n| 2 | 関係するポリシー | A、B、C | — |\n| 3 | 当てはまる Deny | B の DenyDeleteProd が Action(DeleteObject)と Resource(prod/*)の両方に合う | **拒否(明示的な拒否)** |\n| 4 | 当てはまる Allow | A の AppObjects も合うが、段 3 で決着済み | 見ない |\n\n#### リクエスト 4: bob が自宅(198.51.100.7)から example-app/dev/a.txt を GetObject\n| 段 | 確かめること | 見た文 | 判定 |\n|---|---|---|---|\n| 1〜2 | 既定と関係するポリシー | A、B、C | 拒否から始める |\n| 3 | 当てはまる Deny | C の OfficeOnly: Principal は `*` で合う。Action の s3:* に GetObject が入る。依頼元 198.51.100.7 は範囲外なので NotIpAddress を満たす | **拒否(明示的な拒否)** |\n\n#### リクエスト 5: bob が会社から example-shared/x.csv を GetObject\n| 段 | 確かめること | 見た文 | 判定 |\n|---|---|---|---|\n| 1〜2 | 既定と関係するポリシー | A、B、D | 拒否から始める |\n| 3 | 当てはまる Deny | B は DeleteObject だけ。D に Deny はない | Deny なし |\n| 4 | 当てはまる Allow | A は example-app だけなので合わない。D の BobRead が Principal(bob)・Action・Resource とも合う | **許可** |\n\n同じアカウントの中では、本人側(アイデンティティベース)とリソース側のどちらか一方に Allow があれば許可になります。ただし、ロールの信頼ポリシーや KMS のキーポリシー(L9)のように、リソース側の許可が必ず要る例外があります。\n\n#### リクエスト 6: bob が会社から example-shared/x.csv を PutObject\n| 段 | 確かめること | 見た文 | 判定 |\n|---|---|---|---|\n| 1〜2 | 既定と関係するポリシー | A、B、D | 拒否から始める |\n| 3 | 当てはまる Deny | なし | Deny なし |\n| 4 | 当てはまる Allow | A は別バケット、D は GetObject だけ | Allow なし |\n| 5 | 最終 | — | **拒否(暗黙の拒否)** |\n\n#### 7 つのまとめ\n| # | 誰が・どこから | 操作と対象 | 決め手 | 結果 |\n|---|---|---|---|---|\n| 1 | bob・会社 | GetObject example-app/dev/a.txt | A の Allow | 許可 |\n| 2 | bob・会社 | DeleteObject example-app/prod/b.txt | B の Deny | 明示的な拒否 |\n| 3 | bob・会社 | DeleteObject example-app/dev/a.txt | B は prod/* だけ。A の Allow | 許可 |\n| 4 | bob・自宅 | GetObject example-app/dev/a.txt | C の Deny(条件成立) | 明示的な拒否 |\n| 5 | bob・会社 | GetObject example-shared/x.csv | D の Allow | 許可 |\n| 6 | bob・会社 | PutObject example-shared/x.csv | 許可する文がない | 暗黙の拒否 |\n| 7 | carol・会社 | DeleteObject example-app/prod/b.txt | B は bob 専用。A の Allow | 許可 |\n\n7 番が冒頭の「Deny を書いたのに別の人は消せた」の正体です。B は bob のインラインポリシーなので、carol には関係しません。実際に拒否されたとき、どの種類の拒否かを見分ける方法は ch4 で扱います。\n\n### 実務での判断: 「本番を消させない」をどう書くか\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 |\n|---|---|---|---|---|\n| Allow を狭める | A の Resource を dev/* だけにする | 単純。最小権限そのもの | 別のポリシーで誰かに広い Allow が付くと守れない | 低い |\n| 本人側に Deny | グループかユーザーに Deny を付ける | Allow に必ず勝つ | 付け忘れた人には効かない(7 番) | 中 |\n| リソース側に Deny | バケットポリシーに Deny を書く | そのバケットに来る全員に効く | 書き間違えると管理者まで締め出す | 中 |\n\nプロは、まず Allow を必要な分だけに絞ります。そのうえで「誰が何を付けても破られては困る」ものだけを Deny で守ります。Deny は強力なので、Condition つきの Deny は、AWS のサービスが代わりに呼ぶ依頼まで止めないかを確かめてから入れます。また、ポリシーの変更が全体に行き渡るまで少し時間がかかることがあるので、変更直後の結果だけで判断しません。\n\n### 試験ではこう問われる\n- 「Allow を付けたのにアクセスできない」→ どこかに当てはまる Deny があるか、Resource の ARN が合っていないかを疑います\n- 「ポリシーの順番」を変える選択肢は誤りです。評価は順番に依存しません\n- 「最小権限で、特定の操作を全員に確実に禁止」なら、Allow を足す案ではなく Deny を正しい場所(グループ全体かリソース側、組織なら SCP)に置く案を選びます\n\n### まとめ\n- 強さは 明示的な拒否 > 明示的な許可 > 暗黙の拒否。Deny が 1 つ当てはまれば終わり\n- 判定は「関係するポリシーを全部集める → Deny を探す → Allow を探す → なければ拒否」\n- 同じアカウントでは、本人側かリソース側のどちらかの Allow で許可になる(信頼ポリシーや KMS は例外)\n- ほかの人のインラインポリシーは自分には効かない。守りたい範囲に Deny を置く\n",
+  "quiz": [
+    {
+      "question": "あるユーザーに、ポリシー X「s3:* を arn:aws:s3:::example-data/* に Allow」と、ポリシー Y「s3:DeleteObject を arn:aws:s3:::example-data/* に Deny」が付いている。このユーザーが example-data/a.csv を DeleteObject するとどうなるか。",
+      "choices": [
+        "許可される。s3:* の Allow のほうが範囲が広いから",
+        "許可される。後から付けたポリシーが優先されるから",
+        "拒否される。当てはまる Deny は、当てはまる Allow より常に強いから",
+        "結果はポリシー X と Y を付けた順番で変わる"
+      ],
+      "correct": 2,
+      "explanation": "明示的な拒否は明示的な許可に必ず勝ちます。範囲の広さや付けた順番、文の並びは評価に影響しません。Y の Deny が Action・Resource とも合うので拒否です。"
+    },
+    {
+      "question": "新しく作った IAM ユーザーに、ポリシーを 1 つも付けていない。このユーザーが S3 のバケット一覧を取ろうとしたときの結果と、その種類として正しいものはどれか。",
+      "choices": [
+        "拒否される(暗黙の拒否)",
+        "拒否される(明示的な拒否)",
+        "許可される。同じアカウントの IAM ユーザーは読み取りだけ既定で許されるから",
+        "許可される。バケット一覧はポリシーの対象外だから"
+      ],
+      "correct": 0,
+      "explanation": "既定はすべて拒否で、許可する文がどこにもないので暗黙の拒否になります。Deny の文があるわけではないので明示的な拒否ではありません。IAM ユーザーに既定で許される読み取りはなく、バケット一覧も s3:ListAllMyBuckets という操作として評価されます。"
+    },
+    {
+      "question": "本文の例題で、carol(グループ developers のみ所属、インラインポリシーなし)が会社から example-app/prod/b.txt を DeleteObject すると許可された。本番のファイルを developers の全員に消させないための、最も確実で運用負荷の低い変更はどれか。",
+      "choices": [
+        "carol にも bob と同じインラインポリシー B を付ける",
+        "ポリシー B の Deny 文を、グループ developers に付いたポリシーに移す",
+        "ポリシー A の文の順番を入れ替え、Deny を先に評価させる",
+        "ポリシー A の Action から s3:GetObject を外す"
+      ],
+      "correct": 1,
+      "explanation": "グループに付けた Deny は所属する全員に効き、新しく入った人にも付け忘れが起きません。1 人ずつインラインで付ける案は、メンバーが増えるたびに漏れが出ます。文の順番は評価に関係なく、GetObject を外しても削除は止まりません。"
+    },
+    {
+      "question": "バケットポリシーに次の文がある。`{\"Effect\":\"Deny\",\"Principal\":\"*\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::example-app/*\",\"Condition\":{\"NotIpAddress\":{\"aws:SourceIp\":\"203.0.113.0/24\"}}}`。AdministratorAccess を持つ管理者が 203.0.113.50 から GetObject した。結果はどうなるか(ほかに Deny はない)。",
+      "choices": [
+        "拒否される。Principal が * なので、管理者も含めて全員が常に拒否されるから",
+        "拒否される。バケットポリシーの Deny は IP アドレスに関係なく効くから",
+        "許可される。管理者には Deny が効かないから",
+        "許可される。依頼元が範囲内なので NotIpAddress の条件を満たさず Deny が当てはまらず、AdministratorAccess の Allow が効くから"
+      ],
+      "correct": 3,
+      "explanation": "203.0.113.50 は 203.0.113.0/24 に入るので「範囲に入らない」という条件は満たされず、この Deny は当てはまりません。残るのは AdministratorAccess の Allow なので許可です。Condition を満たさない文は無いのと同じです。逆に範囲外からなら、管理者でも明示的な拒否に負けます。"
+    },
+    {
+      "question": "同じアカウントの IAM ユーザー dave には、S3 を許可するポリシーが 1 つも付いていない。バケット example-shared のバケットポリシーに、Principal を dave の ARN、Action を s3:GetObject、Resource を arn:aws:s3:::example-shared/* とする Allow がある。Deny はどこにもない。dave が example-shared/x.csv を GetObject するとどうなるか。",
+      "choices": [
+        "許可される。同じアカウントでは、リソース側の Allow だけでも許可になるから",
+        "拒否される。本人側に Allow がないと、必ず暗黙の拒否になるから",
+        "拒否される。バケットポリシーは別アカウントからの依頼にしか効かないから",
+        "許可される。バケットポリシーがあると本人側のポリシーは評価されなくなるから"
+      ],
+      "correct": 0,
+      "explanation": "同じアカウントの中では、本人側かリソース側のどちらかに当てはまる Allow があれば許可です(例題のリクエスト 5 と同じ形)。バケットポリシーは同じアカウントの依頼にも効きます。本人側のポリシーも必ず評価され、そこに Deny があれば拒否に変わります。"
+    },
+    {
+      "question": "本文の例題で、bob が会社から example-app/dev/a.txt を DeleteObject した(リクエスト 3)。結果と決め手の組み合わせとして正しいものはどれか。",
+      "choices": [
+        "明示的な拒否。B の DenyDeleteProd が DeleteObject に当てはまるから",
+        "暗黙の拒否。DeleteObject を許可する文がないから",
+        "明示的な拒否。C の OfficeOnly が s3:* に当てはまるから",
+        "許可。B の Resource は prod/* だけで dev のファイルに合わず、A の AppObjects の Allow が当てはまるから"
+      ],
+      "correct": 3,
+      "explanation": "Deny の文は Action だけでなく Resource も合ったときにだけ当てはまります。B は prod/* が対象なので dev/a.txt には合いません。C は会社の IP アドレスからなので条件を満たしません。残る A の AppObjects が DeleteObject を許可しています。"
+    },
+    {
+      "kind": "essay",
+      "question": "本文の例題のポリシー A〜D を前提に、bob が自宅(198.51.100.7)から example-shared/x.csv を GetObject した場合の結果を、評価の段(既定・関係するポリシーの収集・Deny の確認・Allow の確認)ごとに説明してください。ポリシー C が関係するかどうかも理由とともに述べてください。",
+      "answer": "結果は許可です。段 1: 既定は拒否から始めます。段 2: 関係するポリシーは、bob 本人に付いたポリシー A(グループ経由)と B(インライン)、対象バケット example-shared のバケットポリシー D です。ポリシー C は example-app のバケットポリシーで、Resource も example-app を指しているため、example-shared への依頼には関係しません。したがって自宅の IP アドレスでも C の Deny は効きません。段 3: Deny を探します。B は DeleteObject で prod/* だけが対象なので GetObject には合いません。D に Deny はありません。当てはまる Deny はありません。段 4: Allow を探します。A の文はどちらも example-app が対象なので合いません。D の BobRead は Principal が bob、Action が GetObject、Resource が example-shared/* で、すべて合います。同じアカウントの中では、リソース側の Allow だけでも許可になるので、最終結果は許可です。",
+      "rubric": [
+        "最終結果を許可と正しく判定している",
+        "ポリシー C は別バケット(example-app)のポリシーなので関係しないと説明している",
+        "Deny の確認で B が DeleteObject と prod/* だけなので当てはまらないと述べている",
+        "Allow の確認で A は合わず、D の BobRead が Principal・Action・Resource とも合うこと、同じアカウントではリソース側の Allow で足りることを述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "IP アドレスの条件に目を奪われず、そもそもどのポリシーが関係するかを先に絞れるかを見ます。段ごとに文を当てはめ、D の Allow で許可になる理由まで言えれば合格です。"
+    }
+  ]
+}
