@@ -1,0 +1,92 @@
+{
+  "lesson": 13,
+  "chapter": 3,
+  "title": "CloudWatch Logs と S3・ELB・CloudFront のログ",
+  "priority": "🔴",
+  "text": "### 基礎: CloudTrail に残らないもの\nCloudTrail は AWS の API の呼び出しを記録します。しかし、次のような出来事は CloudTrail には残りません。\n\n| 出来事 | 残る場所 |\n|---|---|\n| Web サイトに SQL インジェクション(入力欄に SQL を混ぜてデータベースを不正に操作する攻撃)の文字列が送られた | ALB・CloudFront のアクセスログ、WAF のログ(L11) |\n| 誰かが EC2 のサーバーに SSH でログインを何度も試した | OS のログ(CloudWatch Logs へ送る) |\n| アプリが例外を出し、エラーの中にパスワードが書き出された | アプリのログ(CloudWatch Logs) |\n| S3 のバケットに、認証情報の誤った要求が大量に来た | S3 のサーバーアクセスログ |\n| 社内のサーバーが見知らぬ IP の 4444 番ポートへ通信した | VPC Flow Logs(L10) |\n\nインシデントの調査では、「API の操作」と「Web のリクエスト」と「サーバーの中の出来事」をつなげて読みます。たとえば、ALB のログで攻撃の要求を見つけ、そのサーバーの OS のログで侵入を確かめ、CloudTrail でそのサーバーのロールが何を呼んだかを追います。どれか 1 つが欠けると、話がつながりません。この章では、AWS でログを受け止める CloudWatch Logs と、S3・ELB・CloudFront のアクセスログを扱います。\n\n### AWS での仕組み: CloudWatch Logs\nCloudWatch Logs は、文字のログを集めて保管・検索するサービスです。\n\n| 用語 | 意味 | 例 |\n|---|---|---|\n| ロググループ | 同じ種類のログの入れ物。保持期間・暗号化・アクセス権はここで決める | `/app/web/prod` |\n| ログストリーム | 1 つの送り元からのログの流れ | `i-0abcd1234example0`(サーバー 1 台分) |\n| ログイベント | 1 行のログ。時刻と本文を持つ | `2026-11-22T01:20:31Z ERROR db timeout` |\n\n#### ログの送り方\n| 送り元 | 送り方 |\n|---|---|\n| EC2・オンプレミスのサーバー | CloudWatch エージェント(ファイルを読んで送る常駐のソフト)を入れる。送るにはインスタンスのロール(L12)に書き込みの権限が要る |\n| Lambda | 標準出力に書いたものが自動で送られる。実行ロール(L12)に書き込みの権限が要る |\n| VPC Flow Logs | 送り先に CloudWatch Logs を選ぶ(L10) |\n| CloudTrail | 証跡の設定で、ロググループと「CloudTrail が書き込むためのロール」を指定する |\n| ALB・CloudFront などの一部のサービス | AWS のサービスが代わりに送る仕組み(CloudWatch のベンダーログ配信)で送る |\n\n#### 保持期間\nロググループの保持期間は、**既定では無期限**です。放っておくと、ログが増え続けて保管料が積み上がります。逆に短すぎると、調査に必要なログが消えます。\n\n```text\n$ aws logs put-retention-policy --log-group-name /app/web/prod --retention-in-days 400\n```\n\n| 部分 | 意味 |\n|---|---|\n| `put-retention-policy` | ロググループの保持期間を設定する |\n| `--log-group-name` | 対象のロググループ |\n| `--retention-in-days 400` | 400 日より古いログを自動で消す。決められた値(1・7・30・90・365・400・731・3653 日など)から選ぶ |\n\n#### KMS キーで暗号化する\nCloudWatch Logs のデータは常に暗号化されて保管されます(既定でもサーバー側で AES-GCM という方式で暗号化)。自分の KMS キー(L7)を使うと、キーポリシーで「誰が読めるか」を絞れて、キーを止めればログも読めなくなります。キーポリシーに、CloudWatch Logs がキーを使うための文を足します(公式ドキュメントの形に沿った例)。\n\n```json\n{\n    \"Effect\": \"Allow\",\n    \"Principal\": { \"Service\": \"logs.ap-northeast-1.amazonaws.com\" },\n    \"Action\": [\n        \"kms:Encrypt\",\n        \"kms:Decrypt\",\n        \"kms:ReEncrypt*\",\n        \"kms:GenerateDataKey*\",\n        \"kms:Describe*\"\n    ],\n    \"Resource\": \"*\",\n    \"Condition\": {\n        \"ArnEquals\": {\n            \"kms:EncryptionContext:aws:logs:arn\": \"arn:aws:logs:ap-northeast-1:111122223333:log-group:/app/web/prod\"\n        }\n    }\n}\n```\n\n| 部分 | 意味 |\n|---|---|\n| `\"Service\": \"logs.ap-northeast-1.amazonaws.com\"` | 東京リージョンの CloudWatch Logs。キーと同じリージョンのサービスを書く |\n| `\"Action\"` | 暗号化・復号・データキーの生成など、ログの読み書きに必要な操作 |\n| `kms:EncryptionContext:aws:logs:arn` | 暗号化コンテキスト(暗号化のときに一緒に渡す、平文の付記情報。L7・L9)にロググループの ARN が入る。この条件で、このキーを使えるロググループを 1 つに限る |\n\nキーを作ったら、ロググループに結び付けます。\n\n```text\n$ aws logs associate-kms-key --log-group-name /app/web/prod \\\n    --kms-key-id arn:aws:kms:ap-northeast-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab\n```\n\n結び付けた後に入ってくるログが、このキーで暗号化されます。使えるのは対称鍵だけです。キーを無効にしたり削除したりすると、そのキーで暗号化したログは読めなくなります。\n\n#### サブスクリプションフィルター: ログを流して別の場所へ\nサブスクリプションフィルターは、ロググループに入ったログを、条件に合うものだけ、ほぼリアルタイム(通常 3 分未満)で別のサービスへ流す仕組みです。送り先は Kinesis Data Streams(大量のデータを順に流す仕組み)、Data Firehose(データを S3 などへ自動で運ぶ仕組み)、Lambda、OpenSearch Service です。1 つのロググループに最大 5 つ付けられ、アカウント全体に効くものはリージョンごとに 1 つ作れます。別のアカウントの送り先にも送れるので、昔からログを集中させる手段として使われてきました。\n\n#### 組織のログを 1 つのアカウントに集める(ログの集中化)\nCloudWatch Logs には、Organizations と組み合わせて、複数のアカウント・リージョンのロググループを 1 つのアカウントへ自動で複製する機能(ログの集中化のルール)があります。ルールは管理アカウントか委任管理者で作り、送り元のアカウント・リージョン・ロググループと、送り先のアカウント・リージョン(予備のリージョンも選べる)を指定します。**ルールを作った後に入ってきたログだけ**が対象で、それまでのログは複製されません。\n\n#### 機密データを隠す(データ保護ポリシー)\nロググループにデータ保護ポリシーを付けると、ログに含まれるメールアドレスやクレジットカード番号などを見つけて、表示のときに伏せ字にできます。伏せ字を外して見るには、`logs:Unmask` の権限が要ります。ログに機密データを書かないのが本筋ですが、書いてしまったときの被害を小さくできます。\n\n保管したログから数を数えて警報を鳴らすメトリクスフィルターとアラームは L14、Logs Insights での検索は L15 で扱います。\n\n### AWS での仕組み: S3 のログ\nS3 への 1 回ごとのアクセスを記録する方法は 2 つあります。CloudTrail のデータイベント(ch01)と、S3 のサーバーアクセスログです。\n\n| 観点 | CloudTrail のデータイベント | S3 のサーバーアクセスログ |\n|---|---|---|\n| 形式 | JSON | スペース区切りの文字(S3 に送る場合) |\n| 届くまで | 約 5 分 | 数時間かかることがある |\n| 整合性の検証 | できる(ch02) | できない |\n| 一部のプレフィックスだけ記録 | できる | できない(バケット単位) |\n| 認証に失敗した要求 | 記録しない | 記録する |\n| ライフサイクルによる移動・削除 | 記録しない(2026 年 12 月 21 日から変わると告知あり。ch01) | 記録する |\n| 料金 | データイベントの件数で課金 | ログの配信は無料。S3 の保管料だけ |\n| 届き方の保証 | 公式に推奨される記録方法 | ベストエフォート(できる限り届けるが、漏れることがある) |\n\n公式ドキュメントは、バケットとオブジェクトの操作の記録には CloudTrail を勧めています。サーバーアクセスログは、安く広く記録したいときや、認証失敗まで見たいときに使います。\n\n#### サーバーアクセスログの 1 行\n```text\n79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be customer-data-111122223333 [22/Nov/2026:01:15:42 +0000] 198.51.100.200 - 3E57427F3EXAMPLE REST.GET.OBJECT exports/customers.csv \"GET /exports/customers.csv HTTP/1.1\" 403 AccessDenied 243 - 9 - \"-\" \"curl/8.5.0\" - s9lzHYrFp76ZVxRcpX9+5cjAnEH2ROuNkd2BHfIa6UkFVdtjf5mKR3/eTPFvsiP/XV/VLi31234= - ECDHE-RSA-AES128-GCM-SHA256 - customer-data-111122223333.s3.ap-northeast-1.amazonaws.com TLSv1.2 - -\n```\n\n| 部分 | 意味 |\n|---|---|\n| 先頭の長い英数字 | バケットの持ち主の ID |\n| `customer-data-111122223333` | バケット名 |\n| `[22/Nov/2026:01:15:42 +0000]` | 要求を受けた時刻(UTC) |\n| `198.51.100.200` | 送信元の IP アドレス |\n| `-`(5 つ目) | 要求した人。`-` は認証なし(匿名)の要求 |\n| `REST.GET.OBJECT` | 操作の種類(オブジェクトの取得) |\n| `exports/customers.csv` | 対象のオブジェクトのキー(名前) |\n| `403 AccessDenied` | 結果。拒否された |\n| `\"curl/8.5.0\"` | 使われた道具 |\n| 後ろの `TLSv1.2` | 使われた TLS の版 |\n\n匿名で顧客のファイルを取ろうとして拒否されています。CloudTrail は匿名の要求も記録しますが、認証情報が誤っていて認証に失敗した要求は記録しません。そうした要求まで見たいときに、サーバーアクセスログが役に立ちます。\n\n#### 有効にするときの決まり\n- 送り先のバケットは、**送り元と同じリージョン・同じアカウント**に置きます(S3 に直接送る場合)\n- 送り先のバケットのポリシーで、ログ配信のサービス `logging.s3.amazonaws.com` に `s3:PutObject` を許します。条件で送り元のバケットとアカウントを限ります\n\n```json\n{\n    \"Sid\": \"S3ServerAccessLogsPolicy\",\n    \"Effect\": \"Allow\",\n    \"Principal\": { \"Service\": \"logging.s3.amazonaws.com\" },\n    \"Action\": \"s3:PutObject\",\n    \"Resource\": \"arn:aws:s3:::s3-access-logs-111122223333/customer-data/*\",\n    \"Condition\": {\n        \"ArnLike\": { \"aws:SourceArn\": \"arn:aws:s3:::customer-data-111122223333\" },\n        \"StringEquals\": { \"aws:SourceAccount\": \"111122223333\" }\n    }\n}\n```\n\n- 送り先のバケットの既定の暗号化は SSE-S3 にします。SSE-KMS だと、読めない鍵でログが暗号化されることがあります\n- 既定の保持期間を設定した Object Lock のバケットは、送り先にできません\n- 送り元のバケット自身を送り先にしないでください。ログの書き込みがまたログを生み、際限なく増えます\n\nS3 のサーバーアクセスログは、CloudWatch Logs に送る経路も用意されています。この経路では、別アカウントへの集約や KMS での暗号化などができます。\n\n### AWS での仕組み: ELB のアクセスログ\nALB(L8)のアクセスログは、既定では無効です。有効にすると、ロードバランサーの各ノードが 5 分ごとにログファイルを S3 に置きます。ベストエフォートなので、すべての要求の完全な記録としては扱いません。\n\n#### 送り先のバケットの決まり\n- ロードバランサーと**同じリージョン**のバケット(別のアカウントでもよい)\n- 既定の暗号化は **SSE-S3 だけ**に対応(SSE-KMS のバケットには置けない)\n- バケットポリシーで、ログ配信のサービスに書き込みを許す\n\n```json\n{\n    \"Effect\": \"Allow\",\n    \"Principal\": { \"Service\": \"logdelivery.elasticloadbalancing.amazonaws.com\" },\n    \"Action\": \"s3:PutObject\",\n    \"Resource\": \"arn:aws:s3:::alb-logs-444455556666/web/AWSLogs/111122223333/*\",\n    \"Condition\": {\n        \"ArnLike\": { \"aws:SourceArn\": \"arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:loadbalancer/*\" }\n    }\n}\n```\n\n| 部分 | 意味 |\n|---|---|\n| `logdelivery.elasticloadbalancing.amazonaws.com` | ELB のログ配信のサービス。2022 年 8 月より前からあるリージョンでは、リージョンごとの ELB のアカウント ID(東京は 582318560864)を書く古い方式もまだ使える |\n| `web/AWSLogs/111122223333/*` | 置き場所。`web` は自分で決めた接頭辞、`111122223333` はロードバランサーのアカウント。アカウント ID の部分に `*` を使わない |\n| `aws:SourceArn` | このアカウントの東京リージョンのロードバランサーからの書き込みだけを許す |\n\n#### 1 行を読む\n公式ドキュメントの例に沿った、HTTPS の要求 1 件です(読みやすく改行しています。実際は 1 行)。\n\n```text\nhttps 2026-11-22T01:20:31.512345Z app/web-alb/50dc6c495c0c9188\n198.51.100.200:51234 10.0.2.15:8080 0.001 0.043 0.000 500 500 312 1024\n\"GET https://shop.example.com:443/items?id=1%27%20OR%20%271%27=%271 HTTP/1.1\" \"sqlmap/1.8\"\nECDHE-RSA-AES128-GCM-SHA256 TLSv1.2\narn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/web-tg/73e2d6bc24d8a067\n\"Root=1-6740e1df-1d84f3d73c47ec4e58577259\" \"shop.example.com\" \"arn:aws:acm:ap-northeast-1:111122223333:certificate/12345678-1234-1234-1234-123456789012\"\n1 2026-11-22T01:20:31.468000Z \"forward\" \"-\" \"-\" \"10.0.2.15:8080\" \"500\" \"-\" \"-\"\nTID_1234abcd5678ef90 \"-\" \"-\" \"-\"\n```\n\n| 部分 | 意味 |\n|---|---|\n| `https` | 要求の種類 |\n| `2026-11-22T01:20:31.512345Z` | 応答を返した時刻(UTC) |\n| `app/web-alb/50dc…` | ロードバランサーの ID |\n| `198.51.100.200:51234` | クライアント(利用者)の IP とポート。前にプロキシがあるとプロキシの IP になる |\n| `10.0.2.15:8080` | 転送先のサーバー |\n| `0.001 0.043 0.000` | ALB での処理・サーバーでの処理・応答を返す処理にかかった秒数 |\n| `500 500` | ALB が返した状態コードと、サーバーが返した状態コード。500 はサーバーの内部エラー |\n| `312 1024` | 受け取ったバイト数と送ったバイト数 |\n| `\"GET https://…?id=1%27%20OR%20%271%27=%271 …\"` | 要求の 1 行目。`%27` は `'`、`%20` は空白なので、`id=1' OR '1'='1` という SQL インジェクションの典型の文字列 |\n| `\"sqlmap/1.8\"` | 道具の名前。sqlmap は SQL インジェクションを自動で試す道具 |\n| `ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2` | 使われた暗号の組み合わせと TLS の版(L8) |\n| `targetgroup/web-tg/…` | 転送先のターゲットグループ |\n| `\"shop.example.com\"` | クライアントが TLS で伝えた接続先の名前(SNI。L10) |\n| `\"forward\"` | ALB が行った動作(転送)。WAF に止められたときは `waf` が入る |\n\n攻撃の道具からの SQL インジェクションの試みに、サーバーが 500 を返しています。サーバーが壊れた入力を受けてエラーになった可能性があるので、そのサーバーのアプリのログ(CloudWatch Logs)と、データベースへの不審な操作を続けて調べます。WAF(L11)の SQL インジェクションのルールを付けていれば、ALB の手前で止められていたはずです。\n\nALB には、CloudWatch Logs・Data Firehose・S3 へ送る新しいログの送り方(CloudWatch のベンダーログ配信)も加わっています。\n\n### AWS での仕組み: CloudFront のログ\nCloudFront(L8・L11)には、ログの取り方が 3 つあります。\n\n| 種類 | 送り先 | 届くまで | 特徴 |\n|---|---|---|---|\n| 標準ログ(レガシー) | S3 だけ | 数分〜 | バケットで ACL(古い権限の仕組み)を有効にする必要がある。CloudFront 用のアカウント `awslogsdelivery` に書き込みの権限が付く |\n| 標準ログ(v2) | CloudWatch Logs・Data Firehose・S3 | 数分〜 | 記録する欄を選べる。JSON・Parquet(分析向けの列形式)などの形式を選べる。別アカウントへも送れる。API で設定するときは us-east-1(バージニア北部)を指定する |\n| リアルタイムログ | Kinesis Data Streams | 数秒 | 欄と抜き取りの割合を選べる。すぐに反応したいとき |\n\n標準ログはベストエフォートで、まれに 1 件が届かないこともあると公式ドキュメントに書かれています。v2 で CloudWatch Logs に送った 1 件は、選んだ欄だけを持つ JSON になります。\n\n```json\n{\n    \"date\": \"2026-11-22\",\n    \"time\": \"01:20:30\",\n    \"x-edge-location\": \"NRT57-P3\",\n    \"c-ip\": \"198.51.100.200\",\n    \"cs-method\": \"GET\",\n    \"cs-uri-stem\": \"/items\",\n    \"sc-status\": \"403\",\n    \"x-edge-result-type\": \"Error\",\n    \"c-country\": \"NL\"\n}\n```\n\n| 欄 | 意味 |\n|---|---|\n| `x-edge-location` | 要求を受けたエッジ(世界各地の配信拠点)。`NRT` は成田周辺 |\n| `c-ip` | 利用者の IP |\n| `cs-method`・`cs-uri-stem` | 要求の方法とパス |\n| `sc-status` | CloudFront が返した状態コード。403 は拒否(WAF に止められたなど) |\n| `x-edge-result-type` | キャッシュに当たったか(`Hit`)、オリジンから取ったか(`Miss`)、エラーか |\n| `c-country` | IP から推定した利用者の国 |\n\n### 構成図: Web システムのログの流れ\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n\n    service users(aws:users)[Users]\n    service cf(aws:cloudfront)[CloudFront] in cloud\n    service alb(aws:alb)[ALB] in vpc\n    service ec2(aws:ec2)[App EC2] in vpc\n    service data(aws:s3)[Data Bucket] in cloud\n    service cwl(aws:cloudwatch)[CloudWatch Logs] in cloud\n    service albs3(aws:s3)[Access Log Bucket] in cloud\n\n    users:R --> L:cf\n    cf:R --> L:alb\n    alb:R --> L:ec2\n    ec2:R --> L:data\n    cf:B --> T:cwl\n    ec2:B --> T:cwl\n    alb:B --> T:albs3\n    data:B --> T:albs3\n```\n\nCloudFront の標準ログ(v2)とサーバーのアプリ・OS のログは CloudWatch Logs に、ALB のアクセスログとデータのバケットのサーバーアクセスログは、ログ専用のバケットに置きます。API の操作は ch01・ch02 の CloudTrail が別に記録します。\n\n### 実務での使い方と判断\n#### ログの置き場所の比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. S3 に置く | 各サービスから S3 へ直接 | 安い。Object Lock で消させない。長期の保管に向く | すぐには検索しにくい(Athena などが要る) | 低い | 保管料のみ(安い) |\n| B. CloudWatch Logs に置く | エージェントや配信の仕組みで送る | すぐ検索できる。メトリクスフィルターで警報(L14)。サブスクリプションで転送 | 取り込みと保管の料金が S3 より高い | 中 | 取り込み量と保管量で課金 |\n| C. 両方 | 直近の数か月は CloudWatch Logs、長期は S3 | 速さと安さの両取り | 2 か所の管理 | 中 | A と B の中間 |\n\n#### よくある事故\n- **ALB のログのバケットを SSE-KMS にした**: ALB は SSE-S3 にしか置けないので、ログが届きません\n- **CloudFront のレガシーのログを、ACL を無効にしたバケットに送ろうとした**: 新しいバケットは既定で ACL が無効なので、届きません。v2 を使います\n- **ロググループの保持期間を既定(無期限)のままにした**: 何年分も貯まり、保管料が積み上がります\n- **アプリが要求の中身をそのままログに出した**: パスワードやトークンがログに残り、ログを読める人全員に漏れます\n- **送り元のバケットにサーバーアクセスログを送った**: ログがログを生み、際限なく増えます\n- **ログを有効にしていない ALB で事故が起きた**: アクセスログは後から有効にしても、過去の分は取れません\n\n#### プロならどう決めるか\n最初に「どの事故のとき、どのログで何を調べるか」の表を作り、そこから必要なログを決めます。Web の入口(CloudFront・ALB)のアクセスログ、WAF のログ、OS とアプリのログ、VPC Flow Logs、CloudTrail を、本番の環境では作るときに最初から有効にします。長期の保管は ch04 のログ保管用アカウントの S3 に集め、すぐ検索したいものだけ CloudWatch Logs に置いて保持期間を決めます。ログに機密データを書かない作りにし、念のためデータ保護ポリシーで伏せ字にします。\n\n### 試験ではこう問われる\n「EC2 のアプリのログやOS のログを集めたい」は CloudWatch エージェントで CloudWatch Logs、「ログを数秒で別の仕組みに流す」はサブスクリプションフィルター(または CloudFront のリアルタイムログ)です。「S3 の認証失敗の要求も含めて記録」はサーバーアクセスログ、「誰がオブジェクトを読んだかを確実に・整合性も含めて」は CloudTrail のデータイベントです。「ALB のログが届かない」と出たら、バケットのリージョン・バケットポリシー・SSE-KMS を疑います(詳しくは L15)。\n\n### まとめ\n- CloudTrail は API の操作の記録で、Web のリクエスト・OS・アプリ・通信の記録は、それぞれ別のログで取ります\n- CloudWatch Logs はロググループ単位で保持期間と KMS キーを決めます。既定の保持期間は無期限です。サブスクリプションフィルターや集中化のルールで、別の場所・別のアカウントへ流せます\n- S3 のサーバーアクセスログは安く認証失敗まで残りますが、遅くベストエフォートです。確実な記録には CloudTrail のデータイベントを使います\n- ALB のアクセスログは同じリージョンの SSE-S3 のバケットへ 5 分ごと、CloudFront は標準ログ(v2 は CloudWatch Logs・Firehose・S3)とリアルタイムログ(Kinesis Data Streams)があります\n",
+  "quiz": [
+    {
+      "question": "CloudWatch Logs のロググループについて、正しいものはどれか。",
+      "choices": [
+        "保持期間は既定で 90 日で、それより長くはできない",
+        "KMS キーで暗号化するには、非対称鍵を使う",
+        "サブスクリプションフィルターは、1 つのロググループに 1 つしか付けられない",
+        "保持期間は既定で無期限なので、要件に合わせて設定する"
+      ],
+      "correct": 3,
+      "explanation": "ロググループの保持期間は既定で無期限で、1 日〜10 年などから選べます。暗号化に使えるのは対称鍵だけです。サブスクリプションフィルターは 1 つのロググループに最大 5 つ付けられます。"
+    },
+    {
+      "question": "セキュリティチームは、ALB のアクセスログを有効にしたが、S3 バケットにログが届かない。バケットは ALB と同じリージョンにあり、バケットポリシーは ELB のログ配信のサービスに `s3:PutObject` を許している。最も考えられる原因はどれか。",
+      "choices": [
+        "ALB のアクセスログは CloudTrail を有効にしないと出力されない",
+        "バケットの既定の暗号化が SSE-KMS になっている",
+        "バケットでバージョニングが無効になっている",
+        "バケットが ALB と別のアカウントにある"
+      ],
+      "correct": 1,
+      "explanation": "ALB のアクセスログのバケットは、既定の暗号化が SSE-S3 である必要があり、SSE-KMS には対応していません。アクセスログは CloudTrail と関係なく出力され、バージョニングも必須ではありません。バケットは別のアカウントにあってもかまいません。"
+    },
+    {
+      "question": "ある会社は、S3 バケットへの要求のうち、誤った認証情報で認証に失敗した要求まで含めて記録し、不正なアクセスの試みを調べたい。追加の費用を最小にしたい。最も適切なものはどれか。",
+      "choices": [
+        "S3 のサーバーアクセスログを、同じリージョン・同じアカウントの別のバケットへ有効にする",
+        "CloudTrail の証跡で、そのバケットのデータイベントを記録する",
+        "CloudTrail のイベント履歴を確認する",
+        "VPC Flow Logs を有効にする"
+      ],
+      "correct": 0,
+      "explanation": "認証に失敗した要求は CloudTrail には記録されず、S3 のサーバーアクセスログには記録されます。サーバーアクセスログの配信は無料で、保管料だけです。イベント履歴は管理イベントだけで、VPC Flow Logs は通信の記録なので、S3 への要求の中身は分かりません。"
+    },
+    {
+      "question": "EC2 で動くアプリが出すログファイルと、OS のログイン記録を CloudWatch Logs に集め、すぐ検索できるようにしたい。最も適切なものはどれか。",
+      "choices": [
+        "CloudTrail のデータイベントで EC2 を記録する",
+        "VPC Flow Logs の送り先を CloudWatch Logs にする",
+        "CloudWatch エージェントをインストールし、インスタンスのロールに CloudWatch Logs への書き込みの権限を付ける",
+        "S3 のサーバーアクセスログを有効にする"
+      ],
+      "correct": 2,
+      "explanation": "サーバーの中のファイルのログは、CloudWatch エージェントで読み取って送ります。送るにはインスタンスのロールに書き込みの権限が要ります。CloudTrail は API の操作、VPC Flow Logs は通信、サーバーアクセスログは S3 への要求の記録で、サーバーの中のログは取れません。"
+    },
+    {
+      "question": "CloudFront のアクセスログを、記録する欄を選んで CloudWatch Logs に送りたい。最も適切なものはどれか。",
+      "choices": [
+        "CloudFront の標準ログ(v2)で、送り先に CloudWatch Logs を選ぶ",
+        "CloudFront の標準ログ(レガシー)で、送り先に CloudWatch Logs を選ぶ",
+        "CloudTrail のデータイベントで CloudFront を記録する",
+        "CloudFront のリアルタイムログで、送り先に CloudWatch Logs を直接選ぶ"
+      ],
+      "correct": 0,
+      "explanation": "標準ログ(v2)は CloudWatch Logs・Data Firehose・S3 に送れ、欄も選べます。レガシーの標準ログは S3 にしか送れません。リアルタイムログの送り先は Kinesis Data Streams です。利用者の要求は CloudTrail では記録されません。"
+    },
+    {
+      "question": "CloudWatch Logs のロググループを KMS キーで暗号化するとき、キーポリシーに `\"kms:EncryptionContext:aws:logs:arn\": \"arn:aws:logs:ap-northeast-1:111122223333:log-group:/app/web/prod\"` という条件を付けた。この条件の効果として最も適切なものはどれか。",
+      "choices": [
+        "このロググループを読む利用者に、MFA を必須にする",
+        "CloudWatch Logs がこのキーを使えるのを、指定したロググループの暗号化・復号に限る",
+        "このロググループのログを、別のリージョンへ複製できるようにする",
+        "このキーを、ロググループ以外のサービスでも自由に使えるようにする"
+      ],
+      "correct": 1,
+      "explanation": "CloudWatch Logs は暗号化コンテキストにロググループの ARN を入れるので、この条件でキーを使えるロググループを 1 つに限れます。MFA やリージョン間の複製とは関係がなく、使える範囲を広げるのではなく狭める条件です。"
+    },
+    {
+      "kind": "essay",
+      "question": "Web アプリ(CloudFront → ALB → EC2、データは S3)で「顧客の情報が漏れたかもしれない」と連絡があったとします。調査に使うログを 4 つ以上挙げ、それぞれで何を確かめるかと、事前に有効にしておくべき理由を説明してください(300〜500 字)。",
+      "answer": "CloudFront と ALB のアクセスログで、不審な IP や道具からの要求、SQL インジェクションなどの攻撃の文字列、状態コードと応答のバイト数を見て、攻撃の有無と大量の取得を確かめます。EC2 のアプリと OS のログ(CloudWatch Logs)で、エラーや不審なログイン、実行されたコマンドを確かめ、侵入されたかを判断します。CloudTrail の管理イベントで、EC2 のロールの認証情報が使われて IAM やバケットポリシーが変えられていないかを確かめます。顧客データのバケットの CloudTrail データイベント(またはサーバーアクセスログ)で、誰がどのオブジェクトをいつ読んだかを確かめ、漏れた範囲を決めます。必要なら VPC Flow Logs で、サーバーから外部への大量の通信も確かめます。これらのログは後から有効にしても過去の分は取れず、データイベントやアクセスログは既定で無効なので、本番の環境を作るときに最初から有効にし、保持期間を決めておく必要があります。",
+      "rubric": [
+        "CloudFront・ALB のアクセスログで要求の内容や攻撃の有無を確かめると述べている",
+        "OS・アプリのログ(CloudWatch Logs)で侵入を確かめると述べている",
+        "CloudTrail(管理イベントとデータイベント、またはサーバーアクセスログ)で権限の悪用やデータの読み取りを確かめると述べている",
+        "ログは後から有効にしても過去の分が取れないので、事前に有効にする必要があることを説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "1 つのログでは話がつながりません。入口(アクセスログ)→ サーバーの中(OS・アプリ)→ API の操作(CloudTrail)→ データの読み取り(データイベント)とつないで、侵入の経路と漏れた範囲を決めます。"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "lesson": 13,
+  "chapter": 2,
+  "title": "組織の証跡とログの改ざん対策",
+  "priority": "🔴",
+  "text": "### 基礎: 攻撃者はまずログを狙う\n侵入した攻撃者が管理者に近い権限を手に入れると、痕跡を消すために次のような操作をよく行います。\n\n| 攻撃者の操作 | 起きること |\n|---|---|\n| `StopLogging`(証跡の記録を止める) | 以後の操作が残らない |\n| `DeleteTrail`(証跡を消す) | 同上。設定ごと消える |\n| `PutEventSelectors`(記録する条件を変える) | 一見動いているのに、肝心のイベントだけ記録されない |\n| ログのファイルを `DeleteObject` で消す | 過去の記録が消える |\n| ログのファイルを書き換えて置き直す | 自分の操作の行だけを消した「偽の記録」が残る |\n\nこれに対する守りは 2 種類あります。\n\n- **防ぐ**: そもそも止めさせない・消させない・書き換えさせない\n- **見抜く**: 書き換えや削除が起きたら、確実に分かるようにする\n\nどちらか片方では足りません。防ぐ仕組みにはたいてい例外の権限(緊急時に使う管理者など)が残り、見抜く仕組みだけでは消えた記録は戻らないからです。この章では、まず全アカウントの記録を 1 か所に集める「組織の証跡」を作り、次に見抜く仕組み(ログファイルの整合性検証)、最後に防ぐ仕組みを重ねます。\n\n### AWS での仕組み: 組織の証跡\nAWS Organizations(複数のアカウントを 1 つの組織として管理するサービス。L6 で SCP とともに見た。詳しくは L18)を使っていると、組織の全アカウントの記録を 1 本の証跡で取れます。これを組織の証跡と呼びます。\n\n| 項目 | 内容 |\n|---|---|\n| 作れるアカウント | 組織の管理アカウント、または CloudTrail の委任管理者に指定したアカウント |\n| 記録する範囲 | 管理アカウントとすべてのメンバーアカウント |\n| メンバーアカウントから | 証跡は見えるが、削除・記録の停止・記録する種類の変更など、一切の変更ができない |\n| 新しく組織に入ったアカウント | 自動で記録が始まる |\n| 組織から外れたアカウント | 以後は記録されない。それまでのログはバケットに残る |\n| ログの既定の読み手 | 管理アカウントだけ(バケットの持ち主の設定による。ch04) |\n| イベント履歴 | 組織の証跡を作っても、各アカウントのイベント履歴はそのアカウントでしか見られない |\n\nアカウントごとに証跡を作る方式では、アカウントの管理者が自分の証跡を止められます。組織の証跡は、メンバーアカウントの中から止める手段がないので、「乗っ取られたアカウントで記録を止められる」危険を構造でなくせます。AWS Control Tower(組織の初期設定を自動で組むサービス。L18)を使うと、この証跡が自動で作られます。\n\n#### CLI で作る\n管理アカウント(111122223333)で、ログ保管用のアカウントのバケットへ送る組織の証跡を作ります。バケットのポリシーと KMS キーは ch04 で用意します。\n\n```text\n$ aws cloudtrail create-trail --name org-trail \\\n    --s3-bucket-name org-trail-logs-444455556666 \\\n    --is-multi-region-trail \\\n    --is-organization-trail \\\n    --enable-log-file-validation \\\n    --kms-key-id arn:aws:kms:ap-northeast-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab\n{\n    \"Name\": \"org-trail\",\n    \"S3BucketName\": \"org-trail-logs-444455556666\",\n    \"IncludeGlobalServiceEvents\": true,\n    \"IsMultiRegionTrail\": true,\n    \"TrailARN\": \"arn:aws:cloudtrail:ap-northeast-1:111122223333:trail/org-trail\",\n    \"LogFileValidationEnabled\": true,\n    \"KmsKeyId\": \"arn:aws:kms:ap-northeast-1:444455556666:key/1234abcd-12ab-34cd-56ef-1234567890ab\",\n    \"IsOrganizationTrail\": true\n}\n$ aws cloudtrail start-logging --name org-trail\n```\n\n| 部分 | 意味 |\n|---|---|\n| `--name org-trail` | 証跡の名前。メンバーアカウントにも同じ名前のコピーが作られる |\n| `--s3-bucket-name` | 送り先のバケット。別のアカウント(444455556666)のものでよい |\n| `--is-multi-region-trail` | 全リージョンを記録する(CLI では付けないと単一リージョンになる) |\n| `--is-organization-trail` | 組織の全アカウントを記録する |\n| `--enable-log-file-validation` | 次の節の整合性検証を有効にする |\n| `--kms-key-id` | ログファイルを自分の KMS キーで暗号化する(SSE-KMS。L7) |\n| 出力の `IncludeGlobalServiceEvents` | IAM などのグローバルなサービスの記録も含む |\n| 出力の `TrailARN` | 証跡の ARN。管理アカウントの ID が入る。バケットポリシーの条件で使う(ch04) |\n| `start-logging` | 記録を始める。作っただけでは記録が始まらない |\n\n#### ログが置かれる場所\n組織の証跡のログファイルは、組織の ID とアカウントの ID で分けて置かれます。\n\n```text\ns3://org-trail-logs-444455556666/AWSLogs/o-a1b2c3d4e5/222233334444/CloudTrail/ap-northeast-1/2026/11/22/\n    222233334444_CloudTrail_ap-northeast-1_20261122T0105Z_Ab12Cd34Ef56Gh78.json.gz\n```\n\n| 部分 | 意味 |\n|---|---|\n| `AWSLogs/o-a1b2c3d4e5/` | 組織の ID |\n| `222233334444/` | 記録されたメンバーアカウントの ID |\n| `CloudTrail/ap-northeast-1/2026/11/22/` | リージョンと日付(UTC) |\n| `20261122T0105Z` | ファイルの時刻(UTC の 01:05) |\n| `.json.gz` | 中身は JSON(ch01 の 1 件が `Records` の配列で並ぶ)を gzip で圧縮したもの |\n\n### AWS での仕組み: ログファイルの整合性検証\nL4 で、ハッシュ(データから固定長の値を作り、1 ビットでも変わると値が大きく変わる)と電子署名(秘密鍵で作り、公開鍵で確かめる)を学びました。ログファイルの整合性検証は、この 2 つを組み合わせて、ログの改ざん・削除を見抜く仕組みです。\n\n#### 仕組み\n1. CloudTrail は、届けたログファイルごとに SHA-256 のハッシュ値を計算します\n2. 1 時間ごとに、その 1 時間に届けたログファイルの名前とハッシュ値を並べた**ダイジェストファイル**を作ります\n3. ダイジェストファイルに、CloudTrail だけが持つ秘密鍵で署名します(SHA-256 with RSA)。鍵の組はリージョンごとに別です。署名は、ダイジェストファイルの S3 オブジェクトのメタデータ(`x-amz-meta-signature`)に入ります\n4. 各ダイジェストファイルは、**1 つ前のダイジェストファイルの署名とハッシュ値**を含みます。ダイジェストが鎖のようにつながるので、途中の 1 つを消すと鎖が切れて分かります\n5. その 1 時間に API の操作が 1 つもなくても、空のダイジェストファイルが届きます。「この時間には本当にログがなかった」と言えます\n\n```mermaid\nflowchart LR\n    L1[ログファイル 01:05] -->|SHA-256| D1[ダイジェスト 01:00〜02:00]\n    L2[ログファイル 01:10] -->|SHA-256| D1\n    D1 -->|秘密鍵で署名| S1[署名1]\n    S1 -->|前の署名として含める| D2[ダイジェスト 02:00〜03:00]\n    L3[ログファイル 02:05] -->|SHA-256| D2\n    D2 -->|秘密鍵で署名| S2[署名2]\n```\n\nログファイルを 1 文字でも書き換えるとハッシュ値が合わなくなります。ハッシュ値を書き換えたダイジェストを作り直そうとしても、CloudTrail の秘密鍵がないので正しい署名を作れません。ダイジェストを丸ごと消すと、次のダイジェストが指す「前のダイジェスト」が見つからなくなります。\n\nダイジェストファイルは、ログファイルとは別のフォルダ(`CloudTrail-Digest/`)に置かれます。\n\n```text\ns3://org-trail-logs-444455556666/AWSLogs/o-a1b2c3d4e5/222233334444/CloudTrail-Digest/ap-northeast-1/2026/11/22/\n    222233334444_CloudTrail-Digest_ap-northeast-1_org-trail_ap-northeast-1_20261122T020131Z.json.gz\n```\n\n中身の主な項目です(公式ドキュメントの形に沿った例)。\n\n```json\n{\n  \"awsAccountId\": \"222233334444\",\n  \"digestStartTime\": \"2026-11-22T01:01:31Z\",\n  \"digestEndTime\": \"2026-11-22T02:01:31Z\",\n  \"digestSignatureAlgorithm\": \"SHA256withRSA\",\n  \"digestPublicKeyFingerprint\": \"31e8b5433410dfb61a9dc45cc65b22ff\",\n  \"previousDigestS3Object\": \"AWSLogs/o-a1b2c3d4e5/222233334444/CloudTrail-Digest/ap-northeast-1/2026/11/22/222233334444_CloudTrail-Digest_ap-northeast-1_org-trail_ap-northeast-1_20261122T010131Z.json.gz\",\n  \"previousDigestHashValue\": \"97fb791cf91ffc440d274f8190dbdd9aa09c34432aba82739df18b6d3c13df2d\",\n  \"previousDigestSignature\": \"50887ccffad4c002b97c…(省略)\",\n  \"logFiles\": [\n    {\n      \"s3Object\": \"AWSLogs/o-a1b2c3d4e5/222233334444/CloudTrail/ap-northeast-1/2026/11/22/222233334444_CloudTrail_ap-northeast-1_20261122T0105Z_Ab12Cd34Ef56Gh78.json.gz\",\n      \"hashValue\": \"9bb6196fc6b84d6f075a56548feca262bd99ba3c2de41b618e5b6e22c1fc71f6\",\n      \"hashAlgorithm\": \"SHA-256\"\n    }\n  ]\n}\n```\n\n| 項目 | 意味 |\n|---|---|\n| `digestStartTime`・`digestEndTime` | このダイジェストが受け持つ 1 時間(ログが届いた時刻で数える) |\n| `digestSignatureAlgorithm` | 署名の方式。SHA-256 でハッシュを取り RSA で署名 |\n| `digestPublicKeyFingerprint` | 署名を確かめるのに使う公開鍵の目印 |\n| `previousDigestS3Object`・`previousDigestHashValue`・`previousDigestSignature` | 1 つ前のダイジェストの場所・ハッシュ値・署名。鎖のつなぎ目 |\n| `logFiles[].s3Object`・`hashValue` | この 1 時間のログファイルの場所と、そのハッシュ値 |\n\n#### 検証する: validate-logs\n有効にしただけでは、誰も検証してくれません。検証は自分で CLI を実行します。\n\n```text\n$ aws cloudtrail validate-logs --region ap-northeast-1 \\\n    --trail-arn arn:aws:cloudtrail:ap-northeast-1:111122223333:trail/org-trail \\\n    --account-id 222233334444 \\\n    --start-time 2026-11-21T00:00:00Z --end-time 2026-11-22T00:00:00Z\nValidating log files for trail arn:aws:cloudtrail:ap-northeast-1:111122223333:trail/org-trail between 2026-11-21T00:00:00Z and 2026-11-22T00:00:00Z\n\nLog file\ts3://org-trail-logs-444455556666/AWSLogs/o-a1b2c3d4e5/222233334444/CloudTrail/ap-northeast-1/2026/11/21/222233334444_CloudTrail_ap-northeast-1_20261121T1530Z_Qw3Er5Ty7Ui9Op1A.json.gz\tINVALID: hash value doesn't match\n\nResults requested for 2026-11-21T00:00:00Z to 2026-11-22T00:00:00Z\nResults found for 2026-11-21T00:01:31Z to 2026-11-22T00:01:31Z:\n\n24/24 digest files valid\n287/288 log files valid, 1/288 log files INVALID\n```\n\n| 部分 | 意味 |\n|---|---|\n| `--region` | 検証はリージョンごと。証跡の記録を確かめたいリージョンを指定する |\n| `--trail-arn` | 検証する証跡 |\n| `--account-id` | 組織の証跡では必須。どのメンバーアカウントのログを確かめるか |\n| `--start-time`・`--end-time` | 確かめる期間(UTC) |\n| `INVALID: hash value doesn't match` | 届いた後にログファイルが書き換えられた |\n| `24/24 digest files valid` | 24 時間分のダイジェストはすべて正しい(鎖は切れていない) |\n| `287/288 log files valid, 1/288 log files INVALID` | 288 個のログのうち 1 個が改ざんされている |\n\n`--verbose` を付けると、正しいファイルも 1 つずつ `valid` と表示されます。主な結果の読み方です。\n\n| 表示 | 何が起きたか |\n|---|---|\n| ログファイルの `INVALID: hash value doesn't match` | ログファイルが書き換えられた |\n| ログファイルの `INVALID: not found` | ログファイルが消された |\n| ダイジェストの `INVALID: not found` | ダイジェストが消された。その 1 時間のログは検証できない |\n| ダイジェストの `INVALID: signature verification failed` | ダイジェストが偽物か書き換えられた |\n| ダイジェストの `INVALID: has been moved from its original location` | ダイジェストが元の場所から移された |\n\n検証には注意点があります。検証できるのは**CloudTrail が置いた元の場所にあるファイル**だけで、別の場所にコピーしたファイルやダウンロードしたファイルは CLI では検証できません(自作の検証の仕組みが要る)。また、検証は改ざんを**見抜く**だけで、消されたログは戻りません。だから次の「防ぐ」仕組みを重ねます。\n\n### AWS での仕組み: 改ざんと停止を防ぐ\n| 仕組み | 防ぐもの | ポイント |\n|---|---|---|\n| 組織の証跡 | メンバーアカウントからの停止・削除・変更 | 構造で防ぐ。管理アカウントと委任管理者は変更できる |\n| SCP(L6) | 委任管理者や各アカウントの証跡の停止・削除 | 管理アカウントには効かない |\n| ログを別のアカウントに置く(ch04) | ワークロードのアカウントの管理者によるログの削除 | ログ保管用アカウントに入れる人を最小にする |\n| S3 Object Lock(L7) | 保持期間内のログの削除・上書き | コンプライアンスモードならルートユーザーも消せない。バージョニングが前提 |\n| MFA Delete | 版の完全削除とバージョニングの停止 | バケットの持ち主のルートユーザーだけが設定できる。ライフサイクルと併用できない |\n| 検知(L14) | 止められたことに気づかない事態 | `StopLogging` などを EventBridge で即座に通知。AWS Config で「証跡が有効か」を常に評価(L20) |\n\nSCP の例です。CloudTrail の証跡を止める・消す・変える操作を、緊急用のロール以外に禁じます。\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Sid\": \"ProtectCloudTrail\",\n      \"Effect\": \"Deny\",\n      \"Action\": [\n        \"cloudtrail:StopLogging\",\n        \"cloudtrail:DeleteTrail\",\n        \"cloudtrail:UpdateTrail\",\n        \"cloudtrail:PutEventSelectors\"\n      ],\n      \"Resource\": \"*\",\n      \"Condition\": {\n        \"ArnNotLike\": {\n          \"aws:PrincipalArn\": \"arn:aws:iam::*:role/security-breakglass\"\n        }\n      }\n    }\n  ]\n}\n```\n\n| 部分 | 意味 |\n|---|---|\n| `\"Effect\": \"Deny\"` | 明示的な拒否(L3)。どの許可よりも強い |\n| `\"Action\"` | 記録の停止・証跡の削除・設定の変更・記録する条件の変更 |\n| `\"Resource\": \"*\"` | すべての証跡 |\n| `ArnNotLike` と `aws:PrincipalArn` | 操作した主体の ARN が `security-breakglass` ロールに当たらないときだけ拒否する。つまり緊急用のロールだけは例外 |\n| `arn:aws:iam::*:role/…` | どのアカウントの同名のロールでも当たる |\n\nこの SCP を組織のルートに付けると、メンバーアカウントの管理者(`AdministratorAccess` を持つ人)でも証跡を止められません。ただし SCP は**管理アカウントには効きません**(L6)。管理アカウントに入れる人を最小にし、普段の作業に使わないことが前提です。緊急用のロールを使ったら必ず通知が飛ぶようにしておきます(L14)。\n\n### 構成図: 組織の証跡で全アカウントの記録を集める\n```mermaid\narchitecture-beta\n    group org(aws:aws-cloud)[Organization]\n    group mgmt(aws:account)[Management Account] in org\n    group wa(aws:account)[Workload Account A] in org\n    group wb(aws:account)[Workload Account B] in org\n    group logacct(aws:account)[Log Archive Account] in org\n\n    service orgs(aws:organizations)[Organizations] in mgmt\n    service ct(aws:cloudtrail)[Org Trail] in mgmt\n    service ec2a(aws:ec2)[App A] in wa\n    service fnb(aws:lambda)[App B] in wb\n    service bucket(aws:s3)[Trail Bucket] in logacct\n    service key(aws:kms)[KMS Key] in logacct\n\n    orgs:R --> L:ct\n    ec2a:T --> B:ct\n    fnb:T --> B:ct\n    ct:R --> L:bucket\n    bucket:B --> T:key\n```\n\n管理アカウントで作った組織の証跡が、ワークロードのアカウント A・B を含む全アカウントの操作を記録し、ログ保管用のアカウントのバケットへ、そのアカウントの KMS キーで暗号化して送ります。メンバーアカウントからは証跡を変更できず、ログ保管用のアカウントに入れる人は限られます。\n\n### 実務での使い方と判断\n#### 証跡の構成の比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. アカウントごとの証跡 | 各アカウントで自分の証跡を作る | 組織がなくても使える | 各アカウントの管理者が止められる。新しいアカウントで作り忘れる | 高い | アカウントごとに 1 コピー目は無料 |\n| B. 組織の証跡 | 管理アカウント(か委任管理者)で 1 本 | メンバーから止められない。新しいアカウントに自動で適用 | 管理アカウントの守りが前提 | 低い | 1 コピー目は無料 |\n| C. B + Control Tower | ランディングゾーン(L18)が B を自動で組む | ログ保管用アカウントも含めて標準の形が手に入る | Control Tower の設計に合わせる必要 | 最も低い | Control Tower が使う各サービスの料金 |\n\n#### 改ざん対策の組み合わせ\n| 対策 | 防ぐ・見抜く | これだけだと足りない点 |\n|---|---|---|\n| 整合性検証 | 見抜く | 消されたログは戻らない。定期的に検証しないと気づかない |\n| Object Lock | 防ぐ | 証跡の停止は防げない(止められた後の記録は残らない) |\n| SCP | 防ぐ | 管理アカウントには効かない |\n| 組織の証跡 | 防ぐ | 管理アカウント・委任管理者からは変えられる |\n| `StopLogging` の検知 | 見抜く | 止められた事実は分かるが、止まっている間の記録はない |\n\n#### よくある事故\n- **整合性検証を有効にしただけで、一度も検証していない**: 改ざんがあっても誰も気づきません。調査の手順(L16)に `validate-logs` を入れておきます\n- **ログを分析用のバケットへコピーして元を消した**: コピー先は CLI で検証できません。元の場所を残します\n- **整合性検証を一時的に無効にした**: 無効だった間のログにはダイジェストが作られず、後から検証できません\n- **管理アカウントで普段の作業をしていた**: SCP が効かないアカウントが乗っ取られると、組織の証跡ごと止められます\n\n#### プロならどう決めるか\n組織の証跡を 1 本、全リージョン・整合性検証あり・SSE-KMS で作り、送り先はログ保管用アカウントの Object Lock 付きバケットにします(ch04)。SCP で証跡の変更を禁じ、`StopLogging`・`DeleteTrail` が呼ばれたら即座に通知します。インシデントのときは、まず `validate-logs` で調べる期間のログが本物であることを確かめてから、中身を読みます。\n\n### 試験ではこう問われる\n「ログが改ざん・削除されていないことを証明したい」「フォレンジック(事故の証拠調べ)に耐えるログ」は、ログファイルの整合性検証が定番です。「メンバーアカウントの管理者に証跡を止めさせない」「新しいアカウントにも自動で記録を適用」は組織の証跡、「ログを誰にも消させない(ルートユーザーも)」は Object Lock のコンプライアンスモードです。「証跡を止めさせない」に SCP が出たら、管理アカウントには効かない点を思い出します。\n\n### まとめ\n- 組織の証跡は管理アカウントか委任管理者で作り、全アカウントの記録を 1 つのバケットに集めます。メンバーアカウントからは変更できず、新しいアカウントにも自動で適用されます\n- ログファイルの整合性検証は、ログごとの SHA-256 のハッシュを 1 時間ごとのダイジェストにまとめて署名し、ダイジェスト同士を鎖でつなぎます。`validate-logs` で書き換え・削除を見抜きます\n- 見抜くだけでは消えたログは戻らないので、別アカウント・Object Lock・SCP・停止の検知で防ぐ仕組みを重ねます\n",
+  "quiz": [
+    {
+      "question": "組織の証跡について正しいものはどれか。",
+      "choices": [
+        "メンバーアカウントの管理者は、自分のアカウントの分だけ組織の証跡の記録を止められる",
+        "組織の証跡を作ると、管理アカウントのイベント履歴で全メンバーアカウントのイベントを見られる",
+        "組織の証跡は、管理アカウントか CloudTrail の委任管理者のアカウントで作る",
+        "組織に新しく入ったアカウントは、手で証跡を追加するまで記録されない"
+      ],
+      "correct": 2,
+      "explanation": "組織の証跡は管理アカウントか委任管理者で作ります。メンバーアカウントからは見えても、停止・削除・変更はできません。新しく入ったアカウントにも自動で記録が始まります。イベント履歴は各アカウントでしか見られません。"
+    },
+    {
+      "question": "監査人から「調査に使う CloudTrail のログが、届いた後に書き換えられていないことを示してほしい」と求められた。最も運用負荷が低く適切な方法はどれか。",
+      "choices": [
+        "ログファイルの整合性検証を有効にし、`aws cloudtrail validate-logs` で対象期間を検証する",
+        "ログファイルを毎日ダウンロードし、自分で SHA-256 を計算して表計算ソフトに記録する",
+        "ログのバケットでバージョニングを有効にし、版の数が 1 つであることを目で確かめる",
+        "CloudTrail のイベント履歴と S3 のログファイルの件数を比べる"
+      ],
+      "correct": 0,
+      "explanation": "整合性検証は、CloudTrail がハッシュを集めたダイジェストに署名し、CLI で書き換え・削除を検証できる仕組みです。自分で計算したハッシュは、ハッシュの記録ごと書き換えられるおそれがあり手間もかかります。版の数やイベント履歴との件数の比較では、改ざんを証明できません。"
+    },
+    {
+      "question": "`validate-logs` の結果に、ダイジェストファイルについて `INVALID: not found` と表示された。最も適切な解釈はどれか。",
+      "choices": [
+        "その時間帯のログファイルが書き換えられた",
+        "その時間帯は API の操作がなかった",
+        "検証するリージョンの指定を誤っただけで、ログには問題がない",
+        "ダイジェストファイルが消されたため、その時間帯のログは検証できない"
+      ],
+      "correct": 3,
+      "explanation": "ダイジェストの `not found` は、ダイジェストファイルが見つからないことを示し、その時間帯のログは検証できません。消された可能性を調べます。ログの書き換えはログファイルの `hash value doesn't match` で示されます。操作がなかった時間にも空のダイジェストが届くので、`not found` にはなりません。"
+    },
+    {
+      "question": "組織のルートに、`cloudtrail:StopLogging` と `cloudtrail:DeleteTrail` を拒否する SCP を付けた。この SCP の効果として正しくないものはどれか。",
+      "choices": [
+        "メンバーアカウントで `AdministratorAccess` を持つユーザーも、証跡を止められなくなる",
+        "管理アカウントの管理者も、組織の証跡を止められなくなる",
+        "CloudTrail の委任管理者のアカウントにも効く",
+        "SCP は権限を与えないので、別途 IAM で許可された人でも拒否される"
+      ],
+      "correct": 1,
+      "explanation": "SCP は管理アカウントには効きません。そのため管理アカウントの管理者は証跡を止められます。管理アカウントに入れる人を最小にし、停止を検知する仕組みを併用します。メンバーアカウントや委任管理者のアカウントには効き、IAM の許可より拒否が優先されます。"
+    },
+    {
+      "question": "ある会社は、ログファイルの整合性検証を有効にした組織の証跡を運用している。分析しやすいように、ログを毎日別の分析用バケットにコピーし、元のバケットのログはコピー後に消している。この運用の問題点として最も適切なものはどれか。",
+      "choices": [
+        "コピー先のバケットでは、CloudTrail の暗号化が解除される",
+        "元のログを消すと、CloudTrail が記録を止める",
+        "CLI の `validate-logs` は元の場所のファイルしか検証できないため、コピーしたログの整合性を証明できなくなる",
+        "コピー先のログは、ダイジェストファイルに自動で書き換わる"
+      ],
+      "correct": 2,
+      "explanation": "`validate-logs` は、CloudTrail が置いた元の場所にあるファイルだけを検証します。元を消すとコピーの真正性を CLI で示せず、自作の仕組みが要ります。元のログは Object Lock などで保護して残し、分析は元を読むか、コピーを別に持ちます。"
+    },
+    {
+      "question": "CloudTrail のログを、ルートユーザーを含めて誰にも 7 年間削除・上書きさせたくない。最も適切なものはどれか。",
+      "choices": [
+        "ログのバケットで MFA Delete を有効にする",
+        "ログのバケットに、全員の `s3:DeleteObject` を拒否するバケットポリシーを付ける",
+        "ログファイルの整合性検証を有効にする",
+        "ログのバケットで Object Lock をコンプライアンスモード・保持期間 7 年で設定する"
+      ],
+      "correct": 3,
+      "explanation": "Object Lock のコンプライアンスモードは、保持期間中はルートユーザーでも削除・上書きできません。バケットポリシーはルートユーザーが書き換えられます。MFA Delete は MFA があれば削除でき、ライフサイクルとも併用できません。整合性検証は改ざんを見抜くだけで、削除を防ぎません。"
+    },
+    {
+      "kind": "essay",
+      "question": "CloudTrail のログが攻撃者に止められたり、消されたり、書き換えられたりしないための設計を、「防ぐ」と「見抜く」に分けて説明してください。組織(Organizations)を使っている前提です(300〜500 字)。",
+      "answer": "防ぐ仕組みとして、まず管理アカウントで組織の証跡を全リージョンで作ります。メンバーアカウントからは停止・削除・変更ができず、新しいアカウントにも自動で適用されます。送り先はワークロードとは別のログ保管用アカウントのバケットにし、そのアカウントに入れる人を最小にします。バケットはバージョニングと Object Lock のコンプライアンスモードで保持期間を決め、ルートユーザーでも消せないようにします。さらに SCP で StopLogging・DeleteTrail・UpdateTrail・PutEventSelectors を緊急用のロール以外に拒否し、委任管理者やアカウントごとの証跡も守ります。SCP は管理アカウントに効かないので、管理アカウントは普段使わず入れる人を限ります。見抜く仕組みとして、ログファイルの整合性検証を有効にし、調査や定期点検で validate-logs を実行して書き換え・削除を確かめます。また StopLogging や DeleteTrail、緊急用ロールの使用を EventBridge で即座に通知し、AWS Config で証跡が有効かを常に評価します。",
+      "rubric": [
+        "組織の証跡でメンバーアカウントから止められないことに触れている",
+        "別アカウントへの保管と Object Lock(または同等の削除防止)に触れている",
+        "SCP による保護と、管理アカウントには効かない点に触れている",
+        "整合性検証と validate-logs、停止の検知など「見抜く」仕組みを挙げている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "防ぐ仕組みには必ず例外(管理アカウントや緊急用のロール)が残り、見抜く仕組みだけでは消えたログが戻りません。両方を重ねて、どれか 1 つが破られても気づけて、記録が残る設計にします。"
+    }
+  ]
+}
