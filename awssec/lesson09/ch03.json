@@ -1,0 +1,92 @@
+{
+  "lesson": 9,
+  "chapter": 3,
+  "title": "Secrets Manager と Parameter Store",
+  "priority": "🔴",
+  "text": "### 基礎: シークレットはどこから漏れるか\n**シークレット** は、知られると誰かになりすませる値のことです。データベースのパスワード、外部サービスの API キー、署名用の秘密鍵などです。ch01・ch02 の KMS キーは「データを守る鍵」でしたが、シークレットは「システムに入るための鍵」です。\n\nよくある漏れ方を挙げます。\n\n- ソースコードに `DB_PASSWORD = \"S3cr3t!\"` と書き、GitHub の公開リポジトリに push した。数分で自動収集され、データベースに入られた\n- `.env` ファイルを Docker イメージに入れたまま、イメージを公開した\n- 3 年間同じパスワードを使い続け、退職者も知っていた\n- 本番のパスワードを Slack に貼って共有した\n\n対策は 3 つの方向に分かれます。**コードや設定ファイルに書かない**(専用の保管庫から実行時に取る)、**誰が取れるかを絞って記録する**(IAM と CloudTrail)、**定期的に変える**(ローテーション)。AWS では、Secrets Manager と Systems Manager Parameter Store がこの役目を担います。\n\n### Secrets Manager: 保存して、実行時に取る\nシークレットを作ります。\n\n```\n$ aws secretsmanager create-secret \\\n    --name prod/orders/db \\\n    --kms-key-id alias/orders-secrets \\\n    --secret-string '{\"username\":\"orders_app\",\"password\":\"Xk9#mP2vL8qR\",\"engine\":\"mysql\",\"host\":\"orders.cluster-abc123.ap-northeast-1.rds.amazonaws.com\",\"port\":3306}'\n{\n    \"ARN\": \"arn:aws:secretsmanager:ap-northeast-1:111122223333:secret:prod/orders/db-AbCdEf\",\n    \"Name\": \"prod/orders/db\",\n    \"VersionId\": \"a1b2c3d4-5678-90ab-cdef-EXAMPLE11111\"\n}\n```\n\n- `--name prod/orders/db`: シークレットの名前。`/` で区切ると、環境やアプリごとに IAM ポリシーで絞りやすくなります\n- `--kms-key-id`: 暗号化に使う KMS キー。省略すると AWS マネージドキー `aws/secretsmanager` が使われます\n- `--secret-string`: 中身。データベースの接続情報は JSON にまとめるのが定番で、後で出てくるローテーション用の関数もこの形を読みます(この例のパスワードはダミーです)\n- `ARN` の末尾 `-AbCdEf`: Secrets Manager が付ける 6 文字のランダムな文字列。同じ名前で作り直したシークレットと区別するためです\n- `VersionId`: シークレットの版の ID。値を変えるたびに新しい版ができます\n\nアプリは実行時に取りに行きます。\n\n```\n$ aws secretsmanager get-secret-value --secret-id prod/orders/db\n{\n    \"ARN\": \"arn:aws:secretsmanager:ap-northeast-1:111122223333:secret:prod/orders/db-AbCdEf\",\n    \"Name\": \"prod/orders/db\",\n    \"VersionId\": \"a1b2c3d4-5678-90ab-cdef-EXAMPLE11111\",\n    \"SecretString\": \"{\\\"username\\\":\\\"orders_app\\\",\\\"password\\\":\\\"Xk9#mP2vL8qR\\\", ...}\",\n    \"VersionStages\": [ \"AWSCURRENT\" ],\n    \"CreatedDate\": \"2026-11-22T10:00:00+09:00\"\n}\n```\n\n- `SecretString`: 復号された中身。Secrets Manager が裏で KMS の `Decrypt` を呼んでいます。だから読む人には `secretsmanager:GetSecretValue` と、KMS キーの `kms:Decrypt` の**両方**の権限が要ります(ch01 の `kms:ViaService` で「Secrets Manager 経由だけ」に絞れます)\n- `VersionStages: [AWSCURRENT]`: この版に付いている**ステージングラベル**。ラベルは版に付ける名札で、`AWSCURRENT` が「今使うべき版」です。アプリは何も指定しなければ `AWSCURRENT` の版を受け取ります\n\nPython のアプリなら、boto3(AWS の Python 用 SDK)で次のように取ります。\n\n```python\nimport json, boto3\nsm = boto3.client(\"secretsmanager\")\nsecret = json.loads(sm.get_secret_value(SecretId=\"prod/orders/db\")[\"SecretString\"])\nconn = connect(host=secret[\"host\"], user=secret[\"username\"], password=secret[\"password\"])\n```\n\n- 1 行目: JSON を扱う標準ライブラリと boto3 を読み込む\n- 2 行目: Secrets Manager を呼ぶためのクライアントを作る。認証情報は L5 で見たプロバイダーチェーン(ロールの一時キー)から自動で取る\n- 3 行目: シークレットを取り、`SecretString` の JSON を辞書に変える\n- 4 行目: 中身を使って接続する(`connect` はデータベース用ライブラリの関数の例)\n\nコードにパスワードは 1 文字も出てきません。\n\n### ローテーションの流れ: 4 つのステップとラベルの移動\nSecrets Manager のローテーションは、Lambda 関数(ローテーション関数)が 4 つのステップでパスワードを入れ替えます。データベース用には AWS が用意したテンプレートの関数があり、RDS などではさらに簡単な仕組み(後で説明するマネージドローテーション)もあります。\n\n```mermaid\nsequenceDiagram\n    participant SM as Secrets Manager\n    participant L as ローテーション関数(Lambda)\n    participant DB as RDS\n    SM->>L: 1. createSecret\n    L->>SM: 新しいパスワードを作り、新しい版に AWSPENDING を付けて保存\n    SM->>L: 2. setSecret\n    L->>DB: AWSCURRENT の認証情報でログインし、パスワードを AWSPENDING の値に変える\n    SM->>L: 3. testSecret\n    L->>DB: AWSPENDING の認証情報でログインできるか試す\n    SM->>L: 4. finishSecret\n    L->>SM: AWSCURRENT を新しい版へ移す(古い版は AWSPREVIOUS になる)\n```\n\nラベルが版の間をどう動くかを表にします。版 v1 が今のパスワード、v2 が新しいパスワードです。\n\n| 時点 | v1 のラベル | v2 のラベル | アプリが受け取る版 |\n|---|---|---|---|\n| 開始前 | AWSCURRENT | (まだない) | v1 |\n| createSecret の後 | AWSCURRENT | AWSPENDING | v1 |\n| setSecret の後(DB は v2 のパスワードに変わった) | AWSCURRENT | AWSPENDING | v1(この間、古いパスワードは DB で使えない) |\n| finishSecret の後 | AWSPREVIOUS | AWSCURRENT | v2 |\n\n3 行目に注目します。1 人のユーザーのパスワードを入れ替える方式では、setSecret から finishSecret までのわずかな間、アプリが取った v1 のパスワードではログインできません。アプリがシークレットを手元に保存(キャッシュ)している場合も、次に取り直すまで古いパスワードを使い続けます。これに対する 2 つの方式があります。\n\n| 方式 | 仕組み | 良い点 | 悪い点 |\n|---|---|---|---|\n| シングルユーザー | 1 人の DB ユーザーのパスワードを変える | 簡単。DB ユーザーは 1 人 | 切り替えの瞬間に古いパスワードの接続が失敗しうる |\n| 交代ユーザー | `orders_app` と `orders_app_clone` の 2 人を交互に使い、使っていない側のパスワードを変える | 古い版のユーザーも次の入れ替えまでログインできるので、切れ目がない | ユーザーを作れる管理者のシークレットが別に要り、その権限が強い |\n\nアプリ側の作法として、**「ログインに失敗したらシークレットを取り直して 1 回だけ再試行する」** 処理を入れておくと、どちらの方式でも安全に切り替わります。\n\n#### スケジュールと、RDS のマネージドローテーション\n```\n$ aws secretsmanager rotate-secret \\\n    --secret-id prod/orders/db \\\n    --rotation-lambda-arn arn:aws:lambda:ap-northeast-1:111122223333:function:orders-db-rotation \\\n    --rotation-rules '{\"ScheduleExpression\": \"rate(30 days)\"}'\n```\n\n- `--rotation-lambda-arn`: 4 ステップを実行する関数\n- `ScheduleExpression`: `rate(30 days)` は 30 日ごと。`cron(0 18 ? * SAT *)` のような形で曜日と時刻も指定できます(時刻は UTC)。最短は 4 時間ごと、最長は 999 日です\n- この設定をすると、ふつうはすぐに 1 回目のローテーションが走ります\n\nRDS や Aurora なら、データベースを作るときに `--manage-master-user-password` を付けるだけで、RDS が管理者ユーザーのパスワードを作り、Secrets Manager に保存し、既定で 7 日ごとに入れ替えます(マネージドローテーション)。Lambda 関数を自分で持たずに済むので、新しく作るなら第一候補です。\n\n#### ローテーションが失敗する典型\nローテーション関数は、Secrets Manager の API とデータベースの両方に通信できる必要があります。関数を VPC(L2 で見た仮想ネットワーク)の中に置くと、インターネットに出られないため Secrets Manager の API に届かず、失敗します。Secrets Manager 用の VPC エンドポイント(VPC の中から AWS の API に届く入口。L10 で詳しく)か NAT ゲートウェイを用意します。\n\n```mermaid\narchitecture-beta\n    group vpc(aws:vpc)[VPC]\n    group priv(aws:subnet-private)[Private subnet] in vpc\n\n    service app(aws:ecs)[Orders App] in priv\n    service rot(aws:lambda)[Rotation Lambda] in priv\n    service db(aws:rds)[RDS] in priv\n    service vpce(aws:endpoint)[SM Endpoint] in priv\n    service sm(aws:secrets)[Secrets Manager]\n    service kms(aws:kms)[KMS]\n\n    app:R --> L:vpce\n    vpce:R --> L:sm\n    sm:B --> T:kms\n    app:B --> T:db\n    rot:T --> B:vpce\n    rot:L --> R:db\n```\n\nアプリと Lambda はどちらもプライベートサブネットにあり、VPC エンドポイント経由で Secrets Manager を呼びます。Secrets Manager は KMS で中身を復号して返します。Lambda はデータベースのパスワードを変え、アプリはそのデータベースに接続します。\n\n### 別のアカウントにシークレットを渡す\n別のアカウントのロールに読ませるには、3 か所の許可が要ります。\n\n1. シークレットの**リソースポリシー**(シークレットに付けるポリシー)で、相手のロールに `secretsmanager:GetSecretValue` を許可\n2. シークレットを暗号化した **KMS キーのキーポリシー**で、相手のロールに `kms:Decrypt` を許可(ch01 の別アカウントの判定と同じ)\n3. 相手側のロールの **IAM ポリシー**で、シークレットの ARN と KMS キーの ARN を許可\n\nここで落とし穴があります。**AWS マネージドキー `aws/secretsmanager` で暗号化したシークレットは、別アカウントに渡せません。** AWS マネージドキーのキーポリシーは変更できないからです。別アカウントに渡す可能性があるシークレットは、最初からカスタマー管理キーで暗号化します。\n\nリソースポリシーを付けるときは `--block-public-policy` を付けると、誰にでも公開するような広すぎるポリシーを拒否してくれます。\n\n### Parameter Store: 設定値の置き場、SecureString で暗号化も\nSystems Manager の **Parameter Store** は、設定値を階層の名前(`/prod/orders/log-level` など)で保存する仕組みです。型が 3 つあります。\n\n- `String`: ただの文字列。ログレベルや URL など\n- `StringList`: カンマ区切りの一覧\n- `SecureString`: KMS で暗号化して保存する文字列。パスワードを置ける\n\n```\n$ aws ssm put-parameter --name /prod/orders/api-key --type SecureString --value \"sk_live_EXAMPLE\"\n$ aws ssm get-parameter --name /prod/orders/api-key --with-decryption\n{\n    \"Parameter\": {\n        \"Name\": \"/prod/orders/api-key\",\n        \"Type\": \"SecureString\",\n        \"Value\": \"sk_live_EXAMPLE\",\n        \"Version\": 1\n    }\n}\n```\n\n- `--type SecureString`: KMS キーで暗号化する。キーを指定しなければ AWS マネージドキー `aws/ssm`\n- `--with-decryption`: 復号して返す。付けないと暗号化されたままの値が返る\n\n| 項目 | スタンダード | アドバンスト |\n|---|---|---|\n| 料金 | 追加料金なし | パラメータごとに料金 |\n| 値の大きさ | 4 KB まで | 8 KB まで |\n| 数(アカウント・リージョンごと) | 10,000 | 100,000 |\n| パラメータポリシー(有効期限など) | なし | あり |\n| 別アカウントとの共有 | できない | できる |\n\n### 実務での使い方と判断\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷・コスト |\n|---|---|---|---|---|\n| Secrets Manager | 専用の保管庫。ローテーション・別リージョンへの複製・リソースポリシーあり | ローテーションが組み込み。RDS ならマネージド | シークレットごとに月額料金と API 料金 | 運用は最も低い。費用はかかる |\n| Parameter Store の SecureString | 設定値の置き場を暗号化して使う | スタンダードは追加料金なし。設定値と同じ場所で管理 | ローテーションの仕組みはない(自作が要る) | 費用は低い。入れ替えは手作業か自作 |\n| 環境変数・設定ファイル・コード | アプリと一緒に置く | 手軽 | 漏れやすく、誰が見たか追えず、変えにくい | 事故の後始末が最も高くつく |\n\n判断の目安は次のとおりです。\n\n- **データベースのパスワードのように定期的に変えるもの** は Secrets Manager。RDS・Aurora ならマネージドローテーション\n- **変えない設定値や、変えるのが年 1 回の API キー** は Parameter Store(秘密なら SecureString)で十分なことが多い\n- ECS のタスク定義や Lambda の環境変数に、シークレットの値そのものを書かない。ECS はタスク定義の `secrets` で Secrets Manager や Parameter Store の ARN を参照でき、起動時に取り込まれます。ただし起動時の 1 回だけなので、ローテーション後はタスクの入れ替えが要ります\n\nシークレットを消すときは、Secrets Manager は 7〜30 日(既定 30 日)の復旧期間を置き、その間は `restore-secret` で戻せます。\n\n### 試験ではこう問われる\n- 「データベースの認証情報を自動で定期的に変える」「運用負荷が最も低い」は Secrets Manager のローテーション(RDS ならマネージドローテーション)です。Parameter Store には組み込みのローテーションがありません\n- 「ローテーションが失敗する。関数は VPC 内」は、Secrets Manager の VPC エンドポイントか NAT の不足が定番です\n- 「別アカウントからシークレットを読めない」は、AWS マネージドキー `aws/secretsmanager` で暗号化している、またはリソースポリシーやキーポリシーの許可漏れです\n- 「コストを最小に、ローテーション不要の設定値」は Parameter Store のスタンダード(SecureString)です\n\n### まとめ\n- シークレットはコードや設定ファイルに書かず、Secrets Manager や Parameter Store から実行時に取る。読むには取得の権限と KMS の `Decrypt` の両方が要る\n- ローテーションは createSecret → setSecret → testSecret → finishSecret の 4 ステップで、AWSPENDING → AWSCURRENT とラベルが移り、古い版は AWSPREVIOUS になる\n- 切れ目をなくすなら交代ユーザー方式か、アプリの「失敗したら取り直して再試行」。RDS ならマネージドローテーション\n- 別アカウントに渡すシークレットはカスタマー管理キーで暗号化する。Parameter Store は安価だがローテーションは自作\n",
+  "quiz": [
+    {
+      "question": "Secrets Manager のローテーションで、testSecret のステップが終わった直後(finishSecret の前)の状態として正しいものはどれか。",
+      "choices": [
+        "新しい版に AWSCURRENT、古い版に AWSPREVIOUS が付いている",
+        "新しい版が作られる前で、古い版だけに AWSCURRENT が付いている",
+        "古い版は削除され、新しい版に AWSPENDING だけが付いている",
+        "古い版に AWSCURRENT、新しい版に AWSPENDING が付いており、アプリは古い版を受け取る"
+      ],
+      "correct": 3,
+      "explanation": "createSecret で新しい版に AWSPENDING が付き、setSecret でデータベース側のパスワードを変え、testSecret で新しい値を試します。AWSCURRENT が新しい版へ移るのは finishSecret のときで、そのとき古い版に AWSPREVIOUS が付きます。それまでアプリは AWSCURRENT の古い版を受け取ります。"
+    },
+    {
+      "question": "新しく Amazon RDS for MySQL を作る。管理者ユーザーのパスワードを定期的に自動で変え、Lambda 関数のコードの管理もしたくない。運用負荷が最も低い方法はどれか。",
+      "choices": [
+        "Parameter Store の SecureString に保存し、EventBridge のスケジュールで自作の Lambda を動かして変える",
+        "RDS の作成時に Secrets Manager でのパスワード管理(manage-master-user-password)を有効にする",
+        "Secrets Manager に保存し、汎用のテンプレートから自分で Lambda 関数を作ってローテーションする",
+        "パスワードを Systems Manager の Run Command で毎月手作業で変える"
+      ],
+      "correct": 1,
+      "explanation": "manage-master-user-password を有効にすると、RDS がパスワードを生成して Secrets Manager に保存し、既定で 7 日ごとに自動で入れ替えます(マネージドローテーション)。自分で Lambda を持たないので運用負荷が最も低くなります。Parameter Store には組み込みのローテーションがなく、ほかの案は自作や手作業が残ります。"
+    },
+    {
+      "question": "Secrets Manager のローテーション関数を、RDS と同じ VPC のプライベートサブネットに置いた。インターネットへの経路はない。ローテーションが毎回タイムアウトで失敗する。最も可能性が高い原因と対策はどれか。",
+      "choices": [
+        "関数の実行ロールに rds:ModifyDBInstance がない。権限を追加する",
+        "シークレットが AWS マネージドキーで暗号化されている。カスタマー管理キーに変える",
+        "関数から Secrets Manager の API に届かない。Secrets Manager 用のインターフェイス VPC エンドポイントか NAT ゲートウェイを用意する",
+        "ローテーションの間隔が短すぎる。rate(30 days) 以上にする"
+      ],
+      "correct": 2,
+      "explanation": "ローテーション関数は Secrets Manager の API(版の保存やラベルの移動)とデータベースの両方に通信します。インターネットへの経路がないプライベートサブネットでは API に届かずタイムアウトします。テンプレートの関数は DB のユーザーとして SQL でパスワードを変えるので rds:ModifyDBInstance は不要です。同じアカウント内なら AWS マネージドキーでも動き、間隔はタイムアウトの原因になりません。"
+    },
+    {
+      "question": "アカウント A のシークレットを、アカウント B のアプリのロールに読ませたい。シークレットは作成時に何も指定せずに作った。リソースポリシーと B 側の IAM ポリシーを設定したが、読めない。最も適切な対策はどれか。",
+      "choices": [
+        "シークレットの暗号化キーをカスタマー管理キーに変え、そのキーポリシーで B のロールに kms:Decrypt を許可する",
+        "B のロールの IAM ポリシーに kms:* と Resource \"*\" を追加する",
+        "シークレットのリソースポリシーの Principal を \"*\" にする",
+        "aws/secretsmanager のキーポリシーに B のロールを追加する"
+      ],
+      "correct": 0,
+      "explanation": "何も指定しないと AWS マネージドキー aws/secretsmanager で暗号化されます。AWS マネージドキーのキーポリシーは変更できないので、別アカウントに復号を許せません。カスタマー管理キーに変えてキーポリシーで相手を許可するのが正解です。B 側の IAM をいくら広げても A のキーポリシーが許さない限り使えず、Principal \"*\" は危険な公開になります。"
+    },
+    {
+      "question": "交代ユーザー方式のローテーションの説明として正しいものはどれか。",
+      "choices": [
+        "1 人の DB ユーザーのパスワードを 2 回続けて変えることで、切れ目をなくす方式",
+        "2 人の DB ユーザーを交互に使い、使っていない側のパスワードを変えるので、古い版のユーザーも次の入れ替えまでログインできる。ユーザーを作れる管理者のシークレットが別に要る",
+        "シークレットを 2 つのリージョンに複製し、交互に使う方式",
+        "アプリのロールを 2 つ用意し、交互に引き受ける方式"
+      ],
+      "correct": 1,
+      "explanation": "交代ユーザー方式は、たとえば orders_app と orders_app_clone を交互に使い、今使っていない側のパスワードを変えます。古い版のユーザーは次の入れ替えまで有効なので、キャッシュしたアプリも切れません。代わりに、ユーザーを作成・変更できる管理者のシークレットが必要で、その権限は強いので厳重に守ります。"
+    },
+    {
+      "question": "外部の決済サービスの API キー(年 1 回、先方の指示で手作業で更新)を Lambda から使う。コストを最小にしつつ、コードや環境変数に平文で置かないようにしたい。最も適切な方法はどれか。",
+      "choices": [
+        "Lambda の環境変数に平文で入れ、コンソールで見えないようにする",
+        "Secrets Manager に保存し、自作の Lambda で毎日ローテーションする",
+        "S3 バケットにテキストファイルで置き、Lambda から読む",
+        "Parameter Store のスタンダードの SecureString に保存し、実行時に with-decryption で取得する"
+      ],
+      "correct": 3,
+      "explanation": "自動ローテーションが不要で年 1 回の手作業の更新なら、Parameter Store のスタンダード(追加料金なし)の SecureString で KMS 暗号化して置くのが低コストです。環境変数の平文はコンソールや設定の取得で見えてしまいます。Secrets Manager は良い選択ですが料金がかかり、相手先の API キーを自分で毎日変えることはできません。S3 のテキストファイルは専用の保管庫より管理が弱くなります。"
+    },
+    {
+      "kind": "essay",
+      "question": "Secrets Manager のシングルユーザー方式のローテーションで、アプリのデータベース接続が一時的に失敗することがあります。なぜ起きるのかを 4 つのステップとステージングラベルの動きで説明し、対策を 2 つ挙げてください(200〜400 字)。",
+      "answer": "ローテーションでは、createSecret で新しいパスワードを作って新しい版に AWSPENDING を付け、setSecret でデータベースのユーザーのパスワードを AWSPENDING の値に変え、testSecret で新しい値でログインできるか確かめ、finishSecret で AWSCURRENT を新しい版に移します。シングルユーザー方式では、setSecret の時点でデータベース側のパスワードは新しくなりますが、AWSCURRENT はまだ古い版を指しています。この間にシークレットを取ったアプリや、古い値をキャッシュしているアプリは古いパスワードで接続しようとして失敗します。対策の 1 つ目は、アプリで認証に失敗したらシークレットを取り直して再試行する処理を入れることです。2 つ目は、交代ユーザー方式にして 2 人のユーザーを交互に使い、古い版のユーザーも次の入れ替えまで有効にしておくことです。",
+      "rubric": [
+        "4 つのステップ(createSecret・setSecret・testSecret・finishSecret)の役割を述べている",
+        "setSecret から finishSecret までの間、DB は新しいパスワードで AWSCURRENT は古い版という食い違いを説明している",
+        "キャッシュした古い値でも失敗しうることにふれている",
+        "対策として、失敗時に取り直して再試行することと、交代ユーザー方式を挙げている"
+      ],
+      "explanation": "ラベルが移るタイミングとデータベース側のパスワードが変わるタイミングのずれが原因です。図の表を見ずに説明できるようにしておきます。",
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0
+    }
+  ]
+}

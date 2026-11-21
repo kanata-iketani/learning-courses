@@ -1,0 +1,92 @@
+{
+  "lesson": 9,
+  "chapter": 4,
+  "title": "Macie で機密データを見つけ、CloudHSM を選ぶ",
+  "priority": "🔴",
+  "text": "### 基礎: 「どこに何があるか」を知らなければ守れない\nch01〜ch03 では、鍵とシークレットを守りました。しかし、守るべきデータが**どこにあるか分からない**と、どの鍵で守るかも決められません。\n\nよくある話です。\n\n- 分析チームが、本番のデータベースから顧客一覧を CSV で書き出し、作業用の S3 バケットに置いた。そのバケットは暗号化もアクセスの絞り込みも「社内の作業用」の水準だった\n- 開発者がテスト用に置いたログファイルに、本物のクレジットカード番号が混ざっていた\n- 古い設定ファイルに AWS のシークレットアクセスキーが書かれたまま、S3 に何年も残っていた\n\nS3 のバケットが数百、オブジェクトが数億あると、人の目では探せません。これを自動で探すのが **Amazon Macie** です。章の後半では、鍵を「AWS に任せず、自分専用のハードウェアで持ちたい」という要件に応える **CloudHSM** と、KMS との使い分けを見ます。\n\n### Macie がやること\nMacie は、S3 だけを対象にしたデータの点検サービスです。大きく 2 つのことをします。\n\n| 仕事 | 中身 | 出てくる検出結果 |\n|---|---|---|\n| バケットの設定の監視 | パブリックアクセスブロックが外された、外部のアカウントと共有された、などの設定の変化を見る | ポリシーの検出結果(`Policy:IAMUser/...`) |\n| 機密データの発見 | オブジェクトの中身を読み、クレジットカード番号やアクセスキーなどを探す | 機密データの検出結果(`SensitiveData:S3Object/...`) |\n\n機密データを探す方法は 2 つです。\n\n- **自動の機密データ検出**: Macie がバケット全体から毎日少しずつオブジェクトを選んで(サンプリングして)調べ、「どのバケットに機密データがありそうか」の地図を作る。全体を薄く広く見る\n- **機密データ検出ジョブ**: 対象のバケットや条件を決めて、全部(または指定した割合)を調べる。1 回だけ、または毎日・毎週などの定期実行ができる。特定のバケットを深く見る\n\n何を「機密データ」とみなすかは、**データ識別子**で決めます。\n\n- **マネージドデータ識別子**: AWS が用意した判定ルール。クレジットカード番号(`CREDIT_CARD_NUMBER`)、AWS のシークレットアクセスキー(`AWS_CREDENTIALS`)、秘密鍵(`OPENSSH_PRIVATE_KEY` など)、各国のパスポート番号など。多くは、近くに「card」「secret」などのキーワードがあることを条件にして誤検知を減らしています\n- **カスタムデータ識別子**: 自分で作る判定ルール。正規表現(文字の並びのパターン)と、近くにあるべきキーワードを指定します\n\n日本で使うときの注意があります。公式の一覧を確かめると、マネージドデータ識別子は欧米の番号が中心で、マイナンバーなど日本固有の番号を探すものは見当たりません。氏名の検出もラテン文字の名前が対象です。日本の個人情報を探すなら、カスタムデータ識別子を作ります(最新の一覧は公式ドキュメントで確認してください)。\n\n```\n$ aws macie2 create-custom-data-identifier \\\n    --name jp-phone-number \\\n    --regex '0[789]0-?[0-9]{4}-?[0-9]{4}' \\\n    --keywords '電話' 'TEL' 'phone' \\\n    --maximum-match-distance 50\n```\n\n- `--regex`: 「070・080・090 で始まり、4 桁・4 桁が続く(ハイフンはあってもなくてもよい)」という携帯電話番号のパターン。`[789]` は 7・8・9 のどれか 1 文字、`-?` はハイフンが 0 個か 1 個、`{4}` は直前を 4 回、という意味です\n- `--keywords`: このどれかが近くにあるときだけ検出する\n- `--maximum-match-distance 50`: キーワードから 50 文字以内にあるものだけ数える\n\n### 検出結果の実物を読む\nCSV ファイルにクレジットカード番号と携帯電話番号が入っていたときの、機密データの検出結果です(要点の抜粋。値はダミー)。\n\n```json\n{\n  \"type\": \"SensitiveData:S3Object/Multiple\",\n  \"severity\": { \"description\": \"High\", \"score\": 3 },\n  \"category\": \"CLASSIFICATION\",\n  \"count\": 1,\n  \"createdAt\": \"2026-11-22T01:15:00Z\",\n  \"accountId\": \"111122223333\",\n  \"region\": \"ap-northeast-1\",\n  \"resourcesAffected\": {\n    \"s3Bucket\": {\n      \"name\": \"example-analytics-work\",\n      \"publicAccess\": { \"effectivePermission\": \"NOT_PUBLIC\" },\n      \"defaultServerSideEncryption\": { \"encryptionType\": \"AES256\" }\n    },\n    \"s3Object\": {\n      \"key\": \"exports/customers_202611.csv\",\n      \"size\": 1843200,\n      \"serverSideEncryption\": { \"encryptionType\": \"AES256\" }\n    }\n  },\n  \"classificationDetails\": {\n    \"originType\": \"SENSITIVE_DATA_DISCOVERY_JOB\",\n    \"jobId\": \"3ce05dbb7ec5505def334104bf8EXAMPLE\",\n    \"result\": {\n      \"mimeType\": \"text/csv\",\n      \"sizeClassified\": 1843200,\n      \"status\": { \"code\": \"COMPLETE\" },\n      \"sensitiveData\": [\n        {\n          \"category\": \"FINANCIAL_INFORMATION\",\n          \"totalCount\": 1200,\n          \"detections\": [\n            {\n              \"type\": \"CREDIT_CARD_NUMBER\",\n              \"count\": 1200,\n              \"occurrences\": {\n                \"cells\": [\n                  { \"row\": 2, \"column\": 5, \"columnName\": \"card_no\", \"cellReference\": null },\n                  { \"row\": 3, \"column\": 5, \"columnName\": \"card_no\", \"cellReference\": null }\n                ]\n              }\n            }\n          ]\n        }\n      ],\n      \"customDataIdentifiers\": {\n        \"totalCount\": 1180,\n        \"detections\": [\n          {\n            \"name\": \"jp-phone-number\",\n            \"arn\": \"arn:aws:macie2:ap-northeast-1:111122223333:custom-data-identifier/a1b2c3d4-EXAMPLE\",\n            \"count\": 1180,\n            \"occurrences\": {\n              \"cells\": [ { \"row\": 2, \"column\": 4, \"columnName\": \"tel\", \"cellReference\": null } ]\n            }\n          }\n        ]\n      }\n    }\n  }\n}\n```\n\n上から読みます。\n\n- `type: SensitiveData:S3Object/Multiple`: 複数の種類の機密データが見つかった。種類が 1 つなら `/Financial`(金融情報)、`/Personal`(個人情報)、`/Credentials`(認証情報)、`/CustomIdentifier`(カスタムデータ識別子)になります\n- `severity`: 重大度。`description` は Low・Medium・High、`score` は 1〜3 で対応します。クレジットカード番号は 1 件でも High です\n- `resourcesAffected.s3Bucket`: どのバケットか。`effectivePermission: NOT_PUBLIC` は公開されていないこと、`encryptionType: AES256` は SSE-S3(L7 で見た S3 の鍵での暗号化)であることを示します\n- `s3Object.key`: どのファイルか\n- `originType`: 検出ジョブで見つけた(自動の機密データ検出なら `AUTOMATED_SENSITIVE_DATA_DISCOVERY`)\n- `status.code: COMPLETE`: ファイルを最後まで調べられた。暗号化の鍵の権限がなく読めなかったときなどは別の値になります\n- `sensitiveData[].category` と `detections[].type`: マネージドデータ識別子で見つかったもの。`count: 1200` は 1,200 件\n- `occurrences.cells`: CSV や Excel では、見つかった場所を行・列・列名で示します。テキストファイルでは `lineRanges`(行番号)、PDF では `pages`、JSON では `records` になります。場所は最大 15 件まで載ります\n- `customDataIdentifiers`: 自分で作った識別子で見つかったもの。`name` で、どの識別子に引っかかったか分かります\n\nこの結果から、「作業用バケットに顧客 1,200 人分のカード番号と電話番号の CSV がある。暗号化は SSE-S3 で、カスタマー管理キーではない」と読めます。対応は、ファイルの削除か、正規の保管場所への移動、作業用バケットの運用の見直しです。\n\nMacie の検出結果は Macie の中に 90 日保存されます。それより長く残すには、機密データ検出の結果を保存する S3 バケット(KMS キーで暗号化)を設定します。\n\n### 検出結果を通知・自動対応につなぐ\nMacie の検出結果は EventBridge(AWS のイベントを条件で振り分けるサービス。L14 で詳しく)に送られ、Security Hub にも集められます。\n\n```mermaid\narchitecture-beta\n    group acct(aws:account)[Workload Account]\n\n    service s3(aws:s3)[S3 Buckets] in acct\n    service macie(aws:amazon-macie)[Macie] in acct\n    service eb(aws:eventbridge)[EventBridge] in acct\n    service sns(aws:sns)[SNS] in acct\n    service hub(aws:aws-security-hub)[Security Hub] in acct\n    service fn(aws:lambda)[Auto Tagging] in acct\n\n    macie:L --> R:s3\n    macie:R --> L:eb\n    eb:R --> L:sns\n    eb:B --> T:fn\n    macie:B --> T:hub\n```\n\nMacie が S3 のバケットとオブジェクトを調べ、検出結果を EventBridge に送ります。EventBridge のルールで、重大度が High のものだけを SNS(通知のサービス)で担当者にメールし、Lambda でオブジェクトに「要確認」のタグを付けます。同じ検出結果は Security Hub にも集まり、ほかの検知サービスと並べて見られます。組織で使うときは、セキュリティ用のアカウントを Macie の委任管理者(組織全体を代表して設定・閲覧するアカウント。L18 で詳しく)にして、全アカウントの結果を 1 か所で見ます。\n\n### CloudHSM: 自分専用の HSM\n**HSM**(ハードウェアセキュリティモジュール)は、鍵を作り、保管し、暗号の計算をするための専用の機械です。物理的にこじ開けようとすると中の鍵を消すなど、鍵を取り出せないように作られています。KMS も内部で HSM を使っていますが、それは AWS が管理し、多くの利用者で共有するものです。\n\n**AWS CloudHSM** は、**自分専用(シングルテナント)の HSM** を自分の VPC の中に置けるサービスです。\n\n- FIPS 140-2 または FIPS 140-3 のレベル 3 の認定を受けた HSM(FIPS 140 は米国政府の暗号モジュールの基準で、レベル 3 は物理的な改ざんへの強さまで求める水準)\n- 複数の HSM で**クラスター**を組み、AZ をまたいで置くことで、1 台が壊れても止まらないようにする。鍵はクラスターの HSM の間で自動で同期される\n- HSM のユーザー(管理者と、鍵を使う crypto user)は IAM ではなく、**HSM の中で自分が管理する**。AWS は HSM の中の鍵を見られない\n- アプリは PKCS#11・JCE(Java)・OpenSSL・Windows の KSP/CNG といった業界標準の方法で使う。KMS の API とは違う\n\n使う場面は、次のようなものです。\n\n- 規制や契約で「専用の HSM で、利用者だけが鍵を管理すること」「FIPS 140 レベル 3」を求められる\n- Web サーバーの TLS の秘密鍵を HSM に置く(SSL/TLS のオフロード)、Oracle データベースの TDE(データベースが自動でファイルを暗号化する機能)の鍵を置く、自前の認証局の秘密鍵を守る\n- KMS が対応しない鍵の種類や使い方が要る\n\n### KMS と CloudHSM の使い分け\n間には、組み合わせの選択肢もあります。**カスタムキーストア** は、KMS の使い勝手(キーポリシー・AWS サービスとの統合・CloudTrail)はそのままに、鍵の中身を置く場所を変える仕組みです。\n\n| 案 | 鍵の置き場 | 良い点 | 悪い点 | 運用負荷・コスト |\n|---|---|---|---|---|\n| KMS(標準) | AWS が管理する共有の HSM | S3・EBS・RDS などと統合。自動ローテーション。従量課金 | 専用の HSM ではない | 最も低い |\n| KMS+CloudHSM キーストア | 自分の CloudHSM クラスター | AWS サービスと統合したまま、鍵の中身は専用の HSM に。クラスターを切り離せば鍵を使えなくできる | 対称キーだけ。自動ローテーション・マルチリージョンキー・インポートは不可。2 台以上の HSM(別々の AZ)が要る | 高い(HSM の時間料金とクラスターの運用) |\n| KMS+外部キーストア(XKS) | AWS の外の、自分の鍵管理装置 | 鍵が AWS の中に一切ない、という要件に応える | 外部装置が止まると AWS 側で復号できない。遅延も増える | 最も高い |\n| CloudHSM を直接使う | 自分の CloudHSM クラスター | 鍵の種類・アルゴリズム・使い方を完全に自分で決める | AWS サービスの暗号化とは直接は統合されない。アプリから業界標準の方法で呼ぶ | 高い |\n\n判断の流れはこうです。\n\n1. まず KMS(標準)で足りるかを考える。大半の要件はこれで満たせる\n2. 「専用の HSM」「FIPS 140 レベル 3 を自分の鍵の置き場で」が必須で、S3 や EBS などの AWS サービスの暗号化に使いたい → KMS+CloudHSM キーストア\n3. 「鍵を AWS の外に置く」が必須 → 外部キーストア\n4. TLS のオフロード、データベースの TDE、自前の認証局など、アプリが標準の方法で HSM を直接呼ぶ → CloudHSM を直接\n\nよくある設定ミスは、CloudHSM を 1 台だけで動かすことです。その 1 台が壊れると、サービスが止まります。また、HSM のユーザーの管理は利用者の責任で、AWS は中の鍵を見られません。管理者の認証情報の扱いを誤ると、自分でも鍵に手が出せなくなります。L1 で見た責任共有モデルの線が、KMS より利用者側に寄っていると考えます。\n\n### 試験ではこう問われる\n- 「S3 に保存された個人情報やクレジットカード番号を自動で見つける」は Macie です。GuardDuty(脅威の検知)や Inspector(脆弱性の検査)と取り違えないようにします\n- 「独自の形式の番号を検出したい」はカスタムデータ識別子、「検出結果に応じて自動で通知・対処」は EventBridge です\n- 「シングルテナントの HSM」「FIPS 140 レベル 3」「鍵を利用者だけが管理し AWS がアクセスできない」は CloudHSM です。そのうえで「S3 や EBS の暗号化と統合」とあれば、CloudHSM をカスタムキーストアにした KMS です\n- 「運用負荷が最も低い」が付いていて、専用の HSM の要件がなければ、KMS(標準)が答えです\n\n### まとめ\n- Macie は S3 だけを対象に、バケットの設定の変化(ポリシーの検出結果)と、中身の機密データ(機密データの検出結果)を見つける\n- 何を機密とみなすかはデータ識別子で決める。日本固有の番号はカスタムデータ識別子(正規表現とキーワード)で探す\n- 検出結果は種類・重大度・バケットとオブジェクト・見つかった場所(行・列など)を含み、EventBridge と Security Hub につながる\n- CloudHSM は自分専用の HSM。KMS で足りるかをまず考え、専用の HSM が必須なら CloudHSM キーストア、アプリが直接使うなら CloudHSM を直接\n",
+  "quiz": [
+    {
+      "question": "数百の S3 バケットのどこに、クレジットカード番号や AWS のシークレットアクセスキーを含むファイルがあるかを、継続的に自動で把握したい。運用負荷が最も低い方法はどれか。",
+      "choices": [
+        "Amazon Macie を有効にし、自動の機密データ検出を使う",
+        "Amazon GuardDuty の S3 保護を有効にする",
+        "Amazon Inspector で S3 バケットをスキャンする",
+        "毎晩すべてのオブジェクトをダウンロードし、自作のスクリプトで正規表現の検索をする"
+      ],
+      "correct": 0,
+      "explanation": "Macie は S3 のオブジェクトの中身から機密データを見つけるサービスで、自動の機密データ検出はバケット全体を継続的にサンプリングします。GuardDuty は S3 への不審なアクセスなどの脅威を検知するもので、中身の機密データは探しません。Inspector は EC2 やコンテナなどの脆弱性の検査です。自作のスクリプトは運用負荷が高くなります。"
+    },
+    {
+      "question": "日本の顧客データを扱っている。社内で使う会員番号(「JP-」に続く 8 桁の数字)を含むファイルを、Macie で見つけたい。最も適切な方法はどれか。",
+      "choices": [
+        "マネージドデータ識別子の NAME を有効にする",
+        "許可リスト(allow list)に会員番号の形式を登録する",
+        "正規表現と、近くにあるべきキーワードを指定したカスタムデータ識別子を作り、検出ジョブで使う",
+        "S3 のオブジェクトに「会員番号あり」のタグを付ける"
+      ],
+      "correct": 2,
+      "explanation": "独自の形式のデータは、正規表現とキーワードで定義するカスタムデータ識別子で探します。NAME はラテン文字の氏名を探す識別子で、会員番号は対象外です。許可リストは逆に「これは検出しないでよい」と除外するためのものです。タグを付けても Macie の検出にはなりません。"
+    },
+    {
+      "question": "Macie の機密データの検出結果に、次の項目があった。\n\"type\": \"SensitiveData:S3Object/Credentials\", \"severity\": {\"description\": \"High\"}, detections[].type が \"AWS_CREDENTIALS\"、s3Object.key が \"backup/app-config.yml\"。\nこの結果から言えることと、最初の対応として最も適切なものはどれか。",
+      "choices": [
+        "バケットが公開されている。まずパブリックアクセスブロックを有効にする",
+        "設定ファイルに AWS のシークレットアクセスキーが含まれている。該当するアクセスキーを無効化し、ファイルを削除する",
+        "ファイルが暗号化されていない。まずデフォルト暗号化を SSE-KMS に変える",
+        "Macie の誤検知なので、許可リストに登録して今後は検出しないようにする"
+      ],
+      "correct": 1,
+      "explanation": "Credentials 型で AWS_CREDENTIALS が検出されたので、設定ファイルに AWS のシークレットアクセスキーが書かれています。キーが使われる前に無効化し(L5・L17 で見た漏れたキーの対応)、ファイルを消すのが先です。この結果だけでは公開の有無や暗号化の欠落は分からず、確かめずに誤検知と決めつけるのは危険です。"
+    },
+    {
+      "question": "規制により、暗号鍵はシングルテナントで FIPS 140 レベル 3 の HSM で生成・保管し、利用者だけが管理する必要がある。同時に、S3 と EBS の暗号化はこれまでどおり AWS のサービスの機能で行いたい。最も適切な構成はどれか。",
+      "choices": [
+        "KMS のカスタマー管理キーで自動ローテーションを有効にする",
+        "CloudHSM のクラスターを作り、アプリから PKCS#11 で S3 のオブジェクトを暗号化してから保存する",
+        "KMS の AWS マネージドキー aws/s3 と aws/ebs を使う",
+        "2 台以上の HSM を別々の AZ に置いた CloudHSM クラスターを作り、KMS の CloudHSM キーストアとして接続し、その中に作ったキーを S3 と EBS の暗号化に指定する"
+      ],
+      "correct": 3,
+      "explanation": "CloudHSM キーストアを使うと、キーマテリアルは自分の CloudHSM クラスターの中にあり、KMS の使い勝手と AWS サービスとの統合はそのまま使えます。キーストアには 2 台以上の HSM が別々の AZ に必要です。標準の KMS は共有の HSM なので要件を満たさず、CloudHSM を直接使うと S3 や EBS の暗号化機能とは統合されず、自前の暗号化処理が必要になります。"
+    },
+    {
+      "question": "KMS の CloudHSM キーストアに作ったキーについて、正しいものはどれか。",
+      "choices": [
+        "非対称キーも作れ、署名に使える",
+        "マルチリージョンキーとして別のリージョンに複製できる",
+        "自動ローテーションには対応しないので、更新するには新しいキーを作って切り替える",
+        "CloudHSM のクラスターを切り離しても、KMS の中のコピーで復号を続けられる"
+      ],
+      "correct": 2,
+      "explanation": "CloudHSM キーストアのキーは対称キーだけで、自動ローテーション・マルチリージョンキー・キーマテリアルのインポートには対応しません。更新は手動ローテーション(新しいキーとエイリアスの付け替え)になります。キーマテリアルはクラスターにしかないので、切り離すと暗号の操作はできなくなります。"
+    },
+    {
+      "question": "社内の認証局(CA)の秘密鍵を、専用の HSM の中で生成・保管し、署名ソフトウェアから業界標準の PKCS#11 で使いたい。AWS のサービスとの統合は不要である。最も適切なものはどれか。",
+      "choices": [
+        "AWS CloudHSM のクラスターを作り、署名ソフトウェアから CloudHSM の PKCS#11 ライブラリで使う",
+        "KMS の非対称キーを作り、PKCS#11 で呼ぶ",
+        "Secrets Manager に秘密鍵を保存し、署名のたびに取り出して使う",
+        "Parameter Store の SecureString に秘密鍵を保存する"
+      ],
+      "correct": 0,
+      "explanation": "アプリが PKCS#11 などの業界標準の方法で専用の HSM を直接使う場面は、CloudHSM を直接使う典型です。KMS は独自の API で使うもので、専用の HSM ではありません。Secrets Manager や Parameter Store に秘密鍵を置くと、使うたびに鍵が HSM の外に出てしまい、要件を満たしません。"
+    },
+    {
+      "kind": "essay",
+      "question": "あなたは新しいシステムの暗号化を設計しています。上司から「KMS ではなく CloudHSM を使えば、より安全なのでは」と聞かれました。KMS(標準)・KMS の CloudHSM キーストア・CloudHSM の直接利用の違いをふまえ、どのような要件のときにどれを選ぶかを、何も見ずに 1 分で説明するつもりで書いてください(200〜500 字)。",
+      "answer": "CloudHSM を使えば自動的に安全になるわけではなく、要件で選びます。KMS の標準は、AWS が管理する HSM で鍵を守り、キーポリシーと IAM で権限を絞り、S3・EBS・RDS などと統合され、自動ローテーションもあり、運用負荷が最も低いので、まず第一候補です。規制や契約で「シングルテナントの HSM」「FIPS 140 レベル 3 の HSM で利用者だけが鍵を管理する」が必須で、しかも S3 や EBS などの AWS サービスの暗号化に使いたいなら、CloudHSM クラスターを KMS の CloudHSM キーストアとして使います。ただし対称キーだけで、自動ローテーションやマルチリージョンキーは使えず、2 台以上の HSM を別々の AZ に置く運用と費用がかかります。TLS の秘密鍵、データベースの TDE、自前の認証局のように、アプリが PKCS#11 などの標準の方法で HSM を直接使うなら、CloudHSM を直接使います。CloudHSM では HSM のユーザー管理や可用性が利用者の責任になるので、責任が増えることも伝えます。",
+      "rubric": [
+        "要件がなければ KMS(標準)が第一候補である理由(統合・自動ローテーション・運用負荷)を述べている",
+        "専用の HSM が必須で AWS サービスと統合したい場合に CloudHSM キーストアを選ぶと述べている",
+        "アプリが標準の方法で HSM を直接使う場合に CloudHSM の直接利用を選ぶと述べている",
+        "CloudHSM では運用・可用性・ユーザー管理の責任や制約(対称キーのみ・自動ローテーション不可など)が増えることにふれている"
+      ],
+      "explanation": "「より強いもの」ではなく「要件に合うもの」を選ぶ説明ができることが、プロの判断です。KMS で足りる場面で CloudHSM を選ぶと、費用と運用の責任だけが増えます。",
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0
+    }
+  ]
+}

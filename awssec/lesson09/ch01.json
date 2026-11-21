@@ -1,0 +1,92 @@
+{
+  "lesson": 9,
+  "chapter": 1,
+  "title": "キーポリシーとグラントで KMS キーを守る",
+  "priority": "🔴",
+  "text": "### 基礎: 鍵を「誰が使えるか」がデータの守りそのもの\nL7 で、KMS(AWS の鍵管理サービス)の KMS キーで S3 や EBS のデータを暗号化しました。KMS キーそのものは KMS の外に出ません。データを読むには、KMS に「この暗号化されたデータキーを復号して」と頼む必要があります(L4・L7 で見たエンベロープ暗号化)。\n\nつまり、**KMS キーを使える人 = 暗号化されたデータを読める人** です。S3 のバケットポリシーで読み取りを許しても、KMS キーの `kms:Decrypt` が許されていなければ中身は読めません。逆に、鍵の権限を広く配りすぎると、暗号化の意味が薄れます。\n\n実際によく起きる事故は次の 2 種類です。\n\n- **広すぎる**: IAM ポリシーに `\"Action\": \"kms:*\", \"Resource\": \"*\"` を書いて開発者全員に付けた。全員が、顧客データを守る鍵で何でも復号できる\n- **狭すぎる・壊した**: キーポリシーを書き換えたとき、管理者の行を消してしまった。誰も鍵の設定を変えられなくなり、AWS サポートに頼むしかなくなった\n\nこの章では、KMS キーの権限を決める 3 つの道具、**キーポリシー**・**IAM ポリシー**・**グラント** の関係を、JSON を 1 行ずつ読みながら判定できるようにします。\n\n### KMS のキーポリシーはほかのリソースポリシーと何が違うか\nL6 で見たリソースベースのポリシー(S3 のバケットポリシーなど)は「付けても付けなくてもよい」ものでした。バケットポリシーがなくても、同じアカウントの IAM ポリシーで許可すれば S3 は使えます。\n\nKMS は違います。\n\n- **すべての KMS キーに、キーポリシーがちょうど 1 つある**。なくすことはできない\n- **キーポリシーで許可されていないと、同じアカウントの IAM ポリシーは効かない**。アカウントのルートユーザーでさえ、キーポリシーに書かれていなければ使えない\n- キーポリシーが「このアカウントでは IAM ポリシーでも許可してよい」と宣言したときだけ、IAM ポリシーが効く\n\nこの「宣言」が、次の JSON の最初のステートメントです。\n\n### キーポリシーを 1 行ずつ読む\nコンソールで KMS キーを作ると、次のような形のキーポリシーができます(アカウントは 111122223333、ロール名は例)。\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Id\": \"key-policy-orders\",\n  \"Statement\": [\n    {\n      \"Sid\": \"Enable IAM User Permissions\",\n      \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:root\" },\n      \"Action\": \"kms:*\",\n      \"Resource\": \"*\"\n    },\n    {\n      \"Sid\": \"Allow access for Key Administrators\",\n      \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:role/KeyAdmin\" },\n      \"Action\": [\n        \"kms:Create*\", \"kms:Describe*\", \"kms:Enable*\", \"kms:List*\",\n        \"kms:Put*\", \"kms:Update*\", \"kms:Revoke*\", \"kms:Disable*\",\n        \"kms:Get*\", \"kms:Delete*\", \"kms:TagResource\", \"kms:UntagResource\",\n        \"kms:ScheduleKeyDeletion\", \"kms:CancelKeyDeletion\", \"kms:RotateKeyOnDemand\"\n      ],\n      \"Resource\": \"*\"\n    },\n    {\n      \"Sid\": \"Allow use of the key\",\n      \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:role/OrderApp\" },\n      \"Action\": [\n        \"kms:Encrypt\", \"kms:Decrypt\", \"kms:ReEncrypt*\",\n        \"kms:GenerateDataKey*\", \"kms:DescribeKey\"\n      ],\n      \"Resource\": \"*\"\n    },\n    {\n      \"Sid\": \"Allow attachment of persistent resources\",\n      \"Effect\": \"Allow\",\n      \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:role/OrderApp\" },\n      \"Action\": [ \"kms:CreateGrant\", \"kms:ListGrants\", \"kms:RevokeGrant\" ],\n      \"Resource\": \"*\",\n      \"Condition\": { \"Bool\": { \"kms:GrantIsForAWSResource\": \"true\" } }\n    }\n  ]\n}\n```\n\n**ステートメント 1(Enable IAM User Permissions)**\n\n- `Principal: ...:root`: アカウント全体(アカウントプリンシパル)を指します。L3 で見た「ルートユーザー」という 1 人の人ではなく、「このアカウント」という意味です\n- `Action: kms:*`: すべての KMS の操作\n- 意味: 「このキーへのアクセスは、アカウント 111122223333 の IAM ポリシーで配ってよい」。この 1 文があるから、IAM ポリシーで `kms:Decrypt` を許可すると効きます\n- もう 1 つの役目: アカウントの管理者がいつでもキーポリシーを直せるので、鍵が管理不能になるのを防ぎます\n\n**ステートメント 2(Key Administrators)**\n\n- `KeyAdmin` ロールに、キーの管理(有効化・無効化・ポリシー変更・削除の予約など)を許します\n- 暗号化・復号(`kms:Decrypt` など)は**入っていません**。管理する人とデータを読む人を分ける、職務の分離(1 人に強い権限を集めない考え方)です\n- ただし `kms:Put*`(キーポリシーの変更)と `kms:Create*`(グラントの作成を含む)があるので、その気になれば自分に復号権限を足せます。管理者ロールの利用は MFA 必須にし、CloudTrail で監視します\n\n**ステートメント 3(Allow use of the key)**\n\n- `OrderApp` ロールに、暗号化・復号・データキーの生成を許します\n- `kms:GenerateDataKey*` の `*` は、`GenerateDataKey` と `GenerateDataKeyWithoutPlaintext` などをまとめて指します\n- `Resource: \"*\"` は「このキー自身」という意味です。キーポリシーは 1 つのキーに付くので、ここは常に `*` と書きます\n\n**ステートメント 4(Allow attachment of persistent resources)**\n\n- `OrderApp` に、グラント(後で説明)の作成・一覧・取り消しを許します\n- `kms:GrantIsForAWSResource: true`: EBS や RDS などの AWS のサービスが、この人の代わりにグラントを作るときだけ許す、という条件です。`OrderApp` が自分で直接 `CreateGrant` を呼ぶことはできません\n\nなお、API や CLI でキーを作り、キーポリシーを指定しなかった場合は、ステートメント 1 だけのキーポリシーになります。\n\n### 判定表: キーポリシーと IAM ポリシーの組み合わせ\n同じアカウントの `OrderApp` ロールが `kms:Decrypt` を呼ぶ場合を考えます。L3・L6 で見た評価ロジック(明示的な拒否が最優先、許可がなければ暗黙の拒否)はそのまま使えます。KMS で加わるのは「キーポリシーが入り口」というルールだけです。\n\n| No | キーポリシー | OrderApp の IAM ポリシー | 結果 | 理由 |\n|---|---|---|---|---|\n| 1 | ステートメント 1 あり。OrderApp の名前はない | kms:Decrypt を許可 | 使える | キーポリシーが IAM への委任を許し、IAM が許可している |\n| 2 | ステートメント 1 あり。OrderApp の名前はない | KMS の許可なし | 使えない | どこにも許可がない。暗黙の拒否 |\n| 3 | ステートメント 1 なし。OrderApp を名指しで許可 | KMS の許可なし | 使える | キーポリシーだけで許可が完結する |\n| 4 | ステートメント 1 なし。OrderApp の名前はない | kms:* を許可 | 使えない | キーポリシーが IAM への委任をしていないので、IAM の許可は効かない |\n| 5 | ステートメント 1 あり。さらに OrderApp への Deny | kms:Decrypt を許可 | 使えない | 明示的な拒否が最優先 |\n| 6 | ステートメント 1 あり | kms:Decrypt を許可。ただし SCP が kms:Decrypt を拒否 | 使えない | L6 で見た SCP の拒否はアカウント内の全員に効く |\n\n覚え方は 1 つです。**「キーポリシーが本人を許可している」か「キーポリシーが IAM に任せ、IAM が許可している」かのどちらか。そのうえで、どこかに Deny があれば負け。**\n\n### 別のアカウントから使う場合\nアカウント 444455556666 の `ReportJob` ロールに、このキーで復号させたいとします。別アカウントでは、**両側の許可**が必要です。\n\n鍵の持ち主(111122223333)のキーポリシーに足す文:\n\n```json\n{\n  \"Sid\": \"AllowReportAccount\",\n  \"Effect\": \"Allow\",\n  \"Principal\": { \"AWS\": \"arn:aws:iam::444455556666:root\" },\n  \"Action\": [ \"kms:Decrypt\", \"kms:DescribeKey\" ],\n  \"Resource\": \"*\"\n}\n```\n\n使う側(444455556666)の `ReportJob` ロールの IAM ポリシー:\n\n```json\n{\n  \"Effect\": \"Allow\",\n  \"Action\": \"kms:Decrypt\",\n  \"Resource\": \"arn:aws:kms:ap-northeast-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab\"\n}\n```\n\n- キーポリシーの `Principal` が `444455556666:root` なので、「相手のアカウントに任せる」という意味です。相手のアカウントの中で誰に使わせるかは、相手の IAM ポリシーで決めます\n- IAM ポリシーの `Resource` には、**キーの ARN** を書きます。エイリアス(`alias/orders` のような別名)を `Resource` に書いても、キーへのアクセスは許可されません\n- どちらか片方だけでは使えません\n\n| No | 持ち主のキーポリシー | 相手の IAM ポリシー | 結果 |\n|---|---|---|---|\n| 7 | 444455556666 を許可 | キー ARN に kms:Decrypt を許可 | 使える |\n| 8 | 444455556666 を許可 | 許可なし | 使えない |\n| 9 | 444455556666 の記載なし | キー ARN に kms:Decrypt を許可 | 使えない |\n\n### 条件キーで「どの経路で使うか」を絞る\nキーポリシーには、KMS 専用の条件キーを書けます。よく使うのは次の 3 つです。\n\n- `kms:ViaService`: 「このサービス経由の呼び出しだけ許す」。値は `secretsmanager.ap-northeast-1.amazonaws.com` のように、サービス名とリージョンの形\n- `kms:CallerAccount`: 呼び出し元のアカウント ID\n- `kms:EncryptionContext:キー名`: 暗号化コンテキスト(暗号化のときに添える「どのデータか」を表す文字列の組。L7 で見た)の値\n\n例として、「`OrderApp` は S3 経由でしかこのキーで復号できない」という文です。\n\n```json\n{\n  \"Sid\": \"DecryptOnlyViaS3\",\n  \"Effect\": \"Allow\",\n  \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:role/OrderApp\" },\n  \"Action\": [ \"kms:Decrypt\", \"kms:GenerateDataKey\" ],\n  \"Resource\": \"*\",\n  \"Condition\": {\n    \"StringEquals\": { \"kms:ViaService\": \"s3.ap-northeast-1.amazonaws.com\" }\n  }\n}\n```\n\n`OrderApp` の認証情報が盗まれても、攻撃者が `aws kms decrypt` を直接呼ぶと条件に合わず拒否されます。S3 のオブジェクトを読むには S3 側の権限も要るので、守りが 2 枚になります。\n\n### グラント: キーポリシーを書き換えずに、一時的に権限を渡す\n**グラント** は、1 つの KMS キーについて「この相手に、この操作を許す」という許可の札です。キーポリシーや IAM ポリシーと並ぶ、3 つ目の許可の経路です。\n\n主に AWS のサービスが使います。たとえば暗号化された EBS ボリュームを EC2 にアタッチすると、EC2 のサービスがグラントを作り、そのボリュームのデータキーを復号できるようになります。ステートメント 4 は、このためにあります。\n\n```mermaid\nsequenceDiagram\n    participant U as OrderApp ロール\n    participant E as EC2 サービス\n    participant K as KMS\n    U->>E: 暗号化された EBS をアタッチして\n    E->>K: CreateGrant(受け取り手=EC2, 操作=Decrypt)\n    Note over K: キーポリシーの GrantIsForAWSResource 条件に合うので許可\n    K-->>E: GrantId\n    E->>K: Decrypt(ボリュームのデータキー)\n    K-->>E: 平文のデータキー\n    Note over E: ボリュームを読み書きできる\n```\n\n自分でグラントを作ることもできます(作る人に `kms:CreateGrant` の権限が必要です)。\n\n```\n$ aws kms create-grant \\\n    --key-id 1234abcd-12ab-34cd-56ef-1234567890ab \\\n    --grantee-principal arn:aws:iam::111122223333:role/BatchJob \\\n    --retiring-principal arn:aws:iam::111122223333:role/KeyAdmin \\\n    --operations Decrypt \\\n    --constraints EncryptionContextSubset={project=orders}\n{\n    \"GrantToken\": \"AQpAM2RhZTk1MGMyNTk2ZmZmMzEyYWVhOWViN2I1MWM4Mzc0MWFiYjc0ZDE1ODkyNGFlNTIzODZhMzgyZjBlNGY3NiKIAQEBAgB4...\",\n    \"GrantId\": \"0c237476b39f8bc44e45212e08498fbe3151305030726c0590dd8d3e9f3d6a60\"\n}\n```\n\n- `--grantee-principal`: 権限を受け取る相手(グランティー)\n- `--retiring-principal`: このグラントを「使い終わった」として消せる相手\n- `--operations Decrypt`: 許す操作。グラントで許せるのは暗号化・復号・データキー生成・`DescribeKey`・`CreateGrant` などの決まった操作だけです。キーポリシーの変更や削除は許せません\n- `--constraints EncryptionContextSubset={project=orders}`: 暗号化コンテキストに `project=orders` を含むリクエストだけ許す、という制限\n- `GrantToken`: グラントの反映には数秒〜数分かかることがあります(結果整合性。変更が全体に行き渡るまで少し遅れる性質)。このトークンを API に添えると、反映を待たずにすぐ使えます\n- `GrantId`: グラントの ID。消すときに使います\n\nグラントの性質を表にします。\n\n| 性質 | 内容 |\n|---|---|\n| 許可だけ | グラントで「拒否」はできない |\n| 対象 | 1 つのグラントは 1 つのキーだけ |\n| 別アカウント | 別アカウントの相手にも渡せる |\n| 消し方 | retire(リタイア。受け取り手や指定された人が使い終わって消す)と revoke(取り消し。管理者が強制的に消す) |\n| 見え方 | キーポリシーには現れない。`aws kms list-grants` で見る |\n\n最後の行が実務では大事です。**キーポリシーを読んだだけでは、誰が使えるかの全体は分かりません。** 点検ではグラントも一覧します。\n\n### 実務での使い方と判断\n誰にキーを使わせるかの書き方は、主に 3 案あります。\n\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 |\n|---|---|---|---|---|\n| A. キーポリシーに全部書く | ステートメント 1 を外し、使う人を名指し | キーポリシー 1 枚を見れば全員が分かる。IAM の付け間違いで広がらない | 人が増えるたびにキーポリシーを直す。書き損じると管理不能の危険 | 高い |\n| B. キーポリシーは委任、IAM で配る | ステートメント 1 を残し、IAM ポリシーでキー ARN ごとに許可 | 普段の IAM の運用に乗る | IAM で `kms:*` と `*` を書くと全キーに広がる | 低い |\n| C. 一時的な処理はグラント | バッチなど期間限定の処理にグラントを作り、終わったら retire | ポリシーを触らずに渡して消せる | キーポリシーに出ないので見落としやすい | 中 |\n\n多くの現場は B を基本にします。そのうえで、顧客データのような重要な鍵だけは、キーポリシー側で `kms:ViaService` や Deny を足して守りを固めます。\n\nよくある設定ミスです。\n\n- **IAM ポリシーで `\"Resource\": \"*\"` の `kms:Decrypt`**: ステートメント 1 があるキー全部が対象になる。キー ARN を書く\n- **ステートメント 1 も管理者も消したキーポリシー**: KMS はキーポリシーを入れるとき、「変更する本人が後で `PutKeyPolicy` を呼べなくなる内容」なら拒否します(ポリシーのロックアウト安全チェック)。ただしこのチェックは外せるので、外して入れると本当に管理不能になります\n- **別アカウントのキーを `alias/orders` のような短い名前で呼ぶ**: 自分のアカウントのエイリアスとして探され、見つからない。API ではキー ARN(またはエイリアスの ARN)で指定する\n- **キー管理者に復号権限も付ける**: 管理者のアカウントが乗っ取られると、全データが読まれます\n\n```mermaid\narchitecture-beta\n    group acctA(aws:account)[Key Owner Account]\n    group acctB(aws:account)[Report Account]\n\n    service app(aws:iam)[OrderApp Role] in acctA\n    service kms(aws:kms)[KMS Key] in acctA\n    service s3(aws:s3)[S3 Bucket] in acctA\n    service job(aws:iam)[ReportJob Role] in acctB\n    service trail(aws:cloudtrail)[CloudTrail] in acctA\n\n    app:R --> L:s3\n    s3:B --> T:kms\n    job:L --> R:kms\n    kms:B --> T:trail\n```\n\n図の上の段は、鍵の持ち主のアカウントで `OrderApp` が S3 を使い、S3 が KMS キーでデータキーを復号する流れです(`kms:ViaService` で S3 経由に限定)。右から伸びる線は、レポート用のアカウントの `ReportJob` が、キーポリシーと自分の IAM ポリシーの両方の許可で同じキーを使う流れです。どちらの呼び出しも、鍵の持ち主の CloudTrail に `Decrypt` として残ります。\n\n### 試験ではこう問われる\n- 「IAM ポリシーで許可したのに `AccessDeniedException`」は、まずキーポリシーを疑います。ステートメント 1(アカウントへの委任)がない、または別アカウントなのにキーポリシーで相手を許可していない、が定番の原因です\n- 「AWS のサービスだけに使わせたい」「アプリが KMS を直接呼べないようにしたい」は `kms:ViaService` です。「AWS のサービスがユーザーの代わりにグラントを作るときだけ」は `kms:GrantIsForAWSResource` です\n- 「キーポリシーを変えずに、一時的に権限を渡して後で消す」はグラントです\n- 「最小権限」の選択肢は、`kms:*` や `\"Resource\": \"*\"` を含まないもの、キー ARN を名指ししたものを選びます\n\n### まとめ\n- KMS キーには必ずキーポリシーがあり、キーポリシーが入り口になる。キーポリシーが許すか、IAM に委任して IAM が許すか。どこかに Deny があれば拒否\n- `arn:aws:iam::アカウント:root` を Principal にした文は「このアカウントの IAM ポリシーに任せる」という意味\n- 別アカウントからの利用は、持ち主のキーポリシーと相手の IAM ポリシーの両方で許可し、キー ARN で指定する\n- グラントは許可だけを渡す札で、AWS のサービスがよく使う。キーポリシーに現れないので `list-grants` で点検する\n",
+  "quiz": [
+    {
+      "question": "同じアカウントの IAM ロール AppRole に、IAM ポリシーで特定の KMS キーへの kms:Decrypt を許可した。しかし復号すると AccessDeniedException になる。キーポリシーには KeyAdmin ロールへの管理操作の許可だけが書かれている。最も可能性が高い原因はどれか。",
+      "choices": [
+        "IAM ポリシーの Resource にキー ARN ではなくエイリアスを書く必要がある",
+        "キーポリシーに、アカウントの IAM ポリシーへ委任する文(Principal がアカウントの root の文)も AppRole を名指しする文もない",
+        "KMS の復号には、IAM ポリシーではなく SCP での許可が必要である",
+        "AppRole の信頼ポリシーに kms.amazonaws.com を追加していない"
+      ],
+      "correct": 1,
+      "explanation": "KMS では、キーポリシーが本人を許可するか、アカウントへの委任の文(Principal がアカウントの root)を通じて IAM ポリシーに任せるかのどちらかが必要です。どちらもなければ、IAM ポリシーの許可は効きません。SCP は許可を与えるものではなく、信頼ポリシーはロールを引き受けられる相手の話で関係ありません。"
+    },
+    {
+      "question": "キーポリシーの次の文の意味として正しいものはどれか。\n\n\"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:root\" }, \"Action\": \"kms:*\", \"Resource\": \"*\"",
+      "choices": [
+        "アカウント 111122223333 のルートユーザーだけが、このキーをすべての操作に使える",
+        "アカウント 111122223333 のすべての IAM ユーザーとロールが、IAM ポリシーなしでこのキーを使える",
+        "このキーはアカウント外からも、誰でもすべての操作に使える",
+        "アカウント 111122223333 の IAM ポリシーで、このキーへのアクセスを配ってよい。管理者がキーを管理不能にしない役目もある"
+      ],
+      "correct": 3,
+      "explanation": "Principal がアカウントの root の文は「このアカウントに任せる」という意味で、アカウント内の誰が使えるかは IAM ポリシーで決まります。この文だけでアカウント内の全員が使えるわけではありません。ルートユーザー 1 人だけを指すのでも、外部の誰でもでもありません。"
+    },
+    {
+      "question": "アカウント A(111122223333)の KMS キーを、アカウント B(444455556666)の ReportJob ロールに復号させたい。最小権限で必要な設定の組み合わせとして最も適切なものはどれか。",
+      "choices": [
+        "A のキーポリシーで B のアカウントに kms:Decrypt を許可し、B で ReportJob の IAM ポリシーにそのキーの ARN への kms:Decrypt を許可する",
+        "B で ReportJob の IAM ポリシーに kms:* と Resource \"*\" を許可する",
+        "A のキーポリシーで Principal を \"*\" にして kms:Decrypt を許可する",
+        "A のキーポリシーで B のアカウントを許可し、B の IAM ポリシーではキーをエイリアス alias/orders で指定する"
+      ],
+      "correct": 0,
+      "explanation": "別アカウントでは、持ち主のキーポリシーと相手側の IAM ポリシーの両方の許可が必要です。相手側の IAM ポリシーの Resource にはキー ARN を書きます(エイリアスを書いてもキーへのアクセスは許可されません)。B の IAM だけでは A のキーポリシーが許していないので使えず、Principal を \"*\" にするのは誰にでも開く危険な設定です。"
+    },
+    {
+      "question": "Secrets Manager に保存したシークレットを暗号化するカスタマー管理キーがある。アプリのロールが Secrets Manager 経由でシークレットを読むことは許しつつ、同じロールの認証情報で kms decrypt を直接呼んでも復号できないようにしたい。最も適切な方法はどれか。",
+      "choices": [
+        "アプリのロールの IAM ポリシーから kms:Decrypt を外す",
+        "キーの自動ローテーションを有効にする",
+        "キーポリシーでアプリのロールへの kms:Decrypt の許可に、kms:ViaService が secretsmanager.ap-northeast-1.amazonaws.com の条件を付ける",
+        "キーポリシーに kms:GrantIsForAWSResource の条件を付けた kms:Decrypt の許可を書く"
+      ],
+      "correct": 2,
+      "explanation": "kms:ViaService は「このサービス経由の呼び出しだけ許す」という条件で、直接の API 呼び出しは条件に合わず拒否されます。kms:Decrypt を外すと Secrets Manager 経由でも読めなくなります。ローテーションは鍵の中身の更新で、誰が使えるかは変わりません。GrantIsForAWSResource はグラントの操作(CreateGrant など)に使う条件で、Decrypt には使いません。"
+    },
+    {
+      "question": "KMS のグラントについて正しいものはどれか。",
+      "choices": [
+        "グラントは許可だけを渡せ、拒否は書けない。キーポリシーには現れないので、list-grants で確認する",
+        "グラントはキーポリシーに 1 つの文として追記される",
+        "グラントでは、キーポリシーの変更やキーの削除の予約も許可できる",
+        "グラントは同じアカウントの相手にしか作れない"
+      ],
+      "correct": 0,
+      "explanation": "グラントは許可だけを渡す札で、キーポリシーとは別に保存され、list-grants で一覧します。許せる操作は暗号化・復号・データキー生成・DescribeKey・CreateGrant などの決まったものだけで、キーポリシーの変更や削除は含まれません。別アカウントの相手にも作れます。"
+    },
+    {
+      "question": "夜間バッチが 2 時間だけ、ある KMS キーで復号する必要がある。キーポリシーや IAM ポリシーを書き換えずに権限を渡し、終わったら確実に消したい。作成直後から待たずに使いたい。最も適切な方法はどれか。",
+      "choices": [
+        "バッチのロールに kms:* を付けた IAM ポリシーを付け、2 時間後に外す",
+        "バッチのロールを受け取り手、Decrypt だけを操作にしたグラントを作り、返ってきたグラントトークンを API に添えて使い、終わったら retire する",
+        "キーポリシーに Principal \"*\" の許可を 2 時間だけ追加する",
+        "キーを一度無効化し、バッチの開始時に有効化する"
+      ],
+      "correct": 1,
+      "explanation": "グラントはポリシーを触らずに必要な操作だけを渡し、retire や revoke で消せます。反映には結果整合性による遅れがありますが、CreateGrant が返すグラントトークンを添えればすぐに使えます。IAM での kms:* やキーポリシーの Principal \"*\" は最小権限に反し、キーの無効化は権限の制御になりません。"
+    },
+    {
+      "kind": "essay",
+      "question": "次の状況で、ロール OrderApp(アカウント 111122223333)が KMS キー K で kms:Decrypt を呼んだときに成功するかを判定し、理由を説明してください。キー K のキーポリシーには、Principal がアカウント 111122223333 の root で kms:* を許可する文と、OrderApp を Principal として kms:Decrypt を Deny する文がある。OrderApp の IAM ポリシーは、キー K の ARN に kms:Decrypt を許可している。あわせて、Deny の文を消した場合はどうなるかも答えてください(200〜400 字)。",
+      "answer": "失敗します。KMS ではキーポリシーが入り口で、Principal がアカウントの root の文があるので、このアカウントでは IAM ポリシーでの許可も効きます。OrderApp の IAM ポリシーはキー K への kms:Decrypt を許可しているので、許可の条件そのものは満たしています。しかし、キーポリシーに OrderApp への kms:Decrypt の明示的な拒否があります。IAM の評価ロジックでは、どこかに明示的な拒否があれば、ほかの許可より優先されるので、結果は拒否です。Deny の文を消した場合は、キーポリシーがアカウントへの委任を許し、IAM ポリシーがキー ARN を指定して許可しているので、成功します。SCP や権限境界などで拒否されていないことが前提です。",
+      "rubric": [
+        "結果を「失敗(拒否)」と判定している",
+        "明示的な拒否が許可より優先されることを理由に挙げている",
+        "Principal がアカウントの root の文が IAM ポリシーへの委任であることを説明している",
+        "Deny を消すとキーポリシーの委任と IAM の許可で成功すると述べている"
+      ],
+      "explanation": "KMS の判定は「キーポリシーが入り口」「明示的な拒否が最優先」の 2 つで決まります。委任の文と IAM の許可がそろっても、Deny が 1 つあれば負けです。",
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0
+    }
+  ]
+}
