@@ -1,0 +1,1 @@
+Web サービスの入口(エッジ)を CloudFront 1 つにまとめ、OAC と VPC オリジンでオリジンを直接たたかせない形から始めます。AWS WAF のルールの JSON とログの 1 件を 1 行ずつ読み、マネージドルールとレートベースルール、Shield Standard と Advanced で Web アプリへの攻撃と DDoS に備えます。最後に、Route 53 Resolver DNS Firewall で、DNS を抜け道にした持ち出しや指令サーバーとの連絡を止めます。

@@ -1,0 +1,92 @@
+{
+  "lesson": 11,
+  "chapter": 1,
+  "title": "CloudFront と OAC — オリジンを直接たたかせない",
+  "priority": "🔴",
+  "text": "### 基礎: 入口を 1 つにしないと守りは素通りされる\nWeb サービスには、利用者がアクセスする**入口**と、本物のデータや処理がある**オリジン**(配信元のサーバー。S3 のバケットや ALB など)があります。AWS では入口に **CloudFront**(世界中の拠点から配信する CDN。L8 で TLS の終端として見た)を置くのが定番です。CloudFront の拠点を**エッジロケーション**(利用者に近い場所にある配信拠点)と呼び、利用者に近い「縁(エッジ)」で通信を受けるので、このレッスンの題名は「ネットワークエッジのセキュリティ」です。\n\nエッジに守りを集めるのには理由があります。CloudFront には、ch02 で学ぶ WAF(Web の要求の中身を見て止める仕組み)、ch03 で学ぶ Shield(DDoS 攻撃への備え)、地域制限、署名付き URL などを付けられます。ところが、**オリジンをインターネットから直接たたけると、こうした守りはすべて素通り**されます。\n\n#### 実際に起きる事故\nある会社が、画像を S3 に置き、CloudFront で配信していました。CloudFront には WAF と地域制限を付けています。ただ、S3 のバケットは「CloudFront から読めるように」と公開のままでした。\n\n| 時刻 | 起きたこと |\n|---|---|\n| 10:00 | 攻撃者がページの HTML から画像の URL を見て、バケット名 `img-example-prod` を知る |\n| 10:05 | `https://img-example-prod.s3.ap-northeast-1.amazonaws.com/` を直接たたき、地域制限も WAF も通らずに画像を取得する |\n| 10:20 | 有料会員向けの画像(署名付き URL で守っていたもの)も、S3 の URL なら署名なしで読めると気づく |\n| 翌日 | S3 からの大量のデータ転送で料金が跳ね上がる |\n\nALB をオリジンにする場合も同じです。インターネット向けの ALB は誰でも名前を引けるので、攻撃者は CloudFront を飛ばして ALB に大量の要求を送れます。\n\nこの章の原則は 1 つです。**オリジンには、自分の CloudFront からしか届かないようにする**。S3 には OAC、ALB などには VPC オリジンかヘッダーの照合を使います。\n\n### AWS での仕組み: CloudFront の部品\n| 部品 | 役割 |\n|---|---|\n| ディストリビューション | CloudFront の設定の単位。`d111111abcdef8.cloudfront.net` のような名前を持つ。ID は `EDFDVBD6EXAMPLE` のような値 |\n| オリジン | 要求を最終的に取りに行く先。S3 のバケット、ALB、API Gateway など |\n| ビヘイビア(キャッシュビヘイビア) | URL のパスごとの扱い。`/api/*` は ALB へ、それ以外は S3 へ、のように振り分け、キャッシュや HTTPS の扱いを決める |\n| エッジロケーション | 利用者の要求を受け、キャッシュから返すか、オリジンへ取りに行く拠点 |\n\nCloudFront に付けられる守りの主なものです。\n\n| 機能 | 何を守るか | 詳しくは |\n|---|---|---|\n| ビューワープロトコルポリシー | 利用者との通信を HTTPS にそろえる | L8 |\n| 地域制限(geo restriction) | 国単位で配信を許可・拒否する | この章 |\n| 署名付き URL・署名付き Cookie | 有料コンテンツなど、期限付きで特定の人だけに配る | この章 |\n| AWS WAF | 要求の中身を見て攻撃を止める | ch02 |\n| Shield Standard | 大量の通信による攻撃(DDoS)を自動で吸収する。追加料金なし | ch03 |\n\n署名付き URL は、URL に有効期限と署名(L4 で見た、秘密鍵で作る改ざん検知の値)を付け、CloudFront が公開鍵で確かめる仕組みです。署名のない要求や期限切れの要求は CloudFront が 403 で断ります。ただし、これもオリジンを直接たたかれたら効きません。\n\n### AWS での仕組み: OAC で S3 を守る\n**OAC(オリジンアクセスコントロール)** は、CloudFront が S3 へ要求するたびに **SigV4 の署名**(L2 で見た、AWS の API を呼ぶときの身元の証明)を付け、S3 側は「この署名はあの CloudFront のディストリビューションからのものか」をバケットポリシーで確かめる仕組みです。バケットはパブリックアクセスブロック(L7 で見た、公開を止める設定)をオンのまま、非公開にできます。\n\n#### OAC を作る\n```bash\naws cloudfront create-origin-access-control \\\n  --origin-access-control-config \\\n  Name=img-oac,SigningProtocol=sigv4,SigningBehavior=always,OriginAccessControlOriginType=s3\n```\n\n| 部分 | 意味 |\n|---|---|\n| `Name=img-oac` | OAC の名前 |\n| `SigningProtocol=sigv4` | 署名の方式。SigV4 |\n| `SigningBehavior=always` | オリジンへの要求に必ず署名する。公式ドキュメントの推奨。このときだけ CloudFront と S3 の間は必ず HTTPS になる |\n| `OriginAccessControlOriginType=s3` | オリジンの種類 |\n\n出力(主な部分)は次のとおりです。`Id` をディストリビューションのオリジンの設定 `OriginAccessControlId` に入れて使います。\n\n```json\n{\n    \"Location\": \"https://cloudfront.amazonaws.com/2020-05-31/origin-access-control/E2QWRUHEXAMPLE\",\n    \"ETag\": \"ETVPDKIKX0DER\",\n    \"OriginAccessControl\": {\n        \"Id\": \"E2QWRUHEXAMPLE\",\n        \"OriginAccessControlConfig\": {\n            \"Name\": \"img-oac\",\n            \"SigningProtocol\": \"sigv4\",\n            \"SigningBehavior\": \"always\",\n            \"OriginAccessControlOriginType\": \"s3\"\n        }\n    }\n}\n```\n\n`SigningBehavior` にはほかに `never`(署名しない。バケットが公開でないと読めない)と `no-override`(利用者の要求に `Authorization` ヘッダーがあればそれを渡し、なければ署名する)がありますが、普通は `always` にします。\n\n#### バケットポリシーを 1 行ずつ読む\n公式ドキュメントの形に沿った、読み取りだけを許すバケットポリシーです。\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Sid\": \"AllowCloudFrontServicePrincipalReadOnly\",\n      \"Effect\": \"Allow\",\n      \"Principal\": { \"Service\": \"cloudfront.amazonaws.com\" },\n      \"Action\": \"s3:GetObject\",\n      \"Resource\": \"arn:aws:s3:::img-example-prod/*\",\n      \"Condition\": {\n        \"StringEquals\": {\n          \"AWS:SourceArn\": \"arn:aws:cloudfront::111122223333:distribution/EDFDVBD6EXAMPLE\"\n        }\n      }\n    }\n  ]\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `\"Effect\": \"Allow\"` | 許可の文(L3 で見た) |\n| `\"Principal\": { \"Service\": \"cloudfront.amazonaws.com\" }` | 誰に: CloudFront というサービス。特定の IAM ユーザーではなく、サービスプリンシパル(AWS のサービス自体を表す主体) |\n| `\"Action\": \"s3:GetObject\"` | 何を: オブジェクトの読み取りだけ。一覧(`s3:ListBucket`)や書き込みは許さない |\n| `\"Resource\": \"arn:aws:s3:::img-example-prod/*\"` | どれに: このバケットの中のすべてのオブジェクト(ARN は L2 で見た) |\n| `\"AWS:SourceArn\"` | 条件: 要求の元になったディストリビューションの ARN が、自分の `EDFDVBD6EXAMPLE` と一致するときだけ |\n\n最後の条件が肝です。`Principal` が `cloudfront.amazonaws.com` なのは、**どのアカウントの CloudFront でも同じ**です。条件がないと、攻撃者が自分のアカウントでディストリビューションを作り、あなたのバケットをオリジンに指定すれば読めてしまいます。この問題を**混乱した代理(confused deputy)**(権限を持つサービスが、別の人の頼みでその権限を使ってしまう問題)と呼び、`AWS:SourceArn` で依頼元を自分のディストリビューションに限って防ぎます。\n\n#### 3 通りのアクセスの結果\n| 要求 | 経路 | 結果 |\n|---|---|---|\n| 利用者が `https://d111111abcdef8.cloudfront.net/logo.png` を開く | 自分の CloudFront が署名して S3 へ | 200 で画像が返る |\n| 攻撃者が `https://img-example-prod.s3.ap-northeast-1.amazonaws.com/logo.png` を直接開く | 署名なし。公開も許可もない | 403 |\n| 攻撃者が自分のディストリビューション(`E9ATTACKEREX`)のオリジンにこのバケットを指定 | 署名はあるが `SourceArn` が違う | 403 |\n\n直接たたいたときの応答は次のような形です。\n\n```text\n$ curl -s -o /dev/null -w \"%{http_code}\\n\" https://img-example-prod.s3.ap-northeast-1.amazonaws.com/logo.png\n403\n```\n\n`curl` は URL に要求を送るコマンドで、`-o /dev/null` は本文を捨てる、`-w \"%{http_code}\\n\"` は HTTP の状態コードだけを表示する、という指定です。\n\n#### SSE-KMS で暗号化したバケットの場合\nオブジェクトを SSE-KMS(L7 で見た、KMS のキーで暗号化する方式)で保存しているなら、バケットポリシーだけでは足りません。CloudFront が復号できるよう、**KMS のキーポリシー**(L9 で見た)にも次の文を足します。\n\n```json\n{\n    \"Sid\": \"AllowCloudFrontServicePrincipalSSE-KMS\",\n    \"Effect\": \"Allow\",\n    \"Principal\": { \"Service\": \"cloudfront.amazonaws.com\" },\n    \"Action\": [\"kms:Decrypt\", \"kms:Encrypt\", \"kms:GenerateDataKey*\"],\n    \"Resource\": \"*\",\n    \"Condition\": {\n        \"StringEquals\": {\n            \"AWS:SourceArn\": \"arn:aws:cloudfront::111122223333:distribution/EDFDVBD6EXAMPLE\"\n        }\n    }\n}\n```\n\n読むだけなら主に `kms:Decrypt` が使われます。ここでも `AWS:SourceArn` で自分のディストリビューションに限ります。忘れると、バケットポリシーは正しいのに CloudFront 経由で 403 になります。\n\n#### OAI との違い\nOAC の前は **OAI(オリジンアクセスアイデンティティ)** という仕組みでした。公式ドキュメントでは OAI はレガシー(古い方式)とされ、OAC が推奨です。\n\n| 項目 | OAC | OAI(レガシー) |\n|---|---|---|\n| SSE-KMS のオブジェクト | 使える | 使えない |\n| PUT・DELETE などの書き込み | 使える | 制限がある |\n| 新しいリージョンのバケット | 使える | 使えないリージョンがある |\n| バケットポリシーの Principal | `cloudfront.amazonaws.com` + `AWS:SourceArn` | OAI 専用の ARN |\n\n移行するときは、バケットポリシーに OAI と OAC の両方を許す文を一時的に並べ、ディストリビューションを OAC に切り替えてから OAI の文を消します。こうすると移行中も配信が止まりません。\n\n#### OAC が使えない場合\nS3 の**静的ウェブサイトホスティング**のエンドポイント(`img-example-prod.s3-website-ap-northeast-1.amazonaws.com` のような名前)をオリジンにすると、CloudFront はそれを普通の Web サーバー(カスタムオリジン)として扱うので、OAC は使えません。そのままではバケットを公開する必要があります。トップページの表示(`/` で `index.html` を返す)が目的なら、普通の S3 のエンドポイントと OAC を使い、CloudFront の「デフォルトルートオブジェクト」の設定で `index.html` を指定します。\n\n### AWS での仕組み: ALB などのカスタムオリジンを守る\nALB や EC2 には SigV4 の署名を確かめる仕組みがないので、OAC とは別の方法を使います。\n\n#### 方法 A: VPC オリジン\n**VPC オリジン**は、ALB・NLB・EC2 を**プライベートサブネット**(インターネットから直接届かないサブネット。L10 で見た)に置いたまま、CloudFront からだけ届くようにする機能です。CloudFront が VPC の中にサービス管理の ENI(L10 で見たネットワークの差し込み口)を作り、そこから私的な経路でオリジンに届けます。オリジンにはグローバル IP がないので、インターネットからは直接たたけません。\n\n公式ドキュメントでの主な前提と制約です(最新は公式ドキュメントで確認してください)。\n\n- VPC にはインターネットゲートウェイが必要です(通信の経路には使われません)\n- オリジンの SG では、CloudFront が作るサービス管理の SG(`CloudFront-VPCOrigins-Service-SG`)か、後で説明するマネージドプレフィックスリストからの受信を許します。前者のほうが、自分のディストリビューションだけに絞れるので厳しい設定です\n- Gateway Load Balancer と、TLS リスナーの NLB はオリジンにできません\n- 対応しているリージョンに限られます\n\n#### 方法 B: プレフィックスリスト + 秘密のヘッダー\nALB をインターネット向けのまま使う、昔からの方法です。2 段で絞ります。\n\n1 段目は、ALB の SG の受信元に、AWS が管理する **CloudFront のマネージドプレフィックスリスト** `com.amazonaws.global.cloudfront.origin-facing`(CloudFront がオリジンへ接続するときの IP の範囲を AWS が更新し続ける一覧)を指定します。これで、CloudFront 以外の IP からは ALB に届きません。\n\nただし、これだけでは足りません。**他人のアカウントの CloudFront も同じ IP の範囲から来る**からです。攻撃者は自分のディストリビューションのオリジンにあなたの ALB を指定すれば、SG を通れます。\n\nそこで 2 段目に、CloudFront のオリジンの設定で**カスタムヘッダー**(CloudFront がオリジンへの要求に付け足すヘッダー)として推測できない値を付け、ALB で照合します。\n\n```bash\naws elbv2 create-rule \\\n  --listener-arn arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener/app/web-alb/50dc6c495c0c9188/f2f7dc8efc522ab2 \\\n  --priority 1 \\\n  --conditions '[{\"Field\":\"http-header\",\"HttpHeaderConfig\":{\"HttpHeaderName\":\"X-Origin-Verify\",\"Values\":[\"8f2c1e7a9b4d4c3e\"]}}]' \\\n  --actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/web-tg/6d0ecf831eec9f09\n```\n\n| 部分 | 意味 |\n|---|---|\n| `create-rule` | ALB のリスナー(待ち受けの設定)にルールを足す |\n| `--priority 1` | ルールの評価の順番。小さいほど先 |\n| `\"Field\":\"http-header\"` | 条件の種類: HTTP のヘッダーで判断する |\n| `\"HttpHeaderName\":\"X-Origin-Verify\"` | 見るヘッダーの名前(名前は自分で決める) |\n| `\"Values\":[\"8f2c1e7a9b4d4c3e\"]` | このヘッダーの値が一致したら |\n| `--actions Type=forward,...` | アプリのターゲットグループへ転送する |\n\nあわせて、リスナーの**デフォルトアクション**(どのルールにも当たらないときの動作)を「固定の応答で 403 を返す」にします。ヘッダーのない要求、値が違う要求は、アプリに届かずに 403 で終わります。\n\nヘッダーの値は合言葉なので、Secrets Manager(L9)に置いて定期的に入れ替えます。入れ替えるときは、ALB 側で一時的に新旧 2 つの値を許可し、CloudFront を新しい値に変えてから古い値を消します。照合は ALB のリスナールールの代わりに、ALB に付けた WAF のルールで行うこともできます。\n\n### 構成図: オリジンを CloudFront の後ろに隠す\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n    group priv(aws:subnet-private)[Private subnet] in vpc\n\n    service users(aws:users)[Users]\n    service cf(aws:cloudfront)[CloudFront] in cloud\n    service s3(aws:s3)[Image Bucket] in cloud\n    service alb(aws:alb)[Internal ALB] in priv\n    service app(aws:ec2)[App EC2] in priv\n\n    users:R --> L:cf\n    cf:T --> B:s3\n    cf:R --> L:alb\n    alb:R --> L:app\n```\n\n- Users から CloudFront: 利用者が触れる入口はここだけです\n- CloudFront から Image Bucket: OAC で署名して読みます。バケットは非公開のままで、バケットポリシーの `AWS:SourceArn` で自分のディストリビューションに限ります\n- CloudFront から Internal ALB: VPC オリジンで、プライベートサブネットの ALB に私的な経路で届けます。ALB にはインターネットからの道がありません\n\n### 実務での使い方と判断\n#### カスタムオリジンの守り方の比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. VPC オリジン | ALB・NLB・EC2 をプライベートに置き、CloudFront から私的な経路で届ける | オリジンにインターネットからの道がない。合言葉の管理が要らない | 対応リージョン・オリジンの種類に制約。既存の構成は移行の手間 | 低い | 追加料金なし(公式の料金ページで確認) |\n| B. プレフィックスリスト + 秘密のヘッダー | SG で CloudFront の IP に絞り、ALB でヘッダーを照合 | どのリージョン・構成でも使える | ヘッダーの値の管理と入れ替えが要る。ALB 自体はインターネットに見えている | 中 | 追加料金なし(WAF で照合するなら WAF の料金) |\n| C. SG を 0.0.0.0/0 のまま | 何もしない | 手間がない | CloudFront の守りが素通りされる | なし | なし |\n\nS3 のオリジンは、迷わず OAC です。\n\n#### よくある事故\n- **OAC を設定したが、バケットを公開のまま残す**: 以前の `\"Principal\": \"*\"` の文や、パブリックアクセスブロックのオフが残っていて、直接読めます。OAC に切り替えたら、公開の文を消し、ブロックをオンに戻します\n- **`AWS:SourceArn` の条件を書かない**: どのアカウントの CloudFront からでも読めます\n- **SSE-KMS のキーポリシーを忘れる**: CloudFront 経由で 403 になり、慌ててバケットを公開してしまう二次事故につながります\n- **プレフィックスリストだけで安心する**: 他人の CloudFront からは届きます\n- **合言葉のヘッダーをソースコードに直書きし、入れ替えない**: 漏れたら終わりです\n- **オリジンの ALB の DNS 名を外に出す**: エラーページやログに ALB の名前が出ていると、攻撃者に場所を教えることになります\n\n#### プロならどう決めるか\n新しく作るなら、S3 は OAC、ALB・EC2 は VPC オリジンでプライベートサブネットに置きます。これで「オリジンをインターネットから見えなくする」ことが設定 1 つで済みます。既存の公開 ALB で VPC オリジンに移れない場合は、プレフィックスリストと秘密のヘッダーの 2 段にし、ヘッダーの値は Secrets Manager で入れ替えます。どの案でも、最後に「オリジンの URL を直接たたいて 403 になるか」を自分で確かめます。\n\n### 試験ではこう問われる\n「S3 の静的コンテンツを CloudFront 経由でだけ配信し、バケットへの直接アクセスを防ぐ」は OAC とバケットポリシーの `AWS:SourceArn` です。「SSE-KMS で暗号化したオブジェクトが CloudFront 経由で 403」はキーポリシーの不足です。「ALB への直接アクセスを防ぐ」は、新しい選択肢として VPC オリジン、従来の答えとしてカスタムヘッダーの照合と CloudFront のマネージドプレフィックスリストの組み合わせが出ます。「プレフィックスリストだけ」の選択肢は、他人の CloudFront を防げないので最も適切にはなりません。\n\n### まとめ\n- CloudFront に WAF や地域制限を付けても、オリジンを直接たたけると素通りされます。入口を CloudFront だけにします\n- S3 は OAC で守ります。バケットポリシーで `cloudfront.amazonaws.com` に許可し、`AWS:SourceArn` で自分のディストリビューションに限ります。SSE-KMS ならキーポリシーにも同じ条件で許可を足します\n- ALB・EC2 は VPC オリジンでプライベートサブネットに置くのが最も手間が少なく、既存の公開 ALB はプレフィックスリストと秘密のヘッダーの 2 段で守ります\n- S3 のウェブサイトエンドポイントでは OAC が使えません。OAI はレガシーで、新しく作るなら OAC です\n",
+  "quiz": [
+    {
+      "question": "S3 バケット `media-prod` を CloudFront のディストリビューション `E1AAAAEXAMPLE` の OAC 経由でだけ配信したい。バケットポリシーの Principal は `{\"Service\": \"cloudfront.amazonaws.com\"}` にした。ほかのアカウントの CloudFront からこのバケットを読まれないようにするため、ポリシーに加えるべき最も適切なものはどれか。",
+      "choices": [
+        "`aws:SecureTransport` が `true` であることを求める条件",
+        "`AWS:SourceArn` が自分のディストリビューションの ARN と一致することを求める条件",
+        "`aws:SourceIp` に CloudFront のマネージドプレフィックスリストの範囲を書く条件",
+        "Action を `s3:GetObject` から `s3:*` に広げ、Deny の文を別に足す"
+      ],
+      "correct": 1,
+      "explanation": "サービスプリンシパル `cloudfront.amazonaws.com` は、どのアカウントの CloudFront でも同じです。`AWS:SourceArn` で依頼元を自分のディストリビューションに限ると、他人のディストリビューションからの要求は 403 になります。SecureTransport は通信の暗号化の条件で、依頼元は区別しません。CloudFront の IP の範囲はほかの利用者とも共通なので、IP では区別できません。"
+    },
+    {
+      "question": "CloudFront + OAC で S3 のオブジェクトを配信している。バケットのデフォルトの暗号化を、カスタマーマネージドキーによる SSE-KMS に変えたところ、新しく置いたオブジェクトだけ CloudFront 経由で 403 になった。バケットポリシーは変えていない。最も適切な対処はどれか。",
+      "choices": [
+        "バケットのパブリックアクセスブロックをオフにし、オブジェクトを公開する",
+        "OAC を削除して OAI に切り替える",
+        "CloudFront のビューワープロトコルポリシーを https-only に変える",
+        "KMS のキーポリシーに、`cloudfront.amazonaws.com` に `kms:Decrypt` などを許可し、`AWS:SourceArn` で自分のディストリビューションに限る文を足す"
+      ],
+      "correct": 3,
+      "explanation": "SSE-KMS のオブジェクトを返すには、CloudFront がキーで復号できなければなりません。キーポリシーに CloudFront のサービスプリンシパルを、SourceArn の条件付きで許可します。公開は守りを捨てる二次事故です。OAI は SSE-KMS に対応していません。ビューワー側のプロトコルは、オリジンでの復号とは関係ありません。"
+    },
+    {
+      "question": "新しい Web アプリを作る。CloudFront の後ろに ALB と EC2 を置き、ALB へのインターネットからの直接アクセスを確実に防ぎたい。合言葉の管理などの運用負荷は最小にしたい。最も適切なものはどれか。",
+      "choices": [
+        "ALB と EC2 をプライベートサブネットに置き、CloudFront の VPC オリジンとして登録する",
+        "インターネット向けの ALB の SG に CloudFront のマネージドプレフィックスリストだけを許可する",
+        "インターネット向けの ALB に、CloudFront が付けるカスタムヘッダーを照合するリスナールールを作り、値を毎月手で入れ替える",
+        "ALB の前に NAT ゲートウェイを置き、CloudFront からの要求を NAT 経由で受ける"
+      ],
+      "correct": 0,
+      "explanation": "VPC オリジンなら ALB をプライベートサブネットに置けるので、インターネットからの道そのものがありません。合言葉の管理も不要で、運用負荷が最も低い案です。プレフィックスリストだけでは他人の CloudFront から届きます。ヘッダー照合は有効ですが、値の管理が要ります。NAT ゲートウェイは外向きの通信のためのもので、外からの受信の入口にはなりません。"
+    },
+    {
+      "question": "インターネット向けの ALB の SG の受信元を、0.0.0.0/0 から CloudFront のマネージドプレフィックスリスト `com.amazonaws.global.cloudfront.origin-facing` に変えた。この状態で残っている主なリスクはどれか。",
+      "choices": [
+        "CloudFront のエッジの IP が変わるたびに、SG を手で直さないと通信が止まる",
+        "プレフィックスリストは IPv6 の範囲しか含まないので、IPv4 の要求が通らない",
+        "攻撃者が自分のアカウントの CloudFront のオリジンにこの ALB を指定すれば、SG を通って届く",
+        "CloudFront からの要求が、SG のステートフルな動きによって戻りで止められる"
+      ],
+      "correct": 2,
+      "explanation": "このプレフィックスリストは CloudFront 全体の IP の範囲なので、他人のディストリビューションからの要求も同じ範囲から来ます。秘密のカスタムヘッダーの照合か VPC オリジンで、自分のディストリビューションだけに絞ります。プレフィックスリストは AWS が更新し続けるので手で直す必要はなく、IPv4 用のリストがこれです。SG はステートフルなので戻りは止まりません。"
+    },
+    {
+      "question": "S3 の静的ウェブサイトホスティングのエンドポイントを CloudFront のオリジンにしている。バケットを非公開にして OAC で守りたいが、`/` にアクセスしたら `index.html` を返す動きは保ちたい。最も適切なものはどれか。",
+      "choices": [
+        "ウェブサイトエンドポイントのまま OAC を設定し、バケットポリシーに SourceArn の条件を書く",
+        "ウェブサイトエンドポイントのまま OAI を設定する",
+        "バケットを公開のままにし、CloudFront に地域制限を付ける",
+        "オリジンを S3 の普通の(REST の)エンドポイントに変えて OAC を付け、CloudFront のデフォルトルートオブジェクトに `index.html` を指定する"
+      ],
+      "correct": 3,
+      "explanation": "ウェブサイトエンドポイントは CloudFront からはカスタムオリジン扱いになり、OAC も OAI も使えません。普通の S3 のエンドポイントに変えれば OAC で非公開にでき、`/` の表示はデフォルトルートオブジェクトで補えます。公開のままでは直接たたかれ、地域制限も素通りです。"
+    },
+    {
+      "question": "OAC と OAI(オリジンアクセスアイデンティティ)の説明として正しいものはどれか。",
+      "choices": [
+        "OAI は OAC の後継で、SSE-KMS で暗号化したオブジェクトに対応している",
+        "OAC は SSE-KMS のオブジェクトや PUT などの書き込みにも対応し、公式ドキュメントでは OAI より推奨されている",
+        "OAC を使うと、バケットのパブリックアクセスブロックをオフにする必要がある",
+        "OAC は ALB や EC2 のオリジンにも署名を付け、ALB が署名を確かめる"
+      ],
+      "correct": 1,
+      "explanation": "OAC は OAI の後継で、SSE-KMS・書き込み・新しいリージョンに対応し、公式ドキュメントで推奨されています。OAC ならバケットは非公開のままで、パブリックアクセスブロックはオンにしておけます。ALB は SigV4 の署名を確かめないので、ALB には VPC オリジンやヘッダー照合を使います。"
+    },
+    {
+      "kind": "essay",
+      "question": "「CloudFront に WAF を付けたから、オリジンの守りはもう要らない」と言う同僚に、それが誤りである理由と、オリジンが S3 の場合・ALB の場合にそれぞれ何をすべきかを、何も見ずに 1 分で説明するつもりで書いてください(200〜400 字)。",
+      "answer": "WAF や地域制限、署名付き URL は CloudFront を通った要求にしか効きません。S3 や ALB の URL を直接たたかれると、それらをすべて素通りされます。だから入口を CloudFront だけにし、オリジンには自分の CloudFront からしか届かないようにします。S3 なら OAC を使い、バケットは非公開のままにします。バケットポリシーで cloudfront.amazonaws.com に s3:GetObject を許可し、AWS:SourceArn で自分のディストリビューションに限ります。条件がないと他人の CloudFront から読まれます。SSE-KMS ならキーポリシーにも同じ条件で許可を足します。ALB なら、VPC オリジンでプライベートサブネットに置くのが最も簡単です。既存の公開 ALB なら、SG を CloudFront のマネージドプレフィックスリストに絞り、さらに CloudFront が付ける秘密のヘッダーを ALB で照合します。最後に、オリジンを直接たたいて 403 になることを確かめます。",
+      "rubric": [
+        "CloudFront の守り(WAF など)はオリジンを直接たたかれると素通りされる、という理由を述べている",
+        "S3 は OAC を使い、バケットポリシーの AWS:SourceArn で自分のディストリビューションに限ることに触れている",
+        "ALB は VPC オリジン、またはプレフィックスリストと秘密のヘッダーの照合で守ることに触れている",
+        "プレフィックスリストだけでは他人の CloudFront を防げない、SSE-KMS のキーポリシー、直接アクセスの確認などの注意点に 1 つ以上触れている"
+      ],
+      "explanation": "エッジの守りは「入口が 1 つ」であって初めて効きます。S3 は署名の照合(OAC)、ALB は経路を隠す(VPC オリジン)か合言葉の照合で、入口を CloudFront に限ります。",
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0
+    }
+  ]
+}

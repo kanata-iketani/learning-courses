@@ -1,0 +1,92 @@
+{
+  "lesson": 11,
+  "chapter": 4,
+  "title": "Route 53 Resolver DNS Firewall",
+  "priority": "🔴",
+  "text": "### 基礎: DNS は「外への抜け道」になりうる\n**DNS** は、`www.example.com` のような名前を `192.0.2.10` のような IP アドレスに変える仕組みです(名前解決)。名前を問い合わせる側を**クライアント**、代わりに世界中の DNS サーバーをたどって答えを見つけてくる係を**リゾルバー**と呼びます。\n\nVPC の中の EC2 は、普通は VPC に最初からある **Route 53 Resolver**(VPC の DNS のリゾルバー。VPC の範囲の先頭 + 2 の IP、たとえば `10.0.0.2` で待ち受ける)に問い合わせます。`dig` コマンド(DNS に問い合わせて結果を表示するツール)で試すと、次のようになります。\n\n```text\n$ dig +short www.example.com\n192.0.2.10\n```\n\n`+short` は答えの IP だけを表示する指定です。\n\nここに落とし穴があります。**インターネットに出る道(NAT ゲートウェイなど)がないプライベートサブネットの EC2 でも、Resolver がインターネットの名前を代わりに解決してくれます**。L10 の SG や Network Firewall で外向きの通信を止めても、DNS の問い合わせは Resolver を通って外の DNS サーバーまで届くのです。攻撃者はこれを使います。\n\n| 手口 | 何をするか | 例 |\n|---|---|---|\n| 指令サーバーへの接続 | マルウェアが、攻撃者の指令サーバー(C2。乗っ取った機械に命令を送るサーバー)の名前を引く | `update-check.evil.example` |\n| DNS トンネリング | 盗んだデータを名前の一部に埋め込んで問い合わせる。攻撃者は自分のドメインの DNS サーバーで、問い合わせの名前を受け取って読む | `Y2FyZD00MTEx.x1.evil.example`(`Y2FyZD00MTEx` は `card=4111` を Base64 という方式で文字に直したもの) |\n| DGA(ドメイン生成アルゴリズム) | マルウェアが日付などから毎日違うドメイン名を大量に作り、そのうち攻撃者が登録したものに接続する | `qk3v8zt1wq.example`、`p0xm2rf7ad.example` …… |\n\n#### 実際に起きる事故\n決済の処理をするサーバーをプライベートサブネットに置き、NAT ゲートウェイも付けず、「インターネットには出られないから安全」と考えていました。ところが、サーバーに入り込んだマルウェアが、カード番号を少しずつ名前に埋め込んで 1 秒に数十回問い合わせました。問い合わせは VPC の Resolver を通って攻撃者の DNS サーバーに届き、数日で数千件のカード番号が持ち出されました。外向きの HTTPS は止めていたので、誰も気づきませんでした。\n\nこれを止めるのが、**Route 53 Resolver DNS Firewall** です。VPC の Resolver が答える前に、問い合わせの名前を検査して、許可・警告・拒否を決めます。\n\n### AWS での仕組み: DNS Firewall の部品\n| 部品 | 役割 |\n|---|---|\n| ドメインリスト | 名前の一覧。自分で作るものと、AWS が更新し続けるマネージドドメインリストがある |\n| ルール | 優先度、ドメインリスト(または後で説明する高度な検知)、アクションの組。番号の小さいルールから評価する |\n| ルールグループ | ルールの集まり。VPC に関連付けて使う。RAM(L10 で見た、リソースを他のアカウントと共有するサービス)で共有もできる |\n| 関連付け | ルールグループを VPC に結び付ける。1 つの VPC に複数のグループを、優先度を付けて関連付けられる |\n| VPC の設定(失敗時の動き) | DNS Firewall が応答しないときに、通すか止めるか |\n\nドメインリストの名前は、`evil.example` と書くとその名前だけ、`*.evil.example` と書くとそのサブドメイン(`a.evil.example` など)に当たります。`*` だけなら、すべての名前に当たります。\n\n#### アクションと拒否の応答\n| アクション | 動作 |\n|---|---|\n| ALLOW | 検査をやめて通す |\n| ALERT | 通すが、ログに警告として残す |\n| BLOCK | 止めて、決めた応答を返し、ログに残す |\n\nBLOCK の応答は 3 種類から選びます。\n\n| 応答 | クライアントに返る意味 | `dig` で見える状態 |\n|---|---|---|\n| NODATA | 問い合わせは成功したが、答えはない | `status: NOERROR`、`ANSWER: 0` |\n| NXDOMAIN | その名前は存在しない | `status: NXDOMAIN` |\n| OVERRIDE | 決めた別の名前(CNAME。名前の別名の記録)を返す | 警告ページのサーバーの名前などが返る |\n\nOVERRIDE は、社員の PC の通信を「このサイトはブロックされています」という自社のページに案内したいときに使います。TTL(答えを覚えておいてよい秒数)も決められ、既定は 0(覚えない)です。\n\n#### 作ってみる(CLI)\n悪いドメインを止めるルールを作り、VPC に関連付けます。\n\n```bash\naws route53resolver create-firewall-domain-list --name blocked-domains\naws route53resolver update-firewall-domains \\\n  --firewall-domain-list-id rslvr-fdl-1a2b3c4d5e6f7a8b \\\n  --operation ADD --domains \"evil.example\" \"*.evil.example\"\naws route53resolver create-firewall-rule-group --name app-dns-fw\naws route53resolver create-firewall-rule \\\n  --name block-evil --firewall-rule-group-id rslvr-frg-9a8b7c6d5e4f3a2b \\\n  --firewall-domain-list-id rslvr-fdl-1a2b3c4d5e6f7a8b \\\n  --priority 100 --action BLOCK --block-response NXDOMAIN\naws route53resolver associate-firewall-rule-group \\\n  --name app-vpc --firewall-rule-group-id rslvr-frg-9a8b7c6d5e4f3a2b \\\n  --vpc-id vpc-0abc1234def567890 --priority 200\n```\n\n| コマンド・部分 | 意味 |\n|---|---|\n| `create-firewall-domain-list` | 空のドメインリストを作る。ID(`rslvr-fdl-...`)が返る |\n| `update-firewall-domains --operation ADD --domains ...` | リストに名前を足す。ここでは `evil.example` とそのサブドメイン |\n| `create-firewall-rule-group` | ルールグループを作る。ID(`rslvr-frg-...`)が返る |\n| `create-firewall-rule ... --priority 100` | グループにルールを足す。番号の小さいルールから評価する |\n| `--action BLOCK --block-response NXDOMAIN` | 当たったら止め、「存在しない」と答える |\n| `associate-firewall-rule-group --vpc-id ... --priority 200` | グループを VPC に関連付ける。複数のグループがあるときは、関連付けの番号の小さいものから評価する |\n\n関連付けると、その VPC の Resolver を使うすべての問い合わせが検査されます。EC2 側の設定は要りません。\n\n```text\n$ dig update-check.evil.example\n;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 41235\n;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1\n```\n\n`status: NXDOMAIN` が、BLOCK の応答で「存在しない」と返されたことを表します。`ANSWER: 0` は答え(IP)が 0 件であることです。\n\n#### AWS のマネージドドメインリスト\nAWS が脅威の情報から作り、更新し続けるリストです。中身の名前は見られません(攻撃者に回避されないため)。\n\n| リスト | 中身 |\n|---|---|\n| `AWSManagedDomainsMalwareDomainList` | マルウェアの配布などに使われるドメイン |\n| `AWSManagedDomainsBotnetCommandandControl` | ボットネットの指令サーバーのドメイン |\n| `AWSManagedDomainsAggregateThreatList` | マルウェア・ランサムウェア・ボットネット・DNS トンネリングなど複数の種類をまとめたもの(上の 2 つも含む) |\n| `AWSManagedDomainsAmazonGuardDutyThreatList` | GuardDuty(L14 で学ぶ脅威検知サービス)の DNS の検知に使われるドメイン |\n\n試験用の名前も公開されています。たとえば `controldomain1.botnetlist.firewall.route53resolver.us-east-1.amazonaws.com` は、止められていなければ `1.2.3.4` が返り、止められていれば BLOCK の応答が返ります。設定が効いているかを確かめるのに使います。\n\n#### DNS Firewall Advanced\n名前の一覧ではなく、問い合わせの**様子**から怪しいものを見つける上位の機能です。公式ドキュメントでは、問い合わせの文字列・長さ・頻度などを見て、**DGA、辞書型の DGA(辞書の単語をつなげて名前を作るもの)、DNS トンネリング**を検知できます。リストにまだ載っていない新しいドメインにも効くのが強みです。アクションは ALERT と BLOCK で、ALLOW は使えません。誤検知があれば、その名前だけを ALLOW するルールを、より小さい番号で前に置きます。このほか、Web の内容の分類(ギャンブルなど)で止める機能や、実際の問い合わせから許可リストを作る機能も案内されています。最新の機能は公式ドキュメントで確認してください。\n\n#### 失敗したときの動き(fail open・fail closed)\nDNS Firewall 自体が応答できないとき、Resolver がどうするかを VPC ごとに決めます。公式ドキュメントでは、**既定は fail closed**(答えを待てなかった問い合わせを止め、`SERVFAIL`(サーバーの失敗)を返す。安全を優先)です。fail open(`FirewallFailOpen` を有効にする)にすると、検査できないときは通します(可用性を優先)。\n\n#### 許可したものだけを通す構成(ウォールドガーデン)\n決済のサーバーのように、使う名前が決まっている VPC では、「許可リストだけ通し、残りは全部止める」構成が最も強力です。壁で囲った庭にたとえて、ウォールドガーデンと呼ばれます。\n\n| 優先度 | ドメインリスト | アクション |\n|---|---|---|\n| 100 | `*.amazonaws.com`、`pay.example.com`、`*.internal` などの許可リスト | ALLOW |\n| 200 | `*` | BLOCK(NXDOMAIN) |\n\n| 問い合わせ | 当たるルール | 結果 |\n|---|---|---|\n| `secretsmanager.ap-northeast-1.amazonaws.com` | 100 | 通る |\n| `pay.example.com` | 100 | 通る |\n| `Y2FyZD00MTEx.x1.evil.example` | 200 | 止まる(持ち出しを防ぐ) |\n| `ip-10-0-1-15.ap-northeast-1.compute.internal` | 100 | 通る(VPC の中の名前) |\n\n許可リストを作るときは、AWS のサービスの名前、VPC の中の名前(`compute.internal` など)、プライベートホストゾーン(VPC の中だけで使う自社の名前)を忘れないことが大事です。忘れると、Systems Manager のエージェントが動かない、コンテナのイメージが取れない、といった障害になります。まず ALERT で動かし、ログで実際に使っている名前を集めてから BLOCK にします。\n\n### DNS Firewall のログを読む\nDNS Firewall の結果は、**Resolver のクエリログ**(VPC の DNS の問い合わせの記録)に残ります。クエリログは別に設定し、送り先は CloudWatch Logs・S3・Data Firehose から選びます。止めたときの 1 件です(主な項目。値は例)。\n\n```json\n{\n  \"version\": \"1.100000\",\n  \"account_id\": \"111122223333\",\n  \"region\": \"ap-northeast-1\",\n  \"vpc_id\": \"vpc-0abc1234def567890\",\n  \"query_timestamp\": \"2026-11-20T03:10:12Z\",\n  \"query_name\": \"Y2FyZD00MTEx.x1.evil.example.\",\n  \"query_type\": \"TXT\",\n  \"query_class\": \"IN\",\n  \"rcode\": \"NXDOMAIN\",\n  \"answers\": [],\n  \"srcaddr\": \"10.0.1.15\",\n  \"srcport\": \"41922\",\n  \"transport\": \"UDP\",\n  \"srcids\": { \"instance\": \"i-0123456789abcdef0\" },\n  \"firewall_rule_action\": \"BLOCK\",\n  \"firewall_rule_group_id\": \"rslvr-frg-9a8b7c6d5e4f3a2b\",\n  \"firewall_domain_list_id\": \"rslvr-fdl-1a2b3c4d5e6f7a8b\"\n}\n```\n\n| 項目 | この例の値 | 読み方 |\n|---|---|---|\n| `vpc_id` | `vpc-0abc...` | どの VPC からの問い合わせか |\n| `query_name` | `Y2FyZD00MTEx.x1.evil.example.` | 問い合わせた名前。先頭の意味の分からない長い文字列は、トンネリングの疑いが強い |\n| `query_type` | `TXT` | 問い合わせの種類。TXT は任意の文字を返せるので、トンネリングでよく使われる |\n| `rcode` | `NXDOMAIN` | 返した答えの状態。BLOCK の応答を NXDOMAIN にしたので、こうなる |\n| `answers` | 空 | 返した答えの中身 |\n| `srcaddr`、`srcids.instance` | `10.0.1.15`、`i-0123...` | 問い合わせた EC2。調査と隔離(L17)の対象 |\n| `firewall_rule_action` | `BLOCK` | DNS Firewall の判断。ALERT か BLOCK のルールに当たったときだけ出る |\n| `firewall_rule_group_id`、`firewall_domain_list_id` | `rslvr-frg-...`、`rslvr-fdl-...` | どのグループの、どのリストに当たったか |\n\n`version` はログの書式の版です。BLOCK の応答を NODATA にしていれば、`rcode` は `NOERROR` で `answers` が空になります。「`NOERROR` なのに答えがない」のは止められた印、と読めるようにしておきます。\n\n### 構成図: VPC の DNS の出口を守る\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n    group priv(aws:subnet-private)[Private subnet] in vpc\n\n    service app(aws:ec2)[Payment EC2] in priv\n    service dnsfw(aws:res-amazon-route-53-resolver-dns-firewall)[DNS Firewall] in vpc\n    service resolver(aws:res-amazon-route-53-resolver)[Route 53 Resolver] in vpc\n    service net(aws:internet)[Internet DNS]\n    service logs(aws:cloudwatch)[Query Logs] in cloud\n    service fms(aws:aws-firewall-manager)[Firewall Manager] in cloud\n\n    app:R --> L:dnsfw\n    dnsfw:R --> L:resolver\n    resolver:R --> L:net\n    resolver:B --> T:logs\n    fms:T --> B:dnsfw\n```\n\n- Payment EC2 から DNS Firewall: EC2 の問い合わせは、VPC の Resolver が答える前に DNS Firewall で検査されます\n- Route 53 Resolver から Internet DNS: 許可された問い合わせだけが外の DNS サーバーへ解決に行きます\n- Query Logs: クエリログに、ALERT・BLOCK の結果と問い合わせた EC2 が残ります\n- Firewall Manager: 組織の全アカウントの VPC に、共通のルールグループを配ります\n\n### 実務での使い方と判断\n#### DNS とドメインの守りの比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. DNS Firewall | 名前解決の段階で止める | 接続の前に止まる。DNS トンネリングに直接効く。EC2 側の設定が要らない | Resolver を使わない問い合わせは見えない | 低い | 問い合わせの数とドメインの数で課金 |\n| B. Network Firewall のドメインリスト(L10) | 通信の SNI・Host を見て止める | 名前解決の後の通信を止められる | DNS の問い合わせ自体の持ち出しは止めない。ルートの設計が要る | 中 | エンドポイントの時間料金 + データ量 |\n| C. GuardDuty(L14) | DNS のログなどから脅威を見つけて知らせる | 検知の幅が広い。設定が簡単 | 止めない(検知だけ) | 低い | ログの量で課金 |\n\nA・B・C は対立するものではなく重ねます。DNS Firewall で名前の段階で止め、Network Firewall で IP 直打ちなど名前を使わない通信を止め、GuardDuty で全体を見張ります。\n\n#### DNS Firewall が見えないもの\n- **Resolver を使わない問い合わせ**: EC2 の設定を変えて `8.8.8.8` のような外の DNS サーバーに直接聞かれると、DNS Firewall を通りません。SG・NACL・Network Firewall で、インターネット宛ての 53 番ポート(DNS の UDP と TCP)を止めます\n- **DNS over HTTPS(DoH)**: DNS の問い合わせを HTTPS(443 番)の中に入れて送る方式です。Network Firewall で、既知の DoH のサービスのドメインを止めます\n- **IP アドレスへの直接の接続**: 名前を引かずに IP で接続されると、DNS は関係ありません。外向きの通信は L10 の道具で絞ります\n\n#### よくある事故\n- **マネージドリストをいきなり BLOCK にする**: 業務で使う名前が誤って当たり、障害になります。まず ALERT で動かし、ログを見てから BLOCK にします(公式ドキュメントでもこの順を勧めています)\n- **ウォールドガーデンで AWS や VPC の中の名前を許可し忘れる**: Systems Manager・ECR・S3 などが使えなくなります\n- **fail open にしてしまう**: 安全を最優先する VPC で fail open にすると、DNS Firewall が止まったときに素通りになります。決済などは既定の fail closed のままにします\n- **クエリログを取っていない**: 止めた記録も、どの EC2 が問い合わせたかも残らず、調査できません\n- **外への 53 番を開けたまま**: DNS Firewall を迂回されます\n\n#### プロならどう決めるか\nすべての VPC に、AWS のマネージドドメインリスト(まずは `AggregateThreatList`)を BLOCK にしたルールグループを、Firewall Manager で組織全体に配ります。導入時は ALERT で 1〜2 週間ようすを見ます。決済や個人情報を扱う VPC はウォールドガーデンにし、DNS Firewall Advanced の DNS トンネリングと DGA の検知も入れます。クエリログは集中ログ用のアカウント(L13)の S3 に集め、SG・NACL でインターネット宛ての 53 番を閉じて迂回を防ぎます。\n\n### 試験ではこう問われる\n「EC2 が既知の悪いドメインを名前解決するのを防ぐ」「DNS の問い合わせによるデータの持ち出しを防ぐ」は DNS Firewall です(GuardDuty は検知だけで止めない)。「運用負荷を最小に」なら、自分でリストを作るより AWS のマネージドドメインリストです。「許可したドメイン以外の名前解決をすべて止める」は、許可リストを ALLOW にし、より大きい番号で `*` を BLOCK にする構成です。「本番への影響を確かめながら導入」は ALERT です。「DNS Firewall が使えないときも名前解決を止めたくない」は fail open、「安全を優先」は fail closed(既定)です。「組織全体の VPC に配る」は Firewall Manager です。\n\n### まとめ\n- インターネットに出られないサブネットでも、VPC の Resolver が外の名前を解決するので、DNS は持ち出しや指令サーバーとの連絡の抜け道になります\n- DNS Firewall は、ドメインリスト・ルール(優先度とアクション)・ルールグループ・VPC への関連付けでできています。アクションは ALLOW・ALERT・BLOCK、BLOCK の応答は NODATA・NXDOMAIN・OVERRIDE です\n- マネージドドメインリストと DNS Firewall Advanced(DGA・DNS トンネリング)で、自分でリストを保たずに守れます。導入は ALERT から始めます\n- 失敗時の既定は fail closed です。結果は Resolver のクエリログで、`firewall_rule_action` と `srcids` を見て読みます\n- 外の DNS サーバーへの直接の問い合わせや DoH は DNS Firewall を迂回するので、53 番の外向きを閉じ、Network Firewall と重ねます\n",
+  "quiz": [
+    {
+      "question": "多数の VPC の EC2 が、マルウェアの配布やボットネットの指令に使われる既知のドメインを名前解決できないようにしたい。ドメインの一覧を自分で保つ運用負荷は避けたい。最も適切なものはどれか。",
+      "choices": [
+        "Route 53 Resolver DNS Firewall で、AWS のマネージドドメインリストを BLOCK にするルールグループを作り、VPC に関連付ける",
+        "GuardDuty を有効にし、DNS の検知の結果を毎日確認する",
+        "各 EC2 の `/etc/hosts` に、悪いドメインを `0.0.0.0` に向ける行を書く",
+        "Network ACL で、悪いドメインの名前を拒否するルールを書く"
+      ],
+      "correct": 0,
+      "explanation": "DNS Firewall のマネージドドメインリストは AWS が更新し続けるので、名前解決の段階で止められ、一覧を保つ手間もありません。GuardDuty は検知して知らせるだけで、止めません。`/etc/hosts` を全サーバーで保つのは運用負荷が高く、漏れも出ます。NACL は IP とポートしか書けず、名前は扱えません。"
+    },
+    {
+      "question": "NAT ゲートウェイもインターネットゲートウェイへの経路もないプライベートサブネットの EC2 から、`<長いランダムな文字列>.x1.attacker.example` への DNS の問い合わせが大量に出ていることが分かった。データの持ち出しが疑われる。最も適切な対策はどれか。",
+      "choices": [
+        "外への経路がないので、問い合わせは外に届かない。対策は不要である",
+        "EC2 の SG の送信ルールから 443 番を消す",
+        "DNS Firewall で、使う名前だけを ALLOW にし、`*` を BLOCK にする構成にするか、DNS Firewall Advanced の DNS トンネリングの検知を BLOCK で使う",
+        "VPC Flow Logs を有効にして、問い合わせの中身を記録する"
+      ],
+      "correct": 2,
+      "explanation": "外への経路がなくても、VPC の Route 53 Resolver が外の名前を代わりに解決するので、問い合わせの名前に埋め込んだデータは攻撃者の DNS サーバーに届きます。DNS Firewall で名前解決の段階で止めます。443 番を閉じても DNS には関係ありません。Flow Logs は通信の記録で、問い合わせの名前は残らず、止めることもできません。"
+    },
+    {
+      "question": "社内向けの業務システムの VPC で DNS Firewall を使っている。要件は「DNS Firewall 自体に障害が起きても、業務システムの名前解決は止めたくない(可用性を優先)」である。最も適切な設定はどれか。",
+      "choices": [
+        "既定の fail closed のままにする",
+        "VPC の DNS Firewall の設定で fail open(`FirewallFailOpen`)を有効にする",
+        "すべてのルールのアクションを ALERT に変える",
+        "BLOCK の応答を NODATA から NXDOMAIN に変える"
+      ],
+      "correct": 1,
+      "explanation": "fail open にすると、DNS Firewall から答えが返らないときに問い合わせを通します(可用性を優先)。既定の fail closed は、答えが返らない問い合わせを止めて SERVFAIL を返します(安全を優先)。ルールを ALERT にすると、平常時の守りまで失います。BLOCK の応答の種類は障害時の動きと関係ありません。"
+    },
+    {
+      "question": "DNS Firewall でウォールドガーデンを組んだ VPC で、攻撃者が侵入した EC2 の DNS の設定を書き換え、`8.8.8.8` の外の DNS サーバーに直接問い合わせて持ち出しを続けていた。最も適切な追加の対策はどれか。",
+      "choices": [
+        "DNS Firewall の BLOCK の応答を OVERRIDE に変える",
+        "DNS Firewall のルールグループの関連付けの優先度を小さい番号に変える",
+        "DNS Firewall の失敗時の動きを fail closed に変える",
+        "SG・NACL・Network Firewall で、インターネット宛ての 53 番ポート(UDP・TCP)の通信を止める"
+      ],
+      "correct": 3,
+      "explanation": "DNS Firewall が検査するのは、VPC の Route 53 Resolver を通る問い合わせだけです。外の DNS サーバーへの直接の問い合わせは迂回されるので、ネットワークの道具で 53 番の外向きを閉じます。応答の種類、優先度、失敗時の動きを変えても、Resolver を通らない問い合わせには効きません。"
+    },
+    {
+      "question": "Resolver のクエリログに、`\"query_name\": \"qk3v8zt1wq.example.\"`、`\"rcode\": \"NOERROR\"`、`\"answers\": []`、`\"srcids\": {\"instance\": \"i-0abc...\"}`、`\"firewall_rule_action\": \"BLOCK\"` という 1 件があった。正しい読み方はどれか。",
+      "choices": [
+        "`rcode` が `NOERROR` なので、問い合わせは正常に解決され、EC2 は接続先の IP を受け取った",
+        "DNS Firewall が ALERT のルールで警告したが、問い合わせは通した",
+        "DNS Firewall 自体が応答できず、fail closed で止められた",
+        "DNS Firewall の BLOCK のルールに当たり、NODATA の応答(成功だが答えなし)を返した。問い合わせたのは `i-0abc...` の EC2 である"
+      ],
+      "correct": 3,
+      "explanation": "`firewall_rule_action` が `BLOCK` で、`rcode` が `NOERROR` なのに `answers` が空なのは、BLOCK の応答を NODATA にしたときの形です。EC2 は IP を受け取っていません。ALERT なら `firewall_rule_action` は `ALERT` で、答えも返ります。障害で止めた場合は SERVFAIL になります。`srcids.instance` で、調べるべき EC2 が分かります。"
+    },
+    {
+      "question": "本番の VPC に、AWS のマネージドドメインリスト `AWSManagedDomainsAggregateThreatList` を使うルールを入れたい。業務に必要な名前を誤って止める影響を最小にしたい。最初にとるべき最も適切な手順はどれか。",
+      "choices": [
+        "ルールのアクションを ALERT にして入れ、クエリログとメトリクスで当たる問い合わせを確かめてから BLOCK に変える",
+        "BLOCK で入れ、障害が起きたらルールグループの関連付けを外す",
+        "マネージドリストの中身をダウンロードし、業務で使う名前が含まれていないか確かめてから BLOCK で入れる",
+        "VPC の設定を fail open にしてから BLOCK で入れる"
+      ],
+      "correct": 0,
+      "explanation": "ALERT は通しながら当たった問い合わせを記録するので、本番の影響なく、BLOCK にしたら何が止まるかを確かめられます。公式ドキュメントもこの順を勧めています。障害を待つのは影響を出してからの対応です。マネージドリストの中身は見られません。fail open は DNS Firewall の障害時の動きで、誤検知とは関係ありません。"
+    },
+    {
+      "kind": "essay",
+      "question": "カード決済を処理するサーバーだけがある VPC で、DNS を使った持ち出しを防ぐ設計を説明してください。DNS Firewall のルールの構成(優先度・ドメインリスト・アクション)、許可リストに入れるべきものの例、導入の手順、DNS Firewall だけでは防げない道とその対策、を含めてください(300〜500 字)。",
+      "answer": "この VPC は使う名前が決まっているので、ウォールドガーデンにします。ルールグループの優先度 100 に許可リストを ALLOW で置きます。許可リストには、使う AWS のサービスの名前(`*.amazonaws.com` か、Secrets Manager・KMS・Systems Manager・ECR など個別の名前)、決済の外部 API の名前(`pay.example.com`)、VPC の中の名前(`*.compute.internal` など)、プライベートホストゾーンの名前を入れます。優先度 200 に `*` を BLOCK(NXDOMAIN)で置き、それ以外の名前解決をすべて止めます。あわせて DNS Firewall Advanced の DNS トンネリングと DGA の検知を BLOCK で使います。失敗時の動きは既定の fail closed のままにします。導入はまず `*` のルールを ALERT にし、クエリログで実際に使っている名前を集めて許可リストを直してから BLOCK に切り替えます。クエリログは集中ログ用の S3 に残します。DNS Firewall は VPC の Resolver を通る問い合わせしか見ないので、外の DNS サーバーへの直接の問い合わせを防ぐため、SG・NACL でインターネット宛ての 53 番を閉じます。DoH や IP への直接の接続は、Network Firewall で外向きの通信を許可したドメインだけに絞って防ぎます。",
+      "rubric": [
+        "許可リストを ALLOW(小さい番号)、`*` を BLOCK(大きい番号)にするウォールドガーデンの構成を、優先度の順とともに説明している",
+        "許可リストに AWS のサービスの名前や VPC の中の名前などを入れる必要があることに触れている",
+        "ALERT で始めてログで確かめてから BLOCK にする導入の手順に触れている",
+        "外の DNS サーバーへの直接の問い合わせ(53 番)や DoH・IP 直打ちなど、DNS Firewall を迂回する道と、その対策(SG・NACL・Network Firewall)を挙げている"
+      ],
+      "explanation": "DNS の持ち出し対策は「名前解決を許可リストに絞る」と「Resolver を迂回させない」の 2 本立てです。許可リストの漏れは障害になるので、ALERT で実際の名前を集めてから閉じます。",
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0
+    }
+  ]
+}
