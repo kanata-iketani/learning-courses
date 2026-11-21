@@ -1,0 +1,98 @@
+{
+  "lesson": 8,
+  "chapter": 4,
+  "title": "VPN・PrivateLink・mTLS",
+  "priority": "🔴",
+  "text": "### 基礎: アプリの外側で通信を守る方法と、相手を確かめる方法\nここまでは、Web の通信を TLS で守る話でした。この章では 2 つの話を足します。\n\n1. **ネットワークの経路そのものを守る**: 社内のサーバと VPC の間の通信は、アプリごとに TLS を設定しきれないことがあります。古い業務システムが平文のプロトコルを使っていることもあります。そこで、経路全体を暗号化します(VPN・Direct Connect の MACsec)。あるいは、インターネットへの出口を通らない経路にします(PrivateLink)\n2. **クライアントも確かめる**: 普通の TLS では、証明書を見せるのはサーバだけです。取引先のシステムや IoT 機器のように「決まった相手だけを通したい」ときは、クライアントにも証明書を出させます(mTLS)\n\n暗号化がどの層で働くかを整理します。層とは、通信を役割ごとに分けた段のことで、数字が小さいほど物理的な線に近い段です。\n\n| 方式 | 層 | 守る範囲 | AWS での例 |\n|---|---|---|---|\n| MACsec | 2(隣の機器との直結の区間) | 直結した 2 台の機器の間だけ | Direct Connect |\n| IPsec | 3(IP パケット) | VPN の両端の間を通るすべての IP 通信 | Site-to-Site VPN |\n| TLS | 4 より上(アプリの接続ごと) | アプリの接続の両端の間 | ALB、API、RDS |\n\n層が下ほど「中身が何でもまとめて」守れ、上ほど「アプリの相手まで」守れます。\n\n### AWS での仕組み 1: Site-to-Site VPN\nSite-to-Site VPN は、社内のネットワークと VPC を、インターネットの上の IPsec(IP パケットを丸ごと暗号化する仕組み)のトンネルでつなぐサービスです。部品は次のとおりです。\n\n- **カスタマーゲートウェイデバイス**: 社内側の VPN 機器(ルータなど)\n- **カスタマーゲートウェイ**: その機器の情報(グローバル IP など)を AWS に登録したもの\n- **仮想プライベートゲートウェイ**か**Transit Gateway**: AWS 側の VPN の終点。前者は 1 つの VPC 用、後者は多くの VPC をまとめる中継点です\n\n公式ドキュメントでは、1 つの VPN 接続には**トンネルが 2 本**あり、同時に使って冗長化できます。鍵交換には IKE(IPsec の鍵を DH で安全に作る手順。IKEv2 に対応)を使い、AES-256 や SHA-2 などを選べます。状態は CLI で確かめます(一部を省略)。\n\n```text\n$ aws ec2 describe-vpn-connections --vpn-connection-ids vpn-0a1b2c3d4e5f67890\n{\n    \"VpnConnections\": [\n        {\n            \"VpnConnectionId\": \"vpn-0a1b2c3d4e5f67890\",\n            \"CustomerGatewayId\": \"cgw-0123456789abcdef0\",\n            \"TransitGatewayId\": \"tgw-0fedcba9876543210\",\n            \"State\": \"available\",\n            \"VgwTelemetry\": [\n                { \"OutsideIpAddress\": \"203.0.113.10\", \"Status\": \"UP\",   \"StatusMessage\": \"2 BGP ROUTES\" },\n                { \"OutsideIpAddress\": \"203.0.113.20\", \"Status\": \"DOWN\", \"StatusMessage\": \"\" }\n            ]\n        }\n    ]\n}\n```\n\n- `CustomerGatewayId`: 社内側の機器の登録です\n- `TransitGatewayId`: AWS 側の終点が Transit Gateway であることを示します\n- `VgwTelemetry`: 2 本のトンネルの状態です。`OutsideIpAddress` は AWS 側のトンネルの終点のグローバル IP です\n- 1 本目は `UP` で、BGP(経路を自動で教え合う仕組み)で 2 つの経路を受け取っています。2 本目は `DOWN` です。このままでは 1 本目が切れた瞬間に全断するので、社内側の機器で 2 本目も張るのが実務の基本です\n\n個人の PC から VPC につなぐには **Client VPN** を使います。利用者の認証は、クライアント証明書による相互認証、Active Directory、SAML(L5 で見たフェデレーション)から選びます。\n\n### AWS での仕組み 2: Direct Connect と MACsec\nDirect Connect は、社内と AWS を専用の回線でつなぐサービスです。インターネットを通らないので安定しますが、**それだけで暗号化されるわけではありません**。暗号化が必要なら、次のどちらかを足します。\n\n- **MACsec**: 公式ドキュメントでは、10 Gbps・100 Gbps・400 Gbps の専用接続(一部の拠点)で使えます。社内のルータと Direct Connect の機器の間を、層 2 で AES-256 で暗号化します。暗号化するのは**直結した区間だけ**で、端から端まで(エンドツーエンド)ではありません。暗号化に失敗したら通信を止める `must_encrypt` と、平文に戻る `should_encrypt` のモードがあります\n- **Direct Connect の上に VPN を張る**: Direct Connect の回線の上で IPsec の VPN を使います。速度は VPN の上限に縛られますが、終点の間がすべて暗号化されます\n\n### AWS での仕組み 3: PrivateLink(インターフェイス型 VPC エンドポイント)\nVPC の中の EC2 から S3 や KMS などの API を呼ぶとき、普通はインターネットゲートウェイや NAT ゲートウェイを通って、サービスの公開のエンドポイントに向かいます(公式ドキュメントでは、この場合も通信は AWS のネットワークの外には出ません)。\n\nPrivateLink のインターフェイス型 VPC エンドポイントを作ると、自分のサブネットにそのサービス用の ENI(VPC の中の仮想のネットワークカード)ができ、プライベート IP が付きます。**プライベート DNS** を有効にすると、`kms.ap-northeast-1.amazonaws.com` という普段の名前が、その ENI のプライベート IP に解決されます。アプリのコードを変えずに、インターネットへの出口を持たない経路に切り替わります。\n\n```text\n$ dig +short kms.ap-northeast-1.amazonaws.com\n10.0.3.25\n10.0.4.25\n```\n\n- `dig +short`: 名前を引き、IP だけを表示するコマンドです\n- `10.0.3.25` と `10.0.4.25`: 2 つの AZ に置いたエンドポイントの ENI のプライベート IP です。公開の IP ではなくなりました\n\nここで大事な点があります。**PrivateLink は経路を変えるもので、暗号化ではありません**。API の呼び出しは今までどおり HTTPS(TLS)で暗号化されています。PrivateLink の価値は、インターネットへの出口のない VPC から AWS のサービスを使えること、そして VPC エンドポイントポリシーや `aws:SourceVpce` の条件で「このエンドポイント経由だけ」に絞れることです。エンドポイントポリシーの書き方は L10 で扱います。自分のサービスを NLB の後ろに置き、ほかの VPC に PrivateLink で公開することもできます。\n\n### AWS が自動でしている暗号化\n公式ドキュメントによると、AWS のリージョン間や AZ 間を流れる通信は、AWS の施設を出る前に物理層で自動的に暗号化されています。また、Nitro(EC2 の仮想化の基盤)を使う一部のインスタンスタイプでは、同じリージョンの、同じ VPC かピアリングした VPC の中で、ロードバランサーや Transit Gateway を挟まないインスタンス同士の通信が自動で暗号化されます。これらは責任共有モデル(L1)の AWS 側の守りです。規制で「アプリの通信を暗号化」と求められたら、利用者の責任で TLS を使います。\n\n### AWS での仕組み 4: mTLS(相互 TLS)\nmTLS は、サーバだけでなくクライアントも証明書を見せる TLS です。L4 で見たハンドシェイクに、手順が 3 つ増えます。\n\n```mermaid\nsequenceDiagram\n  participant C as 取引先のシステム\n  participant A as ALB(mTLS の検証モード)\n  participant T as ターゲット\n  C->>A: ClientHello\n  A->>C: ServerHello、サーバ証明書、CertificateRequest(証明書を出して)\n  C->>A: クライアント証明書、CertificateVerify(クライアントの秘密鍵で署名)\n  Note over A: トラストストアの CA で連鎖を確かめ、失効リストも照合\n  A->>T: HTTP リクエスト + X-Amzn-Mtls-Clientcert-Subject などのヘッダー\n  T-->>C: レスポンス(ALB 経由)\n```\n\n- `CertificateRequest`: サーバが「あなたの証明書を出してください」と頼みます\n- クライアントの `CertificateVerify`: クライアントが秘密鍵で署名します。証明書だけ盗んでも、秘密鍵がなければなりすませません\n\nALB の mTLS には 2 つのモードがあります(公式ドキュメント)。\n\n| モード | ALB の動き | ターゲットに届くもの |\n|---|---|---|\n| 検証(verify) | トラストストア(信頼する CA の証明書の束)で、クライアント証明書を確かめる。失効リスト(CRL)も使える | `X-Amzn-Mtls-Clientcert-Subject`、`-Issuer`、`-Serial-Number`、`-Validity`、`-Leaf` のヘッダー |\n| パススルー(passthrough) | 確かめずに受け取るだけ | 証明書の連鎖まるごとを `X-Amzn-Mtls-Clientcert` ヘッダーで渡す。検証はアプリの仕事 |\n\n設定は、CA の証明書の束を S3 に置いてトラストストアを作り、リスナーに付けます。\n\n```text\n$ aws elbv2 create-trust-store --name partner-ts \\\n    --ca-certificates-bundle-s3-bucket example-pki-111122223333 \\\n    --ca-certificates-bundle-s3-key partner-ca-bundle.pem\n$ aws elbv2 modify-listener \\\n    --listener-arn arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener/app/web-alb/50dc6c495c0c9188/f2f7dc8efc522ab2 \\\n    --mutual-authentication Mode=verify,TrustStoreArn=arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:truststore/partner-ts/73e2d6bc24d8a067\n```\n\n- `create-trust-store`: S3 に置いた PEM 形式の CA 証明書の束から、トラストストアを作ります\n- `--mutual-authentication Mode=verify`: このリスナーで、クライアント証明書の検証を始めます。信頼できない証明書の接続は、ALB で断られます\n\nクライアント証明書は、AWS Private CA(ch1)で発行するのが定番です。ALB の接続ログには、クライアント証明書の情報や接続の成否が残ります。\n\nAPI Gateway の REST API でも mTLS を使えます。リージョン別のカスタムドメインに、S3 に置いたトラストストアを指定します。公式ドキュメントの注意点は 2 つです。既定の `execute-api` のエンドポイントは mTLS を通らないので**無効にする**こと、API Gateway は**失効を確かめない**ので、必要なら Lambda オーソライザーで確かめることです。\n\n### 構成図\n\n```mermaid\narchitecture-beta\n    group dc(aws:corporate-dc)[Data Center]\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n\n    service cgw(aws:customer-gw)[Customer Gateway] in dc\n    service vpn(aws:vpn)[Site to Site VPN] in cloud\n    service tgw(aws:tgw)[Transit Gateway] in cloud\n    service app(aws:ec2)[App Server] in vpc\n    service ep(aws:endpoint)[Interface Endpoint] in vpc\n    service kms(aws:kms)[KMS] in cloud\n\n    cgw:R --> L:vpn\n    vpn:R --> L:tgw\n    tgw:R --> L:app\n    app:R --> L:ep\n    ep:B --> T:kms\n```\n\n- Customer Gateway から Site to Site VPN: 社内の機器と AWS の間を、2 本の IPsec のトンネルで暗号化します\n- Transit Gateway: VPN の AWS 側の終点で、VPC へ中継します\n- App Server から Interface Endpoint: KMS の API を、プライベート IP のエンドポイント経由で呼びます。インターネットへの出口は要りません。通信そのものは TLS で暗号化されています\n\n### 実務での使い方と判断\n社内と AWS をつなぐときの比較です。\n\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. Site-to-Site VPN | インターネットの上の IPsec | 早く安く始められる。暗号化は標準 | 帯域はトンネルあたり既定 1.25 Gbps(公式)。インターネットの品質に左右される | 小 | 小 |\n| B. Direct Connect + MACsec | 専用回線の直結の区間を層 2 で暗号化 | 大きな帯域で安定。暗号化しても速度が落ちにくい | 対応する速度と拠点が限られる。暗号化は直結の区間だけ | 大 | 大 |\n| C. Direct Connect + VPN | 専用回線の上に IPsec | 終点の間を暗号化。既存の Direct Connect に足せる | 速度は VPN の上限に縛られる | 中 | 中 |\n\nプロはこう決めます。\n\n- 「Direct Connect だから暗号化されている」は誤解です。暗号化が要件なら、案 B か案 C を明示的に選びます\n- VPN のトンネルは 2 本とも張り、`VgwTelemetry` の状態を CloudWatch のメトリクスで見張ります\n- インターネットへの出口のないサブネットで AWS の API を使うなら、PrivateLink を使います。暗号化の問題ではなく、経路と制御の問題として説明します\n- 「決まった相手だけ」を通す API は、IP の制限だけに頼らず mTLS にします。IP は相手のネットワークの変更で変わり、偽装される場合もあるからです\n\n### 試験ではこう問われる\n- 「Direct Connect の通信を暗号化」「専用接続で高速」なら MACsec、「既存の回線の上で、追加の機器なしに IPsec」なら Direct Connect の上の VPN です\n- 「インターネットを経由せずに AWS のサービスの API を呼ぶ」なら VPC エンドポイント(PrivateLink)です。NAT ゲートウェイは誤答として並びます\n- 「クライアントを証明書で認証」なら ALB や API Gateway の mTLS です。API Gateway では `execute-api` の既定のエンドポイントを無効にする点、ALB の検証モードではトラストストアと CRL を使う点が問われます\n\n### まとめ\n- VPN(IPsec、層 3)と MACsec(層 2)は経路全体を、TLS はアプリの接続を暗号化します\n- Site-to-Site VPN は 2 本のトンネルで冗長化します。Direct Connect は単体では暗号化されないので、MACsec か VPN を足します\n- PrivateLink は暗号化ではなく、インターネットへの出口を通らない経路と、エンドポイントでの制御を与えます\n- mTLS はクライアントにも証明書を出させます。ALB は検証とパススルーの 2 つのモード、API Gateway は既定のエンドポイントを無効にします\n",
+  "quiz": [
+    {
+      "question": "ある会社は 10 Gbps の Direct Connect の専用接続で社内と AWS をつないでいる。監査で「この回線の通信を暗号化すること」と求められた。帯域をできるだけ落とさずに暗号化したい。最も適切なものはどれか。",
+      "choices": [
+        "Direct Connect は専用回線なので、すでに暗号化されていると監査に説明する",
+        "Direct Connect の上に Site-to-Site VPN を張る",
+        "対応する拠点で Direct Connect の接続に MACsec を設定する",
+        "すべての EC2 にセキュリティグループを設定する"
+      ],
+      "correct": 2,
+      "explanation": "Direct Connect は単体では暗号化されません。10 Gbps の専用接続は MACsec の対象で、直結の区間を層 2 で暗号化でき、帯域を落としにくい方法です。VPN を上に張ると速度は VPN の上限に縛られます。セキュリティグループは通信の許可であって暗号化ではありません。"
+    },
+    {
+      "question": "インターネットゲートウェイも NAT ゲートウェイもないプライベートサブネットの EC2 から、アプリのコードを変えずに Secrets Manager の API を呼びたい。最も適切なものはどれか。",
+      "choices": [
+        "Secrets Manager のインターフェイス型 VPC エンドポイントを作り、プライベート DNS を有効にする",
+        "NAT ゲートウェイを作り、ルートテーブルで 0.0.0.0/0 を向ける",
+        "EC2 にパブリック IP を付ける",
+        "Site-to-Site VPN を作る"
+      ],
+      "correct": 0,
+      "explanation": "インターフェイス型 VPC エンドポイント(PrivateLink)を作り、プライベート DNS を有効にすると、普段のサービス名がエンドポイントのプライベート IP に解決され、コードを変えずに使えます。NAT やパブリック IP はインターネットへの出口を作ることになり、要件に反します。VPN は社内との接続の仕組みです。"
+    },
+    {
+      "question": "PrivateLink のインターフェイス型 VPC エンドポイント経由で KMS の API を呼ぶときの説明として、正しいものはどれか。",
+      "choices": [
+        "PrivateLink が通信を暗号化するので、TLS は使われない",
+        "PrivateLink を使うと、KMS のキーポリシーは評価されない",
+        "経路はエンドポイントのプライベート IP を通るが、API の呼び出し自体は従来どおり TLS で暗号化されている",
+        "エンドポイントを作ると、VPC の外からもそのプライベート IP で KMS を呼べるようになる"
+      ],
+      "correct": 2,
+      "explanation": "PrivateLink は経路を変えるもので、暗号化は今までどおり TLS が担います。キーポリシーなどの権限の評価も変わりません。エンドポイントのプライベート IP は、VPC にアクセスできる場所からしか使えません。"
+    },
+    {
+      "question": "describe-vpn-connections の結果で、1 つの VPN 接続の VgwTelemetry に 2 つの要素があり、片方の Status が UP、もう片方が DOWN だった。最も適切な解釈と対応はどれか。",
+      "choices": [
+        "VPN 接続は 1 本で十分なので、何もしなくてよい",
+        "2 本のトンネルのうち 1 本しか張れておらず冗長性がないので、社内側の機器で 2 本目のトンネルも設定する",
+        "暗号化が無効になっているので、AES-256 を選び直す",
+        "DOWN は暗号化の鍵の更新中を示すので、時間がたてば UP になる"
+      ],
+      "correct": 1,
+      "explanation": "Site-to-Site VPN の 1 つの接続には 2 本のトンネルがあり、両方を張ることで冗長化します。片方が DOWN のままだと、UP のトンネルが切れた瞬間に全断します。DOWN は暗号の設定の誤りや鍵の更新中を意味するものではありません。"
+    },
+    {
+      "question": "取引先のシステムだけが API を呼べるようにしたい。API は ALB の後ろの EC2 で動いている。取引先には自社の AWS Private CA で発行したクライアント証明書を配り、失効させた証明書は ALB で拒否したい。最も運用負荷が低い構成はどれか。",
+      "choices": [
+        "ALB の mTLS をパススルーモードにし、EC2 のアプリで証明書の連鎖と失効を確かめる",
+        "ALB のセキュリティグループで、取引先の IP アドレスだけを許可する",
+        "ALB の HTTPS リスナーのセキュリティポリシーを TLS 1.3 だけのものに変える",
+        "Private CA の CA 証明書でトラストストアを作り、失効リストを追加して、ALB の mTLS を検証モードにする"
+      ],
+      "correct": 3,
+      "explanation": "検証モードなら ALB がトラストストアでクライアント証明書を確かめ、失効リストで失効した証明書も拒否するので、アプリの実装が要りません。パススルーは検証をアプリに任せるので負荷が大きくなります。IP の制限は相手の認証にはなりません。TLS 1.3 にしてもクライアントの証明書は求められません。"
+    },
+    {
+      "kind": "essay",
+      "question": "mTLS とは何か、普通の TLS と何が違うかを、ハンドシェイクで増える手順に触れながら説明してください。そのうえで、ALB の mTLS の検証モードとパススルーモードの違いと、それぞれをどんなときに選ぶかを述べてください。",
+      "answer": "普通の TLS では、証明書を見せて身元を証明するのはサーバだけで、クライアントはサーバの証明書を確かめます。mTLS(相互 TLS)では、クライアントも証明書を見せます。ハンドシェイクで、サーバが CertificateRequest でクライアントの証明書を求め、クライアントは自分の証明書と、自分の秘密鍵で作った CertificateVerify の署名を返します。サーバは信頼する CA の証明書の束(トラストストア)で連鎖を確かめ、署名を公開鍵で検証するので、証明書だけ盗んでも秘密鍵がなければなりすませません。ALB の検証モードでは、ALB がトラストストアと失効リストでクライアント証明書を確かめ、信頼できない接続を断り、ターゲットにはサブジェクトや発行者などをヘッダーで渡します。アプリで実装しなくてよく、運用負荷が低いので、通常はこちらを選びます。パススルーモードでは、ALB は確かめずに証明書の連鎖を X-Amzn-Mtls-Clientcert ヘッダーでターゲットに渡し、検証はアプリが行います。独自の検証ロジックや、証明書の中身に基づく細かい認可を自分で実装したいときに選びます。",
+      "rubric": [
+        "クライアントも証明書を出す点が普通の TLS との違いだと説明している",
+        "CertificateRequest とクライアントの CertificateVerify(秘密鍵の署名)など増える手順に触れている",
+        "検証モードは ALB がトラストストア(と失効リスト)で検証することを説明している",
+        "パススルーモードは検証をアプリに任せ、ヘッダーで証明書を渡すこと、選ぶ場面を説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "mTLS の本質は「クライアントの秘密鍵の所持を署名で確かめる」ことです。ALB では、確かめるのが ALB(検証)かアプリ(パススルー)かの違いです。"
+    },
+    {
+      "kind": "essay",
+      "question": "社内のデータセンターと AWS の VPC の間の通信を暗号化したいと相談されました。Site-to-Site VPN、Direct Connect + MACsec、Direct Connect + VPN の 3 案を比べ、どんな条件ならどれを勧めるかを説明してください。PrivateLink がこの相談の答えにならない理由も述べること。",
+      "answer": "Site-to-Site VPN はインターネットの上に IPsec のトンネルを 2 本張る方式で、早く安く始められ、暗号化は標準です。一方、帯域はトンネルあたり既定で 1.25 Gbps ほどで、インターネットの品質に左右されます。通信量が中程度までで、すぐに始めたいならこれを勧めます。Direct Connect + MACsec は、専用回線の直結の区間を層 2 で AES-256 で暗号化する方式です。10・100・400 Gbps の専用接続で対応拠点に限られますが、大きな帯域で安定し、暗号化で速度が落ちにくいので、大量のデータを流し、対応する回線を持つならこれを勧めます。ただし暗号化は直結の区間だけです。Direct Connect + VPN は、既存の Direct Connect の上に IPsec を張る方式で、VPN の終点の間を暗号化できますが、速度は VPN の上限に縛られます。MACsec に対応しない回線ですでに Direct Connect を使っているならこれを勧めます。PrivateLink は、VPC の中からインターネットへの出口を通らずに AWS のサービスなどを使うための経路の仕組みで、暗号化の仕組みでも、データセンターと VPC をつなぐ仕組みでもないので、この相談の答えにはなりません。",
+      "rubric": [
+        "Site-to-Site VPN の特徴(IPsec、2 本のトンネル、帯域の上限、手軽さ)を述べている",
+        "Direct Connect は単体では暗号化されず、MACsec は層 2 で直結の区間だけを暗号化することを述べている",
+        "Direct Connect + VPN の位置づけ(既存の回線の上、速度は VPN に縛られる)を述べている",
+        "条件に応じた推奨を示し、PrivateLink が経路の仕組みで暗号化ではないことを述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「Direct Connect は暗号化されない」「MACsec は区間、VPN は終点の間」「PrivateLink は経路」の 3 点を押さえていれば合格です。"
+    }
+  ]
+}

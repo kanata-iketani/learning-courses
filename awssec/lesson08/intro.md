@@ -1,0 +1,1 @@
+ネットワークを流れるデータを、盗聴・改ざん・なりすましから守る方法を、設定の実物と通信の流れで学びます。ACM による証明書の発行と自動更新、ALB・NLB・CloudFront の TLS のセキュリティポリシー、aws:SecureTransport による HTTPS の強制、VPN・Direct Connect の MACsec・PrivateLink、そして mTLS によるクライアントの認証まで進みます。TLS の仕組みそのものは L4 で見たものを土台にします。

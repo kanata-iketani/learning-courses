@@ -1,0 +1,98 @@
+{
+  "lesson": 8,
+  "chapter": 2,
+  "title": "ロードバランサーと CloudFront の TLS 設定",
+  "priority": "🔴",
+  "text": "### 基礎: どこで TLS を「終える」か\nブラウザが `https://www.example.com` に接続すると、TLS で暗号化された通信がどこかで復号されます。復号する場所を **TLS の終端**と呼びます。AWS の Web システムでは、多くの場合ロードバランサーか CloudFront が終端になります。\n\n終端を決めると、同時に 2 つのことを決める必要があります。\n\n1. **終端でどの TLS を受け付けるか**: TLS 1.0・1.1 のような古いバージョンや、弱い暗号スイート(L4 で見た、使う暗号の組み合わせ)を受け付けると、ダウングレード攻撃(わざと古く弱い方式で接続させて破る攻撃)の余地が残ります\n2. **終端から先をどうするか**: ロードバランサーから EC2 までを平文の HTTP で流すのか、もう一度 TLS で暗号化するのか\n\nAWS では、1 を**セキュリティポリシー**という名前付きの設定で決めます。2 はターゲットグループ(ロードバランサーの転送先の集まり)のプロトコルで決めます。\n\n### AWS での仕組み 1: ALB の HTTPS リスナー\nリスナーは、ロードバランサーが「どのポートで、どのプロトコルを待ち受けるか」の設定です。443 番で HTTPS を受ける例です。\n\n```text\n$ aws elbv2 create-listener \\\n    --load-balancer-arn arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:loadbalancer/app/web-alb/50dc6c495c0c9188 \\\n    --protocol HTTPS --port 443 \\\n    --certificates CertificateArn=arn:aws:acm:ap-northeast-1:111122223333:certificate/0a1b2c3d-1111-2222-3333-444455556666 \\\n    --ssl-policy ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09 \\\n    --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/web-tg/6d0ecf831eec9f09\n```\n\n- `--protocol HTTPS --port 443`: 443 番で TLS を終端し、中の HTTP を読みます\n- `--certificates`: ch1 で作った ACM の証明書を付けます\n- `--ssl-policy`: セキュリティポリシーです。受け付ける TLS のバージョンと暗号スイートの組を名前で選びます\n- `--default-actions Type=forward,…`: 復号したリクエストを、指定したターゲットグループに転送します\n\nここに落とし穴があります。公式ドキュメントによると、**コンソールで作ると既定は `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09`、CLI・CloudFormation・CDK で `--ssl-policy` を省くと既定は `ELBSecurityPolicy-2016-08`** です。2016-08 は TLS 1.0 と 1.1 も受け付けます。IaC(コードでインフラを作る方法。L19)では、ポリシーを必ず明示します。\n\n### セキュリティポリシーの名前の読み方\n名前に意味が詰まっています。\n\n| 名前の部品 | 意味 |\n|---|---|\n| `TLS13` | TLS 1.3 に対応している |\n| `1-2` | 受け付ける最低のバージョンが TLS 1.2。`1-3` なら 1.3 だけ、`1-0` なら 1.0 から |\n| `Res` | 暗号スイートを強いものに絞った版 |\n| `Ext1`、`Ext2` | 古い端末のために暗号スイートを広げた版 |\n| `FIPS` | 米国の暗号の基準 FIPS 140 の認定を受けた暗号モジュールを使う版 |\n| `PQ` | TLS 1.3 で、量子コンピュータでも解きにくいとされる鍵交換(ML-KEM との組み合わせ)を使える版 |\n| `2021-06` など | 作られた時期 |\n\nたとえば `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09` は「TLS 1.2 と 1.3 を受け付け、強い暗号スイートに絞り、量子耐性の鍵交換も使える」という意味です。\n\n本当に古いバージョンを断っているかは、外から確かめられます。\n\n```text\n$ openssl s_client -connect www.example.com:443 -tls1_1 < /dev/null\n…\nerror:0A00042E:SSL routines::tlsv1 alert protocol version\n…\n$ openssl s_client -connect www.example.com:443 -tls1_2 < /dev/null\n…\nNew, TLSv1.2, Cipher is ECDHE-ECDSA-AES128-GCM-SHA256\n```\n\n- `-tls1_1`: TLS 1.1 だけで接続を試みます。`protocol version` のエラーで断られたので、1.1 は受け付けていません\n- `-tls1_2`: TLS 1.2 では接続でき、ECDHE(楕円曲線の DH。L4)と AES-128-GCM の組が選ばれました\n\n### AWS での仕組み 2: HTTP を HTTPS に向け直す\n443 番だけを開けると、`http://` で来た人は接続できずに困ります。80 番には「HTTPS へ移ってください」と返すだけのリスナーを置きます。\n\n```text\n$ aws elbv2 create-listener \\\n    --load-balancer-arn arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:loadbalancer/app/web-alb/50dc6c495c0c9188 \\\n    --protocol HTTP --port 80 \\\n    --default-actions 'Type=redirect,RedirectConfig={Protocol=HTTPS,Port=443,StatusCode=HTTP_301}'\n```\n\n- `Type=redirect`: 転送せず、リダイレクト(別の URL へ行き直すよう伝える応答)を返します\n- `StatusCode=HTTP_301`: 「恒久的に移動した」という応答です。ブラウザは `https://` で接続し直します\n\n最初の 1 回の `http://` のリクエストは平文で流れます。これも避けたいときは、レスポンスに HSTS(`Strict-Transport-Security` ヘッダー。「このサイトには今後 HTTPS でしか来るな」とブラウザに覚えさせる仕組み)を付けます。CloudFront ではレスポンスヘッダーポリシーで付けられます。\n\n### AWS での仕組み 3: 終端から先も暗号化する\nALB で TLS を終えた後、ターゲットまでの通信は次の 2 通りです。\n\n- ターゲットグループのプロトコルが `HTTP`: VPC の中を平文で流れます\n- ターゲットグループのプロトコルが `HTTPS`: ALB がもう一度 TLS で暗号化して送ります。**エンドツーエンド暗号化**と呼ばれる構成です\n\nHTTPS のターゲットグループについて、公式ドキュメントには 2 つの大事な点があります。\n\n- **ALB はターゲットの証明書を検証しません**。自己署名の証明書(CA の署名がない、自分で作った証明書)や期限切れの証明書でも通信できます。ALB とターゲットの間は VPC の中で、パケットの段階で送り主が確かめられているためです\n- ターゲットへの TLS のポリシーは選べません。HTTPS リスナーが TLS 1.3 のポリシーなら、ターゲットへの接続には `ELBSecurityPolicy-TLS13-1-0-2021-06` が使われます\n\n「規制で、ターゲットに届くまでずっと暗号化が必要」なら HTTPS のターゲットグループにします。ターゲットの証明書は、ACM のエクスポート可能な証明書か、Private CA の証明書を EC2 に置きます。\n\n### NLB の場合: 終端するか、素通しするか\nNLB(Network Load Balancer。TCP・UDP の層で振り分けるロードバランサー)は、TLS の扱いを選べます。\n\n| リスナー | 動き | 証明書の置き場所 |\n|---|---|---|\n| `TLS` | NLB で TLS を終端する。セキュリティポリシーも ALB と同じ形で選ぶ | ACM の証明書を NLB に付ける |\n| `TCP`(443 番) | 暗号化されたまま素通しし、ターゲットが TLS を終端する | ターゲットのサーバ |\n\nTCP で素通しすると、NLB は中身を一切見ません。復号するのはターゲットだけなので、「途中で誰も復号しない」要件を満たします。その代わり、証明書の管理と TLS の設定はすべてサーバ側の仕事になります。\n\n### AWS での仕組み 4: CloudFront\nCloudFront(世界中の拠点からコンテンツを配る CDN。L11)では、TLS の区間が 2 つあります。\n\n- **ビューワー(利用者)と CloudFront の間**: ビヘイビアの「ビューワープロトコルポリシー」を `redirect-to-https`(HTTP を HTTPS に向け直す)か `https-only` にします。最低の TLS バージョンはセキュリティポリシーで選びます。公式の一覧では `TLSv1.2_2021` などが TLS 1.2 以上、`TLSv1.3_2025` が TLS 1.3 だけです\n- **CloudFront とオリジン(配信元の ALB や S3)の間**: 「オリジンプロトコルポリシー」を `https-only` にすると、CloudFront からオリジンへも TLS で接続します\n\n```mermaid\nsequenceDiagram\n  participant B as ブラウザ\n  participant CF as CloudFront\n  participant A as ALB\n  participant E as EC2\n  B->>CF: TLS 1.3(証明書は us-east-1 の ACM)\n  Note over CF: ここで一度復号し、キャッシュやルールを処理\n  CF->>A: TLS(オリジンプロトコルポリシー https-only)\n  Note over A: ここで二度目の復号。ルールで振り分け\n  A->>E: TLS(HTTPS のターゲットグループ)\n  Note over E: サーバの証明書で三度目の復号\n```\n\nTLS の区間ごとに暗号化し直していることが分かります。各区間の設定が 1 つでも HTTP になっていると、そこだけ平文になります。\n\n### 構成図\n\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n    group pub(aws:subnet-public)[Public subnet] in vpc\n    group priv(aws:subnet-private)[Private subnet] in vpc\n\n    service users(aws:users)[Users]\n    service cf(aws:cloudfront)[CloudFront] in cloud\n    service acm(aws:acm)[ACM] in cloud\n    service alb(aws:alb)[ALB] in pub\n    service ec2(aws:ec2)[Web Servers] in priv\n\n    users:R --> L:cf\n    cf:R --> L:alb\n    acm:B --> T:cf\n    alb:B --> T:ec2\n```\n\n- Users から CloudFront: ビューワー側の TLS。セキュリティポリシーで TLS 1.2 以上に絞ります\n- CloudFront から ALB: オリジン側の TLS。`https-only` にします\n- ACM: CloudFront 用(us-east-1)と ALB 用(東京)の証明書をそれぞれ配ります\n- ALB から Web Servers: HTTPS のターゲットグループにすれば、ここも暗号化されます\n\n### 実務での使い方と判断\n\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. ALB で終端、ターゲットへは HTTP | ALB で復号し VPC 内は平文 | 設定が最も簡単。ALB が中身を見て振り分けや WAF ができる | VPC 内は平文。規制によっては不可 | 小 | 小 |\n| B. ALB で終端し、ターゲットへ再暗号化 | ALB で復号し、HTTPS で送り直す | 全区間が暗号化。WAF やパスでの振り分けも使える | サーバに証明書と TLS の設定が要る | 中 | サーバの CPU が少し増える |\n| C. NLB の TCP で素通し | 復号はサーバだけ | 途中で誰も復号しない | 証明書の管理がすべてサーバ側。WAF を付けられない | 大 | 中 |\n\nよくある事故と、プロの決め方です。\n\n- **CLI や IaC でポリシーを省き、TLS 1.0 が開いたまま**: 監査で指摘される定番です。テンプレートに `ELBSecurityPolicy-TLS13-1-2-…` を書き、Config ルールや Security Hub で検知します\n- **古い端末のために 1.0 を残し続ける**: アクセスログ(ALB のログには `ssl_protocol` の欄があります)で、実際に 1.0・1.1 で来ている割合を確かめてから絞ります\n- 迷ったら案 A から始め、規制や社内基準が「全区間の暗号化」を求めるなら案 B にします。案 C は、ロードバランサーにも復号させない要件があるときだけです\n\n### 試験ではこう問われる\n- 「TLS 1.2 未満の接続を拒否」「最も運用負荷が低い」なら、ALB や CloudFront のセキュリティポリシーを TLS 1.2 以上のものに変える選択肢が答えです。サーバ側の設定変更や WAF のルールは遠回りです\n- 「ロードバランサーでも復号させない」なら、NLB の TCP リスナーで素通しする構成が答えです\n- 「ALB からターゲットまで暗号化」なら、HTTPS のターゲットグループです。ALB がターゲットの証明書を検証しないことも問われます\n\n### まとめ\n- TLS の終端を決めたら、受け付ける TLS(セキュリティポリシー)と、終端から先の暗号化を決めます\n- ALB のポリシーは名前で読めます。`TLS13-1-2` は TLS 1.2 以上。CLI や IaC で省くと古い `2016-08` になるので必ず明示します\n- 80 番は HTTPS へのリダイレクトにし、HSTS で最初の平文も防ぎます\n- 全区間の暗号化は、ALB の再暗号化(HTTPS のターゲットグループ)か NLB の素通しで作ります。CloudFront はビューワー側とオリジン側の 2 区間を設定します\n",
+  "quiz": [
+    {
+      "question": "CloudFormation で ALB の HTTPS リスナーを作りました。監査で「TLS 1.0 で接続できる」と指摘されました。テンプレートを見ると SslPolicy の指定がありません。最も適切な対応はどれか。",
+      "choices": [
+        "EC2 の nginx の設定で TLS 1.0 を無効にする",
+        "AWS WAF で TLS 1.0 のリクエストをブロックするルールを作る",
+        "リスナーの SslPolicy に ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09 など TLS 1.2 以上のポリシーを明示する",
+        "ACM の証明書を ECDSA の鍵で作り直す"
+      ],
+      "correct": 2,
+      "explanation": "CLI や CloudFormation でポリシーを省くと、既定の ELBSecurityPolicy-2016-08 になり TLS 1.0 も受け付けます。TLS を終端しているのは ALB なので、ALB のポリシーを変えます。nginx の設定は ALB の手前には効きません。証明書の鍵の種類は受け付ける TLS のバージョンを決めません。"
+    },
+    {
+      "question": "セキュリティポリシー ELBSecurityPolicy-TLS13-1-2-2021-06 について正しいものはどれか。",
+      "choices": [
+        "TLS 1.3 だけを受け付ける",
+        "TLS 1.2 と TLS 1.3 を受け付ける",
+        "TLS 1.0 から 1.3 まですべて受け付ける",
+        "TLS 1.2 だけを受け付け、TLS 1.3 は受け付けない"
+      ],
+      "correct": 1,
+      "explanation": "名前の TLS13 は TLS 1.3 に対応していること、1-2 は最低のバージョンが TLS 1.2 であることを表します。TLS 1.3 だけにしたいなら TLS13-1-3 のポリシーを選びます。"
+    },
+    {
+      "question": "ある規制のため、利用者の端末からサーバに届くまで、ロードバランサーを含めて途中で一度も復号してはならない。Web サーバは EC2 で、証明書はサーバに置ける。最も適切な構成はどれか。",
+      "choices": [
+        "ALB の HTTPS リスナーで終端し、HTTP のターゲットグループに転送する",
+        "ALB の HTTPS リスナーで終端し、HTTPS のターゲットグループに再暗号化して転送する",
+        "CloudFront で終端し、オリジンプロトコルポリシーを https-only にする",
+        "NLB の TCP リスナー(443 番)で素通しし、EC2 で TLS を終端する"
+      ],
+      "correct": 3,
+      "explanation": "「途中で一度も復号しない」には、ロードバランサーが復号しない NLB の TCP 素通しが合います。ALB の再暗号化や CloudFront は、全区間が暗号化されてはいても、ALB や CloudFront で一度復号しています。"
+    },
+    {
+      "question": "ALB の HTTPS のターゲットグループに、自己署名の証明書を置いた EC2 を登録しました。何が起きるか。",
+      "choices": [
+        "ALB はターゲットの証明書を検証しないので、そのまま TLS で通信できる",
+        "ALB が証明書を検証し、信頼できないのでヘルスチェックが失敗する",
+        "ACM にインポートしないと TLS の接続ができない",
+        "ALB は自動で HTTP に切り替えて通信する"
+      ],
+      "correct": 0,
+      "explanation": "公式ドキュメントのとおり、ALB はターゲットの証明書を検証しません。自己署名や期限切れでも通信できます。VPC の中でパケットの送り主が確かめられているためです。インポートは不要で、HTTP へ自動で切り替わることもありません。"
+    },
+    {
+      "question": "CloudFront を使う Web サイトで、利用者と CloudFront の間、CloudFront とオリジンの ALB の間の両方を必ず HTTPS にしたい。最も適切な設定の組はどれか。",
+      "choices": [
+        "ビューワープロトコルポリシーを allow-all、オリジンプロトコルポリシーを match-viewer にする",
+        "ビューワープロトコルポリシーを redirect-to-https、オリジンプロトコルポリシーを https-only にする",
+        "ビューワープロトコルポリシーを https-only、オリジンプロトコルポリシーを http-only にする",
+        "ALB の HTTPS リスナーを作れば、CloudFront の設定は不要である"
+      ],
+      "correct": 1,
+      "explanation": "利用者側はビューワープロトコルポリシー、オリジン側はオリジンプロトコルポリシーで決まり、別々に設定します。allow-all は HTTP を許し、match-viewer は利用者が HTTP ならオリジンにも HTTP で行きます。http-only はオリジン側が平文になります。"
+    },
+    {
+      "kind": "essay",
+      "question": "ALB の 80 番と 443 番のリスナーを、転送中のデータを守る観点でどう設定するかを説明してください。セキュリティポリシーの選び方、80 番の扱い、ALB からターゲットまでの扱いを含めること。",
+      "answer": "443 番は HTTPS リスナーにして ACM の証明書を付け、セキュリティポリシーは TLS 1.2 以上のもの(例: ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09)を明示します。CLI や IaC で省くと TLS 1.0 も受ける ELBSecurityPolicy-2016-08 になるためです。古い端末がいるかは ALB のアクセスログの ssl_protocol 欄で確かめてから絞ります。80 番は転送せず、HTTPS の 443 番へ 301 でリダイレクトするだけのリスナーにします。最初の HTTP のリクエストも避けるため、レスポンスに HSTS ヘッダーを付けます。ALB からターゲットまでは、VPC 内の平文で許されるなら HTTP のターゲットグループでよく、規制などで全区間の暗号化が必要なら HTTPS のターゲットグループにして、サーバに Private CA などの証明書を置きます。ALB はターゲットの証明書を検証しないので自己署名でも動きますが、管理された証明書を使うのが望ましいです。",
+      "rubric": [
+        "443 番で TLS 1.2 以上のポリシーを明示する理由(既定が古いポリシーになること)に触れている",
+        "80 番を HTTPS へのリダイレクトにしている",
+        "HSTS など最初の平文のリクエストへの対策に触れている",
+        "ターゲットまでの暗号化(HTTPS のターゲットグループ)を要件に応じて判断している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「ポリシーを明示」「80 番はリダイレクト」「ターゲットまでは要件で決める」の 3 点が骨格です。"
+    },
+    {
+      "kind": "essay",
+      "question": "CloudFront → ALB → EC2 という構成で、利用者のリクエストが EC2 に届くまでに TLS が何回終端・復号されるか、どの設定がそれぞれの区間を決めているかを説明してください(全区間を HTTPS にした場合)。",
+      "answer": "全区間を HTTPS にした場合、復号は 3 回です。1 回目は利用者と CloudFront の間で、CloudFront が us-east-1 の ACM の証明書で TLS を終端します。この区間はビューワープロトコルポリシー(redirect-to-https か https-only)と、最低の TLS バージョンを決めるセキュリティポリシー(TLSv1.2_2021 など)で決まります。2 回目は CloudFront と ALB の間で、オリジンプロトコルポリシーを https-only にすると CloudFront が ALB へ TLS で接続し、ALB が東京の ACM の証明書で終端します。ALB 側の受け付ける TLS は HTTPS リスナーのセキュリティポリシーで決まります。3 回目は ALB と EC2 の間で、ターゲットグループのプロトコルを HTTPS にすると ALB が再暗号化し、EC2 の上の証明書で終端します。どこか 1 区間でも HTTP にすると、その区間だけ平文になります。",
+      "rubric": [
+        "復号が 3 回(CloudFront、ALB、EC2)であることを述べている",
+        "利用者側をビューワープロトコルポリシーとセキュリティポリシーが決めると述べている",
+        "CloudFront から ALB をオリジンプロトコルポリシーが決めると述べている",
+        "ALB から EC2 をターゲットグループのプロトコルが決めると述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "TLS は区間ごとの暗号化です。区間ごとに「誰が終端し、どの設定が決めるか」を言えれば合格です。"
+    }
+  ]
+}
