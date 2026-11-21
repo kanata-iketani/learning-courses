@@ -1,0 +1,81 @@
+{
+  "lesson": 5,
+  "chapter": 3,
+  "title": "SAML フェデレーションと Identity Center",
+  "priority": "🔴",
+  "text": "### 基礎: ID を 1 か所で管理する(フェデレーション)\n会社には、社員のアカウントを管理する仕組みがすでにあることがほとんどです。これを IdP(Identity Provider。利用者の ID を管理し、本人確認をするサービス。例: Microsoft Entra ID、Okta、Google Workspace)と呼びます。IdP に本人確認を任せて、その結果を信じて使わせる側を SP(Service Provider。サービスを提供する側)と呼びます。AWS は SP です。\n\nフェデレーション(別の組織や仕組みが確かめた本人確認の結果を信頼して受け入れること)を使わないと、AWS アカウントごとに IAM ユーザーを作ることになります。アカウントが 20 あれば、社員 1 人に 20 個のユーザーとパスワードです。退職者が出たとき、20 か所すべてで消す必要があり、1 か所でも漏れれば ch01 の事故 3 になります。\n\nフェデレーションにすると、社員は IdP にだけ ID を持ちます。AWS には IAM ユーザーを作らず、IdP の本人確認の結果と交換に、ロールの一時的な認証情報(ch02)を渡します。退職時は IdP のアカウントを止めれば、すべての AWS アカウントに入れなくなります。1 回のサインインで複数のサービスを使えることを SSO(シングルサインオン)と呼びます。\n\n人(社員)のフェデレーションでよく使う規格が SAML 2.0(本人確認の結果を XML の文書で受け渡す規格)です。この章では SAML の流れを一段ずつ見てから、AWS が用意している IAM Identity Center を扱います。\n\n### AWS での仕組み: SAML でコンソールに入るまで\nまず、1 つの AWS アカウントに IdP を直接つなぐ構成で追います。事前に 2 つを準備します。\n\n- IAM の SAML プロバイダー: IdP のメタデータ(IdP の名前と、署名の検証に使う公開鍵の証明書を書いた XML)を登録したもの。ARN は `arn:aws:iam::111122223333:saml-provider/CorpIdP`\n- ロール `CorpReadOnly`: 信頼ポリシーで、このプロバイダーからの引き受けを許す\n\n```mermaid\nsequenceDiagram\n    participant U as ブラウザ\n    participant I as 会社の IdP\n    participant G as AWS サインイン\n    participant S as STS\n    U->>I: 1. ポータルで AWS を選ぶ\n    I->>U: 2. パスワードと MFA で本人確認\n    I-->>U: 3. 署名つき SAML レスポンスを自動送信するフォーム\n    U->>G: 4. POST /saml(SAMLResponse)\n    G->>S: 5. AssumeRoleWithSAML\n    S-->>G: 6. 一時的な認証情報\n    G-->>U: 7. コンソールへリダイレクト\n```\n\n#### ステップ 3〜4: ブラウザが運ぶもの\nIdP は、次のような HTML をブラウザに返します。ブラウザはこれを自動で送信します。\n\n```html\n<form method=\"POST\" action=\"https://signin.aws.amazon.com/saml\">\n  <input type=\"hidden\" name=\"SAMLResponse\" value=\"PHNhbWxwOlJlc3BvbnNlIHhtbG5zOnNhbWxwPSJ1cm46...\">\n</form>\n```\n\n- `action`: 送り先。AWS のサインイン用の SAML の受け口\n- `SAMLResponse`: SAML のレスポンス(XML)を Base64(バイナリや記号を英数字の文字列にする変換)にしたもの。IdP と AWS が直接通信するのではなく、ブラウザが運び役になる点が SAML の特徴です\n\n#### SAML レスポンスの中身\nBase64 を戻すと、次のような XML です(要点だけを抜粋)。\n\n```xml\n<saml:Assertion>\n  <saml:Issuer>https://idp.example.com/saml</saml:Issuer>\n  <ds:Signature> … <ds:SignatureValue>kD3fQ9xEXAMPLE…</ds:SignatureValue> … </ds:Signature>\n  <saml:Subject>\n    <saml:NameID Format=\"urn:oasis:names:tc:SAML:2.0:nameid-format:persistent\">u-48213</saml:NameID>\n    <saml:SubjectConfirmation Method=\"urn:oasis:names:tc:SAML:2.0:cm:bearer\">\n      <saml:SubjectConfirmationData NotOnOrAfter=\"2026-11-22T01:05:00Z\"\n          Recipient=\"https://signin.aws.amazon.com/saml\"/>\n    </saml:SubjectConfirmation>\n  </saml:Subject>\n  <saml:Conditions NotBefore=\"2026-11-22T00:59:30Z\" NotOnOrAfter=\"2026-11-22T01:05:00Z\">\n    <saml:AudienceRestriction><saml:Audience>urn:amazon:webservices</saml:Audience></saml:AudienceRestriction>\n  </saml:Conditions>\n  <saml:AttributeStatement>\n    <saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/Role\">\n      <saml:AttributeValue>arn:aws:iam::111122223333:role/CorpReadOnly,arn:aws:iam::111122223333:saml-provider/CorpIdP</saml:AttributeValue>\n    </saml:Attribute>\n    <saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/RoleSessionName\">\n      <saml:AttributeValue>taro@example.com</saml:AttributeValue>\n    </saml:Attribute>\n    <saml:Attribute Name=\"https://aws.amazon.com/SAML/Attributes/SessionDuration\">\n      <saml:AttributeValue>3600</saml:AttributeValue>\n    </saml:Attribute>\n  </saml:AttributeStatement>\n</saml:Assertion>\n```\n\n- `Issuer`: 発行した IdP。AWS は登録済みの SAML プロバイダーと照らし合わせる\n- `Signature`: IdP が秘密鍵で付けた署名(L4)。AWS はメタデータの公開鍵で検証する。署名がなければ、誰でも `Role` を書き換えた偽の XML を作れてしまう。これが SAML の安全さの柱です\n- `NameID`: IdP 側の利用者の ID。`persistent` は「毎回同じ値」の意味\n- `NotOnOrAfter`: この時刻以降は受け付けない。5 分ほどの短い期限で、盗まれたレスポンスの使い回しを防ぐ\n- `Recipient`: 送り先が AWS のサインインであること。信頼ポリシーの条件 `SAML:aud` はこの値と比べられる\n- `Audience`: 誰に向けた文書か。AWS は `urn:amazon:webservices`\n- `Role` 属性: 引き受けるロールと SAML プロバイダーの ARN をカンマでつないだ組。複数あれば、サインイン時にロールを選ぶ画面が出る\n- `RoleSessionName`: ch02 のセッション名。CloudTrail に `assumed-role/CorpReadOnly/taro@example.com` と残る\n- `SessionDuration`: コンソールのセッションの長さ(秒)。900〜43200(15 分〜12 時間)\n\n#### ステップ 5: ロールの信頼ポリシー\n```json\n{\n  \"Effect\": \"Allow\",\n  \"Principal\": { \"Federated\": \"arn:aws:iam::111122223333:saml-provider/CorpIdP\" },\n  \"Action\": \"sts:AssumeRoleWithSAML\",\n  \"Condition\": { \"StringEquals\": { \"SAML:aud\": \"https://signin.aws.amazon.com/saml\" } }\n}\n```\n\n- `Principal` の `Federated`: IAM ユーザーではなく、登録した SAML プロバイダーを信頼する\n- `Action`: SAML 用の引き受け操作 `sts:AssumeRoleWithSAML`\n- `Condition`: レスポンスの `Recipient` が AWS のサインインであることを確かめる\n\n`AssumeRoleWithSAML` は、AWS の認証情報なしで呼べる API です。署名つきの SAML レスポンスそのものが本人確認の材料になるからです。STS の返り値には、ch02 の `Credentials` に加えて、`Issuer`・`Subject`(`NameID` の値)・`Audience` が入ります。\n\n### IAM Identity Center: 多数のアカウントをまとめて扱う\n上の構成は、アカウントごとに SAML プロバイダーとロールを作る必要があります。アカウントが増えると手間が増え、設定がずれます。IAM Identity Center(人の AWS へのサインインを、組織のアカウント全体でまとめて管理するサービス)は、これを肩代わりします。\n\n```mermaid\narchitecture-beta\n    group corp(aws:corporate-dc)[Company]\n    group mgmt(aws:account)[Management Account]\n    group dev(aws:account)[Dev Account]\n    group prod(aws:account)[Prod Account]\n\n    service staff(aws:users)[Employees] in corp\n    service idp(aws:server)[External IdP] in corp\n    service sso(aws:aws-iam-identity-center)[IAM Identity Center] in mgmt\n    service org(aws:organizations)[Organizations] in mgmt\n    service devrole(aws:iam)[Role DevPowerUser] in dev\n    service prodrole(aws:iam)[Role ProdReadOnly] in prod\n\n    staff:R --> L:idp\n    idp:R --> L:sso\n    sso:B --> T:org\n    sso:R --> L:devrole\n    sso:T --> B:prodrole\n```\n\n図の読み方です。社員は会社の IdP でサインインします。IdP は SAML で IAM Identity Center に本人確認の結果を渡し、ユーザーとグループの情報は SCIM(ユーザーとグループを自動で同期する規格)で送ります。Identity Center は Organizations の管理アカウント(L18 で扱います)で有効にし、各メンバーアカウントのロールを自動で作ります。Identity Center から右(Dev)と上(Prod)に伸びる線が、各アカウントへのロールの配布です。開発と本番のロールは、それぞれ別の権限セットから作られた別々のロールです。\n\n#### 権限セットと割り当て\nIdentity Center では、次の 3 つを組み合わせて「誰がどのアカウントで何をできるか」を決めます。\n\n| 部品 | 意味 | 例 |\n|---|---|---|\n| ユーザー・グループ | Identity Center 内の ID(IdP から同期できる) | グループ `dev-team` |\n| 権限セット | ロールのひな形(ポリシーとセッション時間) | `DevPowerUser`(セッション 4 時間) |\n| 割り当て | グループ × アカウント × 権限セット | `dev-team` に Dev アカウントで `DevPowerUser` |\n\n割り当てると、Identity Center は対象アカウントに `AWSReservedSSO_DevPowerUser_1a2b3c4d5e6f7a8b` のような名前のロールを作ります。このロールの信頼ポリシーを見ると、中身は上で見た SAML のしくみそのものです。\n\n```json\n{\n  \"Effect\": \"Allow\",\n  \"Principal\": { \"Federated\": \"arn:aws:iam::444455556666:saml-provider/AWSSSO_0a1b2c3d4e5f6a7b_DO_NOT_DELETE\" },\n  \"Action\": [\"sts:AssumeRoleWithSAML\", \"sts:TagSession\"],\n  \"Condition\": { \"StringEquals\": { \"SAML:aud\": \"https://signin.aws.amazon.com/saml\" } }\n}\n```\n\nこのロールやプロバイダーを IAM 側で手で直してはいけません。Identity Center が管理していて、権限セットを変えると上書きされます。変更は必ず権限セットで行います。\n\n#### ID の置き場所(ID ソース)\n| ID ソース | 仕組み | 向いている場面 |\n|---|---|---|\n| Identity Center のディレクトリ | Identity Center の中にユーザーを作る | 会社の IdP がない、小さな組織 |\n| Active Directory | AWS Managed Microsoft AD か、AD Connector で社内の AD につなぐ | 社内に AD がある |\n| 外部 IdP | SAML でサインイン、SCIM で同期 | Entra ID・Okta などを使っている |\n\n#### セッションの長さと CLI\n- AWS アクセスポータル(Identity Center のサインイン画面)のセッション: 既定 8 時間、15 分〜90 日で設定できる\n- 権限セットのセッション(各アカウントでロールを使える時間): 既定 1 時間、最大 12 時間\n\nCLI は `~/.aws/config` に次のように書きます。\n\n```\n[sso-session corp]\nsso_start_url = https://d-1234567890.awsapps.com/start\nsso_region = ap-northeast-1\nsso_registration_scopes = sso:account:access\n\n[profile prod-readonly]\nsso_session = corp\nsso_account_id = 444455556666\nsso_role_name = ProdReadOnly\nregion = ap-northeast-1\n```\n\n- `[sso-session corp]`: Identity Center への接続設定。`sso_start_url` はアクセスポータルの URL\n- `[profile prod-readonly]`: 本番アカウント `444455556666` で権限セット `ProdReadOnly` を使うプロファイル\n\n`aws sso login --sso-session corp` を実行するとブラウザが開き、ポータルでサインインと承認をします。その後 `aws s3 ls --profile prod-readonly` のように使います。CLI は裏で一時的な認証情報を取得します。PC に長期キーは 1 つも残りません。\n\n### 実務での使い方と判断\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 |\n|---|---|---|---|---|\n| A: アカウントごとの IAM ユーザー | 各アカウントにユーザーとパスワード | すぐ始められる | 退職時の消し忘れ。長期キーが増える | アカウント数に比例して増える |\n| B: アカウントごとに IdP を SAML 直結 | 各アカウントに SAML プロバイダーとロール | IdP で一元的に止められる | アカウントごとの設定がずれやすい | 中 |\n| C: Identity Center + 外部 IdP | 管理アカウントで一元管理し、ロールは自動配布 | 割り当ての一覧が 1 か所。CLI も一時キー | 最初に Organizations が必要 | 低い |\n\n複数アカウントで人を管理するなら、プロは C を選びます。ルートユーザーは非常用として残し、MFA で守ります(L3)。よくあるミスは次のとおりです。\n\n- IdP 側で MFA を必須にしていない。フェデレーションでは、本人確認の強さは IdP の設定で決まる\n- 全員に `AdministratorAccess` の権限セットを割り当てる。権限セットはチームと環境ごとに分ける\n- 権限セットのセッションを 12 時間にして、本番の強い権限も長時間使えるままにする\n- IdP で無効化したのに SCIM を使っておらず、Identity Center 側のユーザーが残る\n\n### 試験ではこう問われる\n- 「複数アカウントへの人のアクセスを、既存の社内 IdP で一元管理、最も運用負荷が低い」は IAM Identity Center と外部 IdP(SAML + SCIM)です\n- 「Identity Center が作ったロールの権限を変えたい」は、IAM でロールを直すのではなく権限セットを更新します\n- SAML の問題では、`Role` 属性・`SAML:aud`・`AssumeRoleWithSAML` の組み合わせや、署名の証明書の期限切れ(IdP の証明書を更新したのに AWS のメタデータを更新していない)が原因の問題が出ます\n\n### まとめ\n- フェデレーションは、IdP の本人確認を信頼して AWS のロールを使わせる仕組み。AWS に IAM ユーザーを作らない\n- SAML ではブラウザが署名つきの XML を運び、AWS は署名・期限・`Recipient` を確かめて `AssumeRoleWithSAML` で一時キーを出す\n- IAM Identity Center は、権限セットと割り当てで多数のアカウントのロールを自動で配る。中身は SAML のロール\n- 本人確認の強さ(MFA)は IdP 側で決まる。権限セットは小さく、セッションは必要な長さに\n",
+  "quiz": [
+    {
+      "question": "会社には Okta で管理された社員アカウントがあり、AWS には Organizations で 30 のアカウントがある。社員が各アカウントにサインインできるようにし、退職時には Okta で無効にするだけで全アカウントに入れなくしたい。最も運用負荷が低い方法はどれか。",
+      "choices": [
+        "各アカウントに社員ごとの IAM ユーザーを作り、退職時はスクリプトで全アカウントから削除する",
+        "各アカウントに IAM の SAML プロバイダーとロールを作り、Okta と SAML で直接つなぐ",
+        "管理アカウントに IAM ユーザーを作り、各アカウントのロールを引き受けさせる",
+        "IAM Identity Center の ID ソースを Okta にし、SAML でサインイン、SCIM でユーザーとグループを同期する"
+      ],
+      "correct": 3,
+      "explanation": "Identity Center は外部 IdP を ID ソースにでき、権限セットの割り当てで全アカウントのロールを自動で配ります。SCIM で同期すれば、Okta で無効化した状態も反映されます。アカウントごとの SAML 直結でも一元化はできますが、30 アカウント分の設定と保守が要ります。IAM ユーザーを作る案は、退職時の消し忘れと長期キーの問題が残ります。"
+    },
+    {
+      "question": "SAML フェデレーションで、AWS が SAML レスポンスの内容を信じてよいと判断できる最も重要な根拠はどれか。",
+      "choices": [
+        "レスポンスが HTTPS で送られてきたこと",
+        "IdP の秘密鍵による署名を、IAM の SAML プロバイダーに登録したメタデータの公開鍵で検証できたこと",
+        "レスポンスに `RoleSessionName` 属性が含まれていること",
+        "ブラウザが会社のネットワークから送信してきたこと"
+      ],
+      "correct": 1,
+      "explanation": "SAML レスポンスはブラウザが運ぶので、利用者自身が中身を書き換えられる位置にあります。IdP の署名を事前に登録した公開鍵で検証できることが、改ざんされていない根拠です。HTTPS は通信路の盗聴を防ぐだけで、送り手が偽の XML を作ることは防げません。属性の有無や送信元のネットワークは本人確認の根拠になりません。"
+    },
+    {
+      "question": "IAM Identity Center の権限セット `DevPowerUser` から、各アカウントに `AWSReservedSSO_DevPowerUser_...` というロールが作られている。このロールに S3 の権限を 1 つ追加したい。最も適切な方法はどれか。",
+      "choices": [
+        "Identity Center で権限セット `DevPowerUser` のポリシーを更新し、割り当て先のアカウントに反映させる",
+        "各アカウントの IAM コンソールで、そのロールに直接ポリシーを追加する",
+        "ロールの信頼ポリシーに S3 の権限を書き足す",
+        "同じ名前のロールを各アカウントに新しく作り直す"
+      ],
+      "correct": 0,
+      "explanation": "Identity Center が作るロールは権限セットから作られ、権限セットを変えると対象アカウントのロールが更新されます。IAM 側で直接直すと、次の反映で上書きされたり、アカウントごとに設定がずれたりします。信頼ポリシーは「誰が引き受けられるか」を書く場所で、S3 の権限は書きません。"
+    },
+    {
+      "question": "SAML で AWS コンソールにサインインしていた社員が、IdP の署名用証明書が更新された日から全員サインインできなくなった。IdP 側の設定は正しい。最も可能性の高い原因はどれか。",
+      "choices": [
+        "ロールの最大セッション時間が 1 時間のままになっている",
+        "社員の MFA デバイスが期限切れになった",
+        "AWS の IAM SAML プロバイダーに、新しい証明書を含む IdP のメタデータを登録し直していない",
+        "`RoleSessionName` 属性にメールアドレスを使っている"
+      ],
+      "correct": 2,
+      "explanation": "AWS は登録済みメタデータの公開鍵で SAML レスポンスの署名を検証します。IdP が新しい鍵で署名し始めたのに AWS 側が古い証明書のままだと、検証に失敗して全員が入れなくなります。セッション時間や `RoleSessionName` の形式は、証明書の更新とは関係がありません。MFA は IdP 側で確認されるもので、全員同時に失効する理由になりません。"
+    },
+    {
+      "question": "次のロールの信頼ポリシーについて、正しい説明はどれか。\n\n`\"Principal\": {\"Federated\": \"arn:aws:iam::111122223333:saml-provider/CorpIdP\"}, \"Action\": \"sts:AssumeRoleWithSAML\", \"Condition\": {\"StringEquals\": {\"SAML:aud\": \"https://signin.aws.amazon.com/saml\"}}`",
+      "choices": [
+        "IAM ユーザー CorpIdP だけがこのロールを引き受けられる",
+        "このロールは EC2 インスタンスにだけ付けられる",
+        "引き受けるには、事前に長期のアクセスキーで STS を呼び出す必要がある",
+        "SAML プロバイダー CorpIdP が発行し、送り先が AWS のサインインである SAML レスポンスを持つ利用者が、このロールを引き受けられる"
+      ],
+      "correct": 3,
+      "explanation": "`Federated` は IAM ユーザーではなく、登録した SAML プロバイダーを信頼することを表します。`SAML:aud` はレスポンスの `Recipient` と比べられ、AWS のサインインに向けたレスポンスであることを確かめます。`AssumeRoleWithSAML` は AWS の認証情報なしで呼べ、署名つきの SAML レスポンスが本人確認の材料になります。EC2 用のロールは `ec2.amazonaws.com` を信頼します。"
+    },
+    {
+      "kind": "essay",
+      "question": "SAML フェデレーションで、社員がブラウザで IdP のポータルから AWS コンソールに入るまでの流れを、何も見ずに 1 分で説明するつもりで書いてください。ブラウザが何を運ぶか、AWS が何を確かめるか、最後に何が発行されるかを含めてください(200〜400 字)。",
+      "answer": "社員がポータルで AWS を選ぶと、IdP がパスワードと MFA で本人確認をします。IdP は SAML レスポンスという XML を作り、自分の秘密鍵で署名します。中には、利用者の ID、引き受けるロールと SAML プロバイダーの ARN の組(Role 属性)、セッション名、短い有効期限、送り先が AWS のサインインであることが入っています。これを Base64 にして自動送信フォームでブラウザに返し、ブラウザが AWS のサインインの受け口に POST します。AWS は、登録済みのメタデータの公開鍵で署名を検証し、期限と送り先を確かめ、ロールの信頼ポリシー(SAML プロバイダーを Federated で信頼し、SAML:aud の条件を満たすこと)を確認して、AssumeRoleWithSAML で STS からロールの一時的な認証情報を発行します。最後にコンソールへリダイレクトされ、セッション名が CloudTrail に残ります。",
+      "rubric": [
+        "IdP が本人確認をして、署名つきの SAML レスポンス(XML)を作ることを述べている",
+        "IdP と AWS が直接ではなく、ブラウザが POST で運ぶことを述べている",
+        "AWS が署名を公開鍵で検証し、期限や送り先、信頼ポリシーを確かめることを述べている",
+        "AssumeRoleWithSAML でロールの一時的な認証情報が発行されることを述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "SAML の要点は「ブラウザが運ぶ」「署名で改ざんを見抜く」「最後は STS の一時キー」の 3 つです。Identity Center を使っても、この流れが裏で動いています。"
+    }
+  ]
+}
