@@ -1,0 +1,93 @@
+{
+  "lesson": 12,
+  "chapter": 4,
+  "title": "コンテナと Lambda の権限と秘密情報",
+  "priority": "🔴",
+  "text": "### 基礎: コンテナと Lambda で守るもの\nここまでは EC2 を見てきました。いまの AWS のアプリの多くは、コンテナ(アプリと必要なライブラリを 1 つにまとめて、どこでも同じように動かす仕組み)や Lambda(サーバーを用意せずに関数を動かすサービス)で動きます。OS の管理の一部を AWS が引き受けるぶん楽になりますが、守るものがなくなるわけではありません。\n\n| 守るもの | 起きる事故 | この章 |\n|---|---|---|\n| イメージの中身 | 古いライブラリの穴を抱えたイメージを、そのまま本番に出した | ECR のスキャン |\n| イメージのすり替え | 同じタグ `latest` に別のイメージを上書きされ、知らないうちに中身が変わった | タグの不変性・ダイジェスト |\n| コンテナに渡す権限 | 1 つのロールに「イメージを取る権限」と「アプリの権限」を混ぜ、アプリの穴から全部使われた | タスクロールと実行ロール |\n| 秘密情報 | データベースのパスワードを環境変数に平文で書き、設定を見られる人全員に見えた | Secrets Manager との連携 |\n\n### 基礎の基礎: イメージ・タグ・ダイジェスト\n- **コンテナイメージ**: コンテナの型です。EC2 にとっての AMI にあたります\n- **ECR**(Elastic Container Registry): イメージを置く AWS の倉庫です\n- **タグ**: イメージに付ける名前です(`orders-api:1.4.2`、`orders-api:latest`)。**付け替えられます**\n- **ダイジェスト**: イメージの中身から計算したハッシュ(L4 で見た、中身が 1 ビットでも違えば変わる値)です(`sha256:4f1a...`)。中身が同じなら同じ値になり、**付け替えられません**\n\nタグだけで指定すると、誰かが同じタグに別のイメージを置いたとき、次の起動から中身が変わります。そこで、ECR のリポジトリ(イメージの置き場の単位)では**タグの不変性**(同じタグへの上書きを禁止する設定)を有効にし、本番の起動はダイジェストで指定します。\n\n### AWS での仕組み: ECR のスキャン\nECR には 2 種類のスキャンがあります。\n\n| 観点 | 基本スキャン | 拡張スキャン |\n|---|---|---|\n| 仕組み | ECR 自身(AWS のネイティブの技術と CVE のデータベース) | ch03 の Inspector と連携 |\n| 見るもの | OS のパッケージ | OS のパッケージ + 言語のパッケージ(Python の pip、Node.js の npm、Java など) |\n| いつ | プッシュ時(置いたとき)か手動 | プッシュ時 + 継続的(新しい CVE が出たら、置いてあるイメージも検査し直す) |\n| 結果の通知 | EventBridge(スキャン完了のイベント) | Inspector の検出結果として EventBridge・Security Hub へ |\n| 料金 | 追加料金なし | Inspector の料金 |\n\nここで大事なのは、アプリの穴の多くは OS ではなく**言語のライブラリ**にあることです。Python のアプリで使う古い `requests` の穴は、基本スキャンでは見つかりません。また、イメージを置いた日に穴がなくても、翌月に新しい CVE が公開されることがあります。本番では、言語のパッケージまで見て継続的に検査する拡張スキャンを選ぶのが普通です。\n\nスキャンの設定は、レジストリ(アカウントとリージョンごとの ECR 全体)の単位で決めます。\n\n```bash\naws ecr put-registry-scanning-configuration \\\n  --scan-type ENHANCED \\\n  --rules '[{\"scanFrequency\":\"CONTINUOUS_SCAN\",\"repositoryFilters\":[{\"filter\":\"prod-*\",\"filterType\":\"WILDCARD\"}]}]'\n```\n\n| 部分 | 意味 |\n|---|---|\n| `--scan-type ENHANCED` | 拡張スキャン(Inspector)を使う |\n| `\"scanFrequency\":\"CONTINUOUS_SCAN\"` | プッシュ時に加えて、継続的に検査する(`SCAN_ON_PUSH` ならプッシュ時だけ) |\n| `\"filter\":\"prod-*\"` | 名前が `prod-` で始まるリポジトリに、この規則を当てる |\n\n検出結果を見たら、ch03 と同じく `fixAvailable` と `exploitAvailable` で優先順位を付けます。直し方は「ベースイメージ(イメージの土台にした公式のイメージ)を新しくする」「`requirements.txt` などのライブラリの版を上げる」のどちらかで、作り直したイメージを新しいタグでプッシュし、タスクを入れ替えます。L19 のパイプラインで「`CRITICAL` があればデプロイを止める」と組み込むのが仕上げです。\n\n### ECS のタスクロールと実行ロール\nECS(Elastic Container Service)では、**タスク**(1 回の起動で動くコンテナのまとまり)に 2 つのロールを付けられます。名前が似ていて、試験でも実務でも取り違えが多いところです。\n\n| 観点 | 実行ロール(task execution role) | タスクロール(task role) |\n|---|---|---|\n| 使う人 | ECS のエージェント・Fargate の仕組み(コンテナを起動する側) | コンテナの中のアプリのコード |\n| 使う場面 | ECR からイメージを取る、CloudWatch Logs にログを送る、Secrets Manager・Parameter Store から秘密情報を取ってコンテナに渡す | アプリが S3・DynamoDB・SQS などを呼ぶ |\n| アプリから見えるか | 見えない | 見える(SDK が自動で使う) |\n| よく使うポリシー | AWS 管理ポリシー `AmazonECSTaskExecutionRolePolicy` + 秘密情報の読み取り | アプリごとに作る最小権限のポリシー |\n\nタスク定義(タスクの設計図)の実物で確かめます。\n\n```json\n{\n    \"family\": \"orders-api\",\n    \"executionRoleArn\": \"arn:aws:iam::111122223333:role/orders-exec-role\",\n    \"taskRoleArn\": \"arn:aws:iam::111122223333:role/orders-task-role\",\n    \"networkMode\": \"awsvpc\",\n    \"requiresCompatibilities\": [\"FARGATE\"],\n    \"containerDefinitions\": [\n        {\n            \"name\": \"api\",\n            \"image\": \"111122223333.dkr.ecr.ap-northeast-1.amazonaws.com/orders-api@sha256:4f1a9c0e7b2d...\",\n            \"user\": \"1000\",\n            \"readonlyRootFilesystem\": true,\n            \"environment\": [\n                { \"name\": \"LOG_LEVEL\", \"value\": \"info\" }\n            ],\n            \"secrets\": [\n                { \"name\": \"DB_PASSWORD\",\n                  \"valueFrom\": \"arn:aws:secretsmanager:ap-northeast-1:111122223333:secret:prod/orders/db-AbCdEf\" }\n            ],\n            \"logConfiguration\": {\n                \"logDriver\": \"awslogs\",\n                \"options\": { \"awslogs-group\": \"/ecs/orders-api\", \"awslogs-region\": \"ap-northeast-1\", \"awslogs-stream-prefix\": \"api\" }\n            }\n        }\n    ]\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `executionRoleArn` | 起動する側が使うロール。下の `image` の取得、`secrets` の取得、`awslogs` のログ送信に使う |\n| `taskRoleArn` | アプリが使うロール。たとえば注文を DynamoDB に書く権限だけを持つ |\n| `\"image\": \"...@sha256:...\"` | タグではなくダイジェストで指定。中身が変わらない |\n| `\"user\": \"1000\"` | コンテナの中で root(管理者)ではないユーザーで動かす |\n| `\"readonlyRootFilesystem\": true` | コンテナのファイルを書き換えられないようにする。侵入されても道具を置きにくい |\n| `environment` | 秘密でない設定。タスク定義を読める人には誰でも見える |\n| `secrets` | 起動時に実行ロールで Secrets Manager から値を取り、環境変数 `DB_PASSWORD` としてコンテナに渡す。タスク定義には ARN しか書かれない |\n\n実行ロールには、取ってよい秘密情報だけを許可します。\n\n```json\n{\n    \"Effect\": \"Allow\",\n    \"Action\": \"secretsmanager:GetSecretValue\",\n    \"Resource\": \"arn:aws:secretsmanager:ap-northeast-1:111122223333:secret:prod/orders/db-*\"\n}\n```\n\n秘密情報をカスタマー管理の KMS キーで暗号化しているなら、そのキーの `kms:Decrypt` も実行ロールに要ります(L9)。\n\n#### コンテナはどうやってタスクロールのキーを受け取るか\nch01 の IMDS と同じ考え方で、ECS はコンテナ専用の窓口 `169.254.170.2` を用意します。コンテナには環境変数 `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` が入り、SDK はそこに書かれたパスへ一時キーを取りに行きます。L5 で見た SDK の探す順番で、コンテナの認証情報は EC2 のメタデータより先に見られます。\n\n#### EC2 の上で動かすときの注意\nFargate では、タスクごとに分離された環境で動き、EC2 のメタデータは見えません。一方、自分で用意した EC2(コンテナインスタンス)の上でタスクを動かすと、コンテナから ch01 の IMDS に届けば、**インスタンスのロール**(ECS のエージェント用の広めの権限)まで取れてしまいます。公式の推奨は次のとおりです。\n\n- `awsvpc` ネットワークモードなら、エージェントの設定 `ECS_AWSVPC_BLOCK_IMDS=true` で、コンテナから IMDS への通信を止める\n- `bridge` モードなら、iptables(Linux の通信の制御の仕組み)で `169.254.169.254` への通信を落とす\n- 強い分離が必要なら Fargate を使う(公式も「コンテナはセキュリティの境界ではない」と明記しています)\n\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group vpc(aws:vpc)[VPC] in cloud\n    group priv(aws:subnet-private)[Private subnet] in vpc\n\n    service task(aws:fargate)[Orders Task] in priv\n    service ecr(aws:ecr)[ECR] in cloud\n    service sm(aws:secrets)[Secrets Manager] in cloud\n    service cwl(aws:res-amazon-cloudwatch-logs)[CloudWatch Logs] in cloud\n    service ddb(aws:dynamodb)[DynamoDB] in cloud\n    service insp(aws:amazon-inspector)[Inspector] in cloud\n\n    ecr:R --> L:task\n    sm:B --> T:task\n    task:R --> L:cwl\n    task:B --> T:ddb\n    insp:R --> L:ecr\n```\n\nFargate のタスクは、起動のときに**実行ロール**で ECR からイメージを取り、Secrets Manager から秘密情報を取り、動いている間のログを CloudWatch Logs に送ります。アプリのコードが DynamoDB に書くときは**タスクロール**を使います。ECR に置いたイメージは、Inspector の拡張スキャンが継続的に検査します。プライベートサブネットなら、これらへの道は L10 の VPC エンドポイントで用意します。\n\n### Lambda の実行ロールと環境変数\nLambda にも**実行ロール**があります。名前は ECS と同じですが、役目は「関数のコードが AWS を呼ぶときの権限」で、ECS のタスクロールにあたります(ログの送信にも使います)。信頼ポリシーの `Principal` は `lambda.amazonaws.com` です(L3)。\n\nLambda の関数の中では、実行ロールの一時キーが**環境変数**に入っています。\n\n| 環境変数 | 中身 |\n|---|---|\n| `AWS_ACCESS_KEY_ID` | 一時キーの ID(`ASIA` で始まる) |\n| `AWS_SECRET_ACCESS_KEY` | 秘密の値 |\n| `AWS_SESSION_TOKEN` | セッショントークン |\n\nLambda には ch01 の IMDS はありません。そのかわり、コードに「環境変数を表示してしまう」「任意のファイルを読める」などの穴があると、この 3 つが漏れます。たとえば、エラーのときに `os.environ` を丸ごとログや応答に出すデバッグ用のコードは、本番に残してはいけません。対策の中心は ch01 と同じく、**実行ロールを最小権限にする**ことです。関数ごとに専用のロールを作り、共有しません。\n\n#### 環境変数に秘密情報を置くとどうなるか\nLambda の環境変数は、保存時に必ず KMS で暗号化されます。既定は AWS 管理キーで、設定は要りません。ただし、暗号化は「AWS のディスクの上で」守るもので、**関数の設定を読める人には復号されて見えます**。\n\n```bash\naws lambda get-function-configuration --function-name orders-worker \\\n  --query \"Environment.Variables\"\n```\n\n```json\n{\n    \"TABLE_NAME\": \"orders\",\n    \"DB_PASSWORD\": \"Sup3rS3cret!\"\n}\n```\n\n`lambda:GetFunctionConfiguration` の権限を持つ人(読み取り専用の担当者を含む)には、パスワードがそのまま見えています。選び方は次のとおりです。\n\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. 環境変数に平文(AWS 管理キー) | 保存時だけ暗号化 | 最も手軽 | 設定を読める人に見える。ローテーションのたびにデプロイ | 低い | 無料 |\n| B. 環境変数 + カスタマー管理キー | キーの `kms:Decrypt` がない人には値が見えない | 見られる人を KMS で絞れる | ローテーションは手作業のまま。キーポリシーの管理が増える | 中 | KMS の料金 |\n| C. Secrets Manager から実行時に取る | 環境変数には秘密の名前だけ。値はコードが取る(公式の拡張機能でキャッシュもできる) | 設定に値が残らない。自動ローテーション(L9)。取得が CloudTrail に残る | 取得の処理と権限が要る | 低い〜中 | Secrets Manager の料金 |\n\n公式もデータベースの認証情報は Secrets Manager を推奨しています。プロは C を基本にし、秘密でない設定(テーブル名・ログの詳しさ)だけを環境変数に置きます。\n\n#### 誰が関数を呼べるか\nLambda には実行ロールとは別に、**リソースベースのポリシー**(L6)があり、「誰がこの関数を呼び出せるか」を決めます。たとえば「この S3 バケットのイベントからだけ呼べる」と書くときは、`aws:SourceArn` と `aws:SourceAccount` の条件で、他人のバケットから呼ばれる混乱した代理(L6)を防ぎます。関数 URL(関数に直接 HTTPS の入口を付ける機能)を `AuthType: NONE` で作ると、URL を知る人は誰でも呼べます。認証が必要なら `AWS_IAM` にします。\n\n### 実務での使い方と判断\n#### よくある事故\n- **実行ロールとタスクロールを 1 つにまとめる**: アプリの穴から、ECR やすべての秘密情報まで読まれます。2 つに分け、それぞれ最小にします\n- **`secrets` を使ったのに起動に失敗する**: `GetSecretValue` をタスクロールに付けています。取りに行くのは実行ロールです\n- **基本スキャンだけで安心する**: 言語のライブラリの穴と、置いた後に公開された CVE を見逃します\n- **`latest` タグで本番を動かす**: いつのイメージか分からず、上書きで中身が変わります\n- **Lambda の環境変数にパスワード**: 読み取り専用の人にも見えています\n- **EC2 の上の ECS でコンテナから IMDS に届く**: インスタンスのロールまで取られます\n\n#### プロならどう決めるか\nコンテナは「ECR の拡張スキャン(継続)+ タグの不変性 + ダイジェストで起動 + 実行ロールとタスクロールを分けて最小に + 秘密は `secrets` で Secrets Manager から」をひとまとまりの標準にします。強い分離が要るなら Fargate を選び、EC2 で動かすなら IMDS を遮断します。Lambda は「関数ごとの最小の実行ロール + 秘密は Secrets Manager + 呼び出し元をリソースベースのポリシーで限定」です。Lambda のライブラリの穴も Inspector で検査します。\n\n### 試験ではこう問われる\n「ECS のタスクが ECR からイメージを取れない」「`secrets` の値を取れない」は**実行ロール**、「コンテナのアプリが S3 にアクセスできない」は**タスクロール**です。「言語のパッケージの脆弱性も、継続的に検査」は ECR の拡張スキャンです。「同じタグでイメージを上書きされないように」はタグの不変性です。「Lambda の環境変数のパスワードを、関数の設定を読める担当者に見せない」は Secrets Manager に移す(またはカスタマー管理キー)です。「EC2 上の ECS タスクから、インスタンスのロールを使わせない」は `ECS_AWSVPC_BLOCK_IMDS` か Fargate です。\n\n### まとめ\n- ECR の基本スキャンは OS のパッケージをプッシュ時か手動で、拡張スキャンは Inspector で言語のパッケージまで継続的に検査します。タグの不変性とダイジェストですり替えを防ぎます\n- ECS の実行ロールは起動する側(イメージ・ログ・`secrets` の取得)、タスクロールはアプリのコードが使います。分けて、それぞれ最小にします\n- EC2 の上の ECS ではコンテナから IMDS を遮断し、強い分離が要るなら Fargate を使います\n- Lambda の実行ロールの一時キーは環境変数に入ります。環境変数は設定を読める人に見えるので、秘密は Secrets Manager から取り、呼び出し元はリソースベースのポリシーで絞ります\n",
+  "quiz": [
+    {
+      "question": "Fargate の ECS タスクが、起動時に `CannotPullContainerError` で失敗する。イメージは同じアカウントのプライベートな ECR リポジトリにある。タスクロールには S3 の読み取り権限だけが付いている。最も可能性の高い原因はどれか。",
+      "choices": [
+        "タスクロールに ECR からイメージを取る権限がない",
+        "実行ロールが指定されていない、または ECR からイメージを取る権限(`AmazonECSTaskExecutionRolePolicy` など)がない",
+        "ECR のリポジトリでタグの不変性が有効になっている",
+        "ECR の拡張スキャンで `CRITICAL` の検出結果がある"
+      ],
+      "correct": 1,
+      "explanation": "イメージを取るのはコンテナを起動する側なので、実行ロールの権限が使われます。タスクロールはアプリのコードが使うロールで、イメージの取得には使われません。タグの不変性は上書きを禁止するだけで、取得は妨げません。スキャンの検出結果は、それ自体では起動を止めません。"
+    },
+    {
+      "question": "ECS のタスク定義の `secrets` で、Secrets Manager のデータベースのパスワードを環境変数としてコンテナに渡したい。秘密情報はカスタマー管理の KMS キーで暗号化されている。最小権限で必要な設定はどれか。",
+      "choices": [
+        "タスクロールに `secretsmanager:GetSecretValue` を付ける",
+        "タスクロールと実行ロールの両方に `secretsmanager:*` と `kms:*` を付ける",
+        "コンテナの中で AWS CLI を使って取得するよう、タスクロールに `secretsmanager:ListSecrets` を付ける",
+        "実行ロールに、その秘密情報の ARN に限った `secretsmanager:GetSecretValue` と、そのキーの `kms:Decrypt` を付ける"
+      ],
+      "correct": 3,
+      "explanation": "`secrets` の値は起動時に ECS が実行ロールで取得してコンテナに渡すので、実行ロールに対象を限った `GetSecretValue` と、カスタマー管理キーの `kms:Decrypt` が要ります。タスクロールに付けても `secrets` の取得には使われません。ワイルドカードの付与は最小権限に反します。`ListSecrets` では値は取れません。"
+    },
+    {
+      "question": "Python のアプリのコンテナイメージを ECR に置いている。OS のパッケージに加えて pip で入れたライブラリの脆弱性も見つけ、イメージを置いた後に公開された CVE にも気づきたい。最も適切な設定はどれか。",
+      "choices": [
+        "ECR の拡張スキャン(Inspector)を有効にし、スキャンの頻度を継続的(`CONTINUOUS_SCAN`)にする",
+        "ECR の基本スキャンをプッシュ時に有効にする",
+        "GuardDuty の ECS のランタイムモニタリングを有効にする",
+        "ECR のライフサイクルポリシーで、30 日より古いイメージを削除する"
+      ],
+      "correct": 0,
+      "explanation": "拡張スキャンは Inspector と連携し、OS と言語のパッケージの両方を検査し、継続的な設定なら新しい CVE が出たときに置いてあるイメージも検査し直します。基本スキャンは OS のパッケージだけで、プッシュ時か手動です。GuardDuty のランタイムモニタリングは動いているコンテナの怪しい動きの検知で、パッケージの脆弱性の一覧ではありません。古いイメージの削除は検査になりません。"
+    },
+    {
+      "question": "本番の ECS サービスが `orders-api:latest` を指定して動いている。ある日、誰かが同じタグに別のイメージをプッシュし、次のデプロイで意図しない中身が動いた。再発を防ぐ組み合わせとして最も適切なものはどれか。",
+      "choices": [
+        "ECR のリポジトリを KMS で暗号化し、タスク定義のタグを `prod` に変える",
+        "ECR の基本スキャンを有効にし、`latest` タグのまま運用する",
+        "ECR のリポジトリでタグの不変性を有効にし、タスク定義ではイメージをダイジェスト(`@sha256:...`)で指定する",
+        "タスクロールから `ecr:PutImage` を外す"
+      ],
+      "correct": 2,
+      "explanation": "タグの不変性を有効にすると同じタグへの上書きが拒否され、ダイジェストで指定すれば中身が変わることはありません。暗号化やタグ名の変更では上書きを防げません。スキャンは中身の検査で、すり替えは防ぎません。プッシュしたのはタスクではなく別の人なので、タスクロールの権限を外しても防げません。"
+    },
+    {
+      "question": "自分で管理する EC2 の上で ECS のタスク(`awsvpc` モード)を動かしている。コンテナのアプリが乗っ取られたとき、EC2 のインスタンスのロールの認証情報まで取られないようにしたい。タスクロールは引き続き使う。最も適切な対応はどれか。",
+      "choices": [
+        "インスタンスのロールを外す",
+        "ECS エージェントの設定で `ECS_AWSVPC_BLOCK_IMDS=true` を有効にし、コンテナから IMDS への通信を止める",
+        "タスクロールを外し、すべての権限をインスタンスのロールに集める",
+        "インスタンスの IMDS のホップ制限を 2 にする"
+      ],
+      "correct": 1,
+      "explanation": "`ECS_AWSVPC_BLOCK_IMDS` を有効にすると、`awsvpc` モードのタスクのコンテナから IMDS に届かなくなり、インスタンスのロールは取れません。タスクロールは `169.254.170.2` の別の窓口から渡されるので使い続けられます。インスタンスのロールを外すと ECS のエージェントが動きません。権限をインスタンスのロールに集めるのは逆効果です。ホップ制限 2 はコンテナから IMDS に届きやすくする設定です。"
+    },
+    {
+      "question": "Lambda 関数の環境変数にデータベースのパスワードを置いている。読み取り専用の権限(`lambda:GetFunctionConfiguration` を含む)を持つ運用担当にもパスワードが見えてしまう。パスワードを自動でローテーションしたいという要件もある。最も適切な対応はどれか。",
+      "choices": [
+        "環境変数の暗号化を有効にする。保存時に暗号化されるので、担当者には見えなくなる",
+        "パスワードを Base64 に変換してから環境変数に置く",
+        "パスワードを関数のコードに直接書き、環境変数から消す",
+        "パスワードを Secrets Manager に移してローテーションを設定し、関数は実行ロールの権限で実行時に取得する。環境変数には秘密の名前だけを置く"
+      ],
+      "correct": 3,
+      "explanation": "Secrets Manager に移せば、関数の設定に値が残らず、自動ローテーションも使え、取得は実行ロールの権限で行われて CloudTrail に残ります。環境変数は既定で保存時に暗号化されていますが、設定を読める人には復号されて見えます(カスタマー管理キーで見られる人を絞れても、ローテーションは解決しません)。Base64 は暗号化ではありません。コードに書くとコードを読める人に見え、さらに悪くなります。"
+    },
+    {
+      "kind": "essay",
+      "question": "Fargate で動く注文 API(ECR のイメージ、Secrets Manager の DB パスワード、DynamoDB への書き込み、CloudWatch Logs へのログ)について、実行ロールとタスクロールに何の権限を付けるかを分けて説明してください。あわせて、イメージの検査とすり替えの防止、秘密情報の渡し方の設計も述べてください(250〜450 字)。",
+      "answer": "実行ロールは ECS と Fargate の仕組みが起動のときに使うロールで、ECR からイメージを取る権限(ecr:GetAuthorizationToken・BatchGetImage・GetDownloadUrlForLayer)、CloudWatch Logs のロググループへの書き込み、注文 API の DB パスワードの ARN に限った secretsmanager:GetSecretValue と、カスタマー管理キーならその kms:Decrypt を付けます。タスクロールはアプリのコードが使うロールで、注文テーブルへの dynamodb:PutItem など必要な操作だけを、そのテーブルの ARN に限って付けます。2 つを混ぜると、アプリの穴から ECR や秘密情報まで使われるので分けます。イメージは ECR の拡張スキャンを継続的にして、OS と言語のパッケージの CVE を検査し、CRITICAL があればデプロイを止めます。リポジトリはタグの不変性を有効にし、タスク定義ではダイジェストで指定してすり替えを防ぎます。DB パスワードはタスク定義の secrets に Secrets Manager の ARN を書き、起動時に実行ロールで取って環境変数として渡すので、タスク定義に値は残りません。environment には秘密でない設定だけを置きます。",
+      "rubric": [
+        "実行ロールに ECR の取得・CloudWatch Logs・Secrets Manager(と必要なら KMS)の権限を付けると述べている",
+        "タスクロールにはアプリが使う DynamoDB の操作だけを対象を限って付けると述べている",
+        "2 つのロールを分ける理由(アプリの穴からの被害を限る)に触れている",
+        "ECR の拡張スキャン(継続)と、タグの不変性・ダイジェスト指定に触れている",
+        "secrets で Secrets Manager の ARN を参照し、タスク定義に値を書かないことを述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "「起動する側の権限」と「アプリの権限」を分けて、それぞれを対象の ARN まで絞るのが ECS の権限設計の要点です。イメージの検査・固定と秘密情報の渡し方を合わせて、1 つの標準として説明できるようにします。"
+    }
+  ]
+}

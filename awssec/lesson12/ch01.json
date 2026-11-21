@@ -1,0 +1,92 @@
+{
+  "lesson": 12,
+  "chapter": 1,
+  "title": "IMDSv2 と SSRF — 認証情報を守る",
+  "priority": "🔴",
+  "text": "### 基礎: サーバーの上で何を守るのか\nL10・L11 では、通信の入口と出口を守りました。この章からは、通信が届いた先のサーバーそのもの(コンピューティングワークロード。EC2・コンテナ・Lambda など、計算をする部分)を守ります。\n\nL1 の責任共有モデルで見たとおり、EC2 の OS から上はお客様の責任です。OS の更新も、アプリの穴も、サーバーに付けた権限も、自分で守ります。実際に起きる事故は次のような形です。\n\n| 事故 | 何が起きたか | 本来の防ぎ方 |\n|---|---|---|\n| Web アプリに「指定した URL の中身を取ってくる」機能があり、内部のアドレスも指定できた | 攻撃者がメタデータのアドレスを指定し、EC2 に付けたロールの一時キーを盗んだ。そのキーで S3 の顧客データを持ち出された | IMDSv2 を必須にする(この章) |\n| 1 年前に作ったサーバーの OS を一度も更新していない | 公開済みの脆弱性(ソフトウェアの穴)を突かれて乗っ取られた | パッチの自動適用(ch02)と脆弱性の検査(ch03) |\n| SSH の鍵を全員で共有し、ポート 22 を開けていた | 退職者の PC から鍵が漏れ、ログインされた | Session Manager で鍵とポートをなくす(ch02) |\n\nこの章では、1 つ目の「メタデータから認証情報が盗まれる」流れを、実際のリクエストで追います。2019 年には、米国の大手金融機関で、この流れによって 1 億人規模の個人情報が流出した事件がありました。SCS でも実務でも、最もよく問われる論点の 1 つです。\n\n### 基礎の基礎: インスタンスメタデータとは\nEC2 の中で動くプログラムは、「自分はどのインスタンスか」「どのサブネットにいるか」などを知りたいことがあります。そのために、どの EC2 の中からでも `http://169.254.169.254/` という特別なアドレスに HTTP で問い合わせると、自分の情報が返ってきます。この仕組みを **IMDS**(Instance Metadata Service。インスタンスが自分の情報を聞く窓口)と呼びます。\n\n- `169.254.x.x` はリンクローカルアドレス(その機械の中か、すぐ隣にしか届かない特別な範囲)です。インターネットからは直接届きません\n- 返ってくるのは、AMI の ID、プライベート IP、ホスト名、ユーザーデータ(起動時に渡したスクリプト)、そして**インスタンスに付けた IAM ロールの一時的な認証情報**です\n\nL3 で見たとおり、EC2 にはインスタンスプロファイルでロールを付けます。L5 で見たとおり、AWS の SDK や CLI は、ほかに認証情報がなければ最後に IMDS へ一時キーを取りに行きます。ここが攻撃者に狙われます。\n\n### AWS での仕組み: IMDSv1 のリクエスト\nIMDSv1 は「GET を 1 回送れば答える」方式です。EC2 の中で次のように打ちます。\n\n```bash\ncurl http://169.254.169.254/latest/meta-data/iam/security-credentials/\n```\n\n```text\napp-server-role\n```\n\n| 部分 | 意味 |\n|---|---|\n| `curl` | HTTP のリクエストを送るコマンド。何も指定しなければ GET(取得)を送る |\n| `/latest/meta-data/` | メタデータの最新版の入口 |\n| `iam/security-credentials/` | 付いているロールの名前の一覧。ここでは `app-server-role` が 1 つ |\n\n続けてロールの名前を付けて問い合わせると、一時キーが返ります。\n\n```bash\ncurl http://169.254.169.254/latest/meta-data/iam/security-credentials/app-server-role\n```\n\n```json\n{\n  \"Code\" : \"Success\",\n  \"LastUpdated\" : \"2026-11-22T01:10:44Z\",\n  \"Type\" : \"AWS-HMAC\",\n  \"AccessKeyId\" : \"ASIAIOSFODNN7EXAMPLE\",\n  \"SecretAccessKey\" : \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\",\n  \"Token\" : \"IQoJb3JpZ2luX2VjEXAMPLETOKEN...\",\n  \"Expiration\" : \"2026-11-22T07:35:12Z\"\n}\n```\n\n| 項目 | 意味 |\n|---|---|\n| `AccessKeyId` | `ASIA` で始まる。L5 で見た STS の一時キーの印 |\n| `SecretAccessKey` | 署名に使う秘密の値 |\n| `Token` | セッショントークン。一時キーにはこの 3 点がそろって初めて使える |\n| `Expiration` | 期限。数時間で切れ、IMDS が期限前に新しいキーに差し替える |\n\nこの 3 点を手に入れた人は、どこからでも、期限までこのロールとして AWS の API を呼べます。ロールに `s3:GetObject` があれば、S3 のデータを読めます。\n\n### SSRF でメタデータから認証情報が盗まれる流れ\n**SSRF**(Server-Side Request Forgery。サーバーに、攻撃者の指定した宛先へリクエストを送らせる攻撃)は、アプリの穴です。たとえば「画像の URL を入れるとサムネイルを作る」機能が、URL の宛先を確かめずにサーバーから取りに行くとします。\n\n```text\nGET /thumbnail?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/app-server-role HTTP/1.1\nHost: app.example.com\n```\n\n攻撃者は、自分の PC からこの 1 行を送るだけです。`url=` の後ろに、外からは届かないはずのメタデータのアドレスを入れています。サーバーは「画像を取りに行く」つもりで、自分自身の IMDS に GET を送ります。IMDSv1 なら GET だけで答えるので、一時キーがアプリの応答として攻撃者に返ってきます。\n\n```mermaid\nsequenceDiagram\n    participant A as 攻撃者のPC\n    participant W as Webアプリ(EC2)\n    participant M as IMDS 169.254.169.254\n    participant S as S3\n    A->>W: GET /thumbnail?url=http://169.254.169.254/.../app-server-role\n    W->>M: GET /latest/meta-data/iam/security-credentials/app-server-role\n    M-->>W: AccessKeyId・SecretAccessKey・Token\n    W-->>A: 応答の本文に一時キーがそのまま入る\n    A->>S: 盗んだキーで aws s3 cp s3://customer-data/ . --recursive\n    S-->>A: 顧客データ\n```\n\n1. 攻撃者は、URL を受け取る機能にメタデータのアドレスを入れる\n2. EC2 のアプリが、何も疑わずに IMDS へ GET を送る\n3. IMDSv1 は GET だけで一時キーを返す\n4. アプリはそれを「取ってきた中身」として攻撃者に返す\n5. 攻撃者は自分の PC でキーを設定し、ロールの権限で S3 を読む\n\nポイントは、**攻撃者は EC2 にログインしていない**ことです。アプリの小さな穴 1 つで、サーバーの権限がまるごと外に出ます。SG も NACL も、正規の 443 番の要求なので止めません。\n\n### IMDSv2: トークンを先にもらう方式\nIMDSv2 は、「まず PUT でトークン(一時的な合言葉)をもらい、その後の GET のたびにトークンをヘッダー(HTTP の要求に付ける追加の情報)に付ける」方式です。\n\n```bash\nTOKEN=$(curl -X PUT \"http://169.254.169.254/latest/api/token\" \\\n  -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\ncurl -H \"X-aws-ec2-metadata-token: $TOKEN\" \\\n  http://169.254.169.254/latest/meta-data/iam/security-credentials/app-server-role\n```\n\n| 部分 | 意味 |\n|---|---|\n| `TOKEN=$( ... )` | かっこの中のコマンドの出力を、変数 `TOKEN` に入れる |\n| `-X PUT` | GET ではなく PUT(置く・作る)を送る。トークンを作る要求 |\n| `/latest/api/token` | トークンを発行する入口 |\n| `-H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\"` | トークンの有効期間を秒で指定するヘッダー。最大 21600 秒(6 時間) |\n| `-H \"X-aws-ec2-metadata-token: $TOKEN\"` | 2 回目の GET に、もらったトークンを付ける |\n\n結果は IMDSv1 と同じ JSON です。違いは、トークンなしで GET すると拒否されることです。IMDSv2 を必須(後述の `HttpTokens: required`)にした EC2 で、v1 の形で問い合わせると次のようになります。\n\n```bash\ncurl -s -o /dev/null -w \"%{http_code}\\n\" \\\n  http://169.254.169.254/latest/meta-data/iam/security-credentials/\n```\n\n```text\n401\n```\n\n`-s` は進み具合を表示しない、`-o /dev/null` は本文を捨てる、`-w \"%{http_code}\\n\"` は HTTP の結果の番号だけを表示する指定です。`401` は「認証されていない」という意味で、何も返りません。\n\n#### なぜ SSRF に効くのか\nIMDSv2 には、SSRF を難しくする工夫が 3 つ重なっています。\n\n| 工夫 | SSRF に効く理由 |\n|---|---|\n| PUT とカスタムヘッダーが必要 | 多くの SSRF は「URL を 1 つ指定して GET させる」だけで、メソッドやヘッダーを攻撃者が選べない |\n| `X-Forwarded-For` ヘッダー付きの PUT は拒否 | リバースプロキシ(要求を中継するサーバー)の多くは、中継するときにこのヘッダーを付ける。中継された要求ではトークンが発行されない |\n| 応答のホップ制限(既定 1) | PUT の応答パケットの TTL(ネットワーク機器を何台越えられるか)を 1 にする。EC2 の外へ中継された要求には応答が届かない |\n\n注意点として、IMDSv2 は「SSRF の穴を直す」ものではありません。PUT やヘッダーまで自由に指定できるほどの穴なら、v2 でも取られえます。アプリ側の対策(URL の宛先を許可リストで確かめる、内部アドレスを拒否する)も合わせて行います。これが L1 の多層防御です。\n\n#### ホップ制限とコンテナ\nEC2 の上で Docker のコンテナを動かすと、コンテナから IMDS までに 1 段の中継が増えます。ホップ制限が 1 だと、コンテナの中の SDK はトークンを受け取れず、ロールが使えません。そのため、コンテナを動かす EC2 では 2 にするのが公式の推奨です。逆に「コンテナからインスタンスのロールを使わせたくない」なら、1 のままにする選択もあります(ch04 で扱います)。\n\n### IMDSv2 を必須にする方法\n設定する場所は 3 つあり、優先順位があります。\n\n| 優先 | 場所 | 設定 |\n|---|---|---|\n| 1 | 起動時のインスタンスの設定(起動テンプレートを含む) | `HttpTokens=required` |\n| 2 | アカウントの既定値(リージョンごと) | `modify-instance-metadata-defaults` |\n| 3 | AMI | `--imds-support v2.0`(起動したインスタンスは v2 必須・ホップ制限 2) |\n\n既存のインスタンスを直すコマンドは次のとおりです。\n\n```bash\naws ec2 modify-instance-metadata-options \\\n  --instance-id i-0123456789abcdef0 \\\n  --http-tokens required \\\n  --http-endpoint enabled\n```\n\n```json\n{\n    \"InstanceId\": \"i-0123456789abcdef0\",\n    \"InstanceMetadataOptions\": {\n        \"State\": \"pending\",\n        \"HttpTokens\": \"required\",\n        \"HttpPutResponseHopLimit\": 1,\n        \"HttpEndpoint\": \"enabled\"\n    }\n}\n```\n\n`HttpTokens` が `required` になれば v2 だけを受け付けます(`optional` は v1 と v2 の両方)。`HttpEndpoint` は IMDS 自体を使えるかどうかで、`disabled` にすると IMDS が止まります。`State` が `pending` から `applied` に変われば反映済みです。再起動は要りません。\n\n新しいインスタンスをまとめて守るには、アカウントの既定値を変えます。\n\n```bash\naws ec2 modify-instance-metadata-defaults \\\n  --region ap-northeast-1 \\\n  --http-tokens required \\\n  --http-tokens-enforced enabled\n```\n\n`--http-tokens required` で、指定のないインスタンスは v2 必須で起動します。`--http-tokens-enforced enabled` を付けると強制になり、v1 を許す設定のインスタンスは**起動自体が失敗**します。既存のインスタンスは変わらないので、別に直します。複数のアカウントでは、L18 の Organizations の宣言型ポリシーで同じ設定を配れます。\n\nIAM のポリシーや SCP で「v2 必須でない起動を拒否」と書く方法もあります。\n\n```json\n{\n    \"Version\": \"2012-10-17\",\n    \"Statement\": [\n        {\n            \"Sid\": \"RequireImdsV2\",\n            \"Effect\": \"Deny\",\n            \"Action\": \"ec2:RunInstances\",\n            \"Resource\": \"arn:aws:ec2:*:*:instance/*\",\n            \"Condition\": {\n                \"StringNotEquals\": { \"ec2:MetadataHttpTokens\": \"required\" }\n            }\n        }\n    ]\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `\"Effect\": \"Deny\"` | 当てはまれば明示的に拒否(L3) |\n| `\"Action\": \"ec2:RunInstances\"` | インスタンスを起動する操作 |\n| `\"Resource\": \"arn:aws:ec2:*:*:instance/*\"` | 起動されるインスタンスについて判定する |\n| `\"ec2:MetadataHttpTokens\": \"required\"` が `StringNotEquals` | 起動の要求で v2 必須が指定されていなければ |\n\n結論は「v2 必須を指定しない起動は拒否」です。また、すでに盗まれたキーの悪用を減らす条件キーに `ec2:RoleDelivery` があります。IMDSv2 で受け取った一時キーで呼ばれた要求には、この値が `2.0` で入ります。「`2.0` 未満なら拒否」と書くと、v1 経由で取られたキーを使えなくできます。\n\n### 移行のしかた: いきなり必須にしない\n古いアプリや古い SDK が v1 を使っていると、必須にした瞬間に動かなくなります。公式の推奨の流れは次のとおりです。\n\n1. CloudWatch のメトリクス `MetadataNoToken`(トークンなしの問い合わせの回数)で、v1 を使っているインスタンスを探す\n2. そのインスタンスの SDK・エージェントを、v2 に対応した版に上げる(現在の SDK はすべて対応)\n3. `MetadataNoToken` が 0 になったのを確かめて、`HttpTokens=required` にする\n4. 新しいインスタンスは、アカウントの既定値と強制、または SCP で最初から v2 にする\n\nAmazon Linux 2023 など新しい AMI は、AMI 側で v2 必須(`imds-support v2.0`)になっています。\n\n### 盗まれたことに気づく\nL14 で扱う GuardDuty には、この流れ専用の検出結果があります。`UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.OutsideAWS` は、「EC2 のロールの一時キーが、AWS の外の IP アドレスから使われた」ことを示します(AWS の中の別アカウントから使われた場合は `.InsideAWS`)。見つけたときの対応(キーの無効化とインスタンスの隔離)は L17 で扱います。\n\n### 実務での使い方と判断\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. v1 も許す(`optional`) | GET だけで答える | 古いアプリもそのまま動く | SSRF 1 つでロールが盗まれる | 低い | 無料 |\n| B. v2 必須(`required`) | PUT のトークンが必要 | SSRF の多くを防ぐ。設定 1 つ | v1 しか使えない古いソフトは止まる | 低い(移行時だけ確認) | 無料 |\n| C. IMDS を止める(`disabled`) | 問い合わせに答えない | メタデータを狙う攻撃は成り立たない | ロール・ユーザーデータ・SSH の公開鍵の取得など、IMDS を使う機能が全部止まる | 高い | 無料 |\n\nプロの決め方は「全インスタンス B、新規はアカウントの強制か SCP で B 以外を作れなくする」です。C は、ロールも IMDS も使わないと確かな特殊なサーバーに限ります。そのうえで、ロールの権限そのものを最小にします(L3・L6)。盗まれても読めるものが少なければ、被害は小さくなります。\n\n#### よくある事故\n- **既存のインスタンスを直し忘れる**: アカウントの既定値は新しいインスタンスにしか効きません\n- **ホップ制限 1 のままコンテナを動かし、「ロールが使えない」と v1 に戻す**: 正しくはホップ制限を 2 にします\n- **v2 にしたので SSRF は大丈夫と考える**: アプリの入力チェックと、ロールの最小権限も必要です\n- **ロールに `AdministratorAccess` を付けた EC2**: 盗まれたときの被害がアカウント全体に広がります\n\n### 試験ではこう問われる\n「EC2 上のアプリに SSRF の脆弱性が見つかった。インスタンスの認証情報を守る、最も運用負荷が低い対策」は IMDSv2 の必須化(`HttpTokens=required`)です。「組織の全アカウントで、IMDSv1 のインスタンスを起動させない」は SCP の `ec2:MetadataHttpTokens` 条件か、宣言型ポリシーです。「コンテナから IMDSv2 が使えない」はホップ制限を 2 にします。「EC2 のロールのキーが外部から使われた」と気づくのは GuardDuty の `InstanceCredentialExfiltration` です。\n\n### まとめ\n- IMDS(`169.254.169.254`)は EC2 の中から自分の情報とロールの一時キーを取る窓口です。IMDSv1 は GET 1 回で一時キーを返します\n- SSRF では、アプリに IMDS へ GET させて一時キーを盗み、攻撃者は外からロールの権限を使います\n- IMDSv2 は PUT で得たトークンをヘッダーに付けないと答えず、`X-Forwarded-For` 付きの PUT の拒否とホップ制限で中継も防ぎます\n- `HttpTokens=required` を、既存は個別に、新規はアカウントの既定値・強制・SCP で徹底します。移行前に `MetadataNoToken` で v1 の利用を探します\n",
+  "quiz": [
+    {
+      "question": "EC2 の中で `curl http://169.254.169.254/latest/meta-data/iam/security-credentials/app-role` を実行したところ、`AccessKeyId`・`SecretAccessKey`・`Token`・`Expiration` を含む JSON が返った。この結果から言えることとして正しいものはどれか。",
+      "choices": [
+        "このインスタンスは IMDSv1 での問い合わせを受け付けており、ロール `app-role` の一時キーが取得できる",
+        "このインスタンスは IMDSv2 を必須にしており、トークンが自動で付けられた",
+        "返ったキーはルートユーザーの長期のアクセスキーで、期限はない",
+        "返ったキーはこのインスタンスの中からしか使えず、外に持ち出しても使えない"
+      ],
+      "correct": 0,
+      "explanation": "トークンのヘッダーを付けない GET で答えが返ったので、IMDSv1 を受け付けている(`HttpTokens=optional`)と分かります。返るのはインスタンスに付けたロールの STS の一時キーで、`Expiration` の期限があります。一時キーは持ち出せば外からも使えるため、SSRF で狙われます。"
+    },
+    {
+      "question": "Web アプリを動かす EC2 で、外部の URL から画像を取ってくる機能に SSRF の脆弱性が見つかった。アプリの修正には数週間かかる。その間、インスタンスのロールの認証情報が盗まれるリスクを、最も運用負荷が低く下げる方法はどれか。",
+      "choices": [
+        "インスタンスのセキュリティグループで、`169.254.169.254` への外向きの通信を拒否するルールを追加する",
+        "インスタンスのメタデータのオプションを `HttpTokens=required` に変更する",
+        "インスタンスからロールを外し、アクセスキーを `~/.aws/credentials` に置く",
+        "NACL で、インターネットからの 443 番の通信を拒否する"
+      ],
+      "correct": 1,
+      "explanation": "IMDSv2 を必須にすると、PUT で得たトークンをヘッダーに付けない GET は 401 で拒否されるため、URL を指定して GET させるだけの SSRF ではキーを取れません。再起動も不要です。SG は許可リストで拒否のルールは書けず、IMDS への通信は SG の対象でもありません。アクセスキーをファイルに置くと、長期のキーが漏れる別のリスクが生まれます。443 を止めるとサービス自体が止まります。"
+    },
+    {
+      "question": "IMDSv2 の仕組みのうち、「リバースプロキシや WAF を経由して中継された要求で、トークンが発行されるのを防ぐ」働きをするものはどれか。",
+      "choices": [
+        "トークンの有効期間が最大 6 時間であること",
+        "トークンがインスタンスごとに固有で、別のインスタンスでは使えないこと",
+        "`X-Forwarded-For` ヘッダーを含む PUT 要求を拒否すること",
+        "メタデータのパスが `/latest/meta-data/` で始まること"
+      ],
+      "correct": 2,
+      "explanation": "多くのリバースプロキシは、中継するときに `X-Forwarded-For` ヘッダーを付けます。IMDSv2 はこのヘッダー付きの PUT を拒否するため、中継された要求ではトークンが発行されません。有効期間やインスタンス固有であることは、トークンの使い回しを制限する性質で、中継の防止ではありません。パスは v1 と v2 で同じです。"
+    },
+    {
+      "question": "EC2 上で Docker のコンテナ(bridge ネットワーク)を動かしている。IMDSv2 を必須にしたところ、コンテナ内の SDK がインスタンスのロールを使えなくなった。コンテナからロールを使い続けることが要件である。最も適切な対応はどれか。",
+      "choices": [
+        "`HttpTokens` を `optional` に戻す",
+        "IMDS を `disabled` にし、コンテナにアクセスキーを環境変数で渡す",
+        "インスタンスを再起動して、トークンを作り直す",
+        "メタデータの応答のホップ制限(`HttpPutResponseHopLimit`)を 2 にする"
+      ],
+      "correct": 3,
+      "explanation": "コンテナから IMDS までは中継が 1 段増えるため、ホップ制限 1 では PUT の応答(トークン)がコンテナに届きません。公式もコンテナ環境ではホップ制限 2 を推奨しています。v1 に戻すと SSRF への守りを失います。アクセスキーを環境変数で渡すのは長期のキーを増やす悪い手です。再起動では解決しません。"
+    },
+    {
+      "question": "AWS Organizations で 40 のアカウントを管理している。今後、どのアカウントでも IMDSv1 を受け付けるインスタンスを起動できないようにしたい。各アカウントの管理者が個別に設定を変えても回避できない方法として、最も適切なものはどれか。",
+      "choices": [
+        "各アカウントで `modify-instance-metadata-defaults --http-tokens required` を実行する",
+        "SCP で、`ec2:MetadataHttpTokens` が `required` でない `ec2:RunInstances` を拒否する",
+        "各インスタンスで `modify-instance-metadata-options --http-tokens required` を実行するよう手順書に書く",
+        "GuardDuty を有効にして、IMDSv1 のインスタンスを検出する"
+      ],
+      "correct": 1,
+      "explanation": "SCP はアカウントの管理者を含むすべてのプリンシパルに効くガードレールで、`ec2:MetadataHttpTokens` 条件で v2 必須でない起動を拒否できます(宣言型ポリシーでアカウントの設定を固定する方法もあります)。アカウントの既定値は、管理者が変更でき、起動時の指定で上書きもできます。手順書は守られる保証がありません。GuardDuty は検出で、起動を止めません。"
+    },
+    {
+      "question": "GuardDuty が `UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.OutsideAWS` を出した。この検出結果が意味することとして最も適切なものはどれか。",
+      "choices": [
+        "EC2 インスタンスに付けたロールの一時キーが、AWS の外の IP アドレスから API の呼び出しに使われた",
+        "IAM ユーザーのパスワードが、AWS の外から総当たりで試された",
+        "EC2 インスタンスから、AWS の外の既知の悪性 IP アドレスへ通信があった",
+        "IMDSv1 を受け付けるインスタンスが起動された"
+      ],
+      "correct": 0,
+      "explanation": "この検出結果は、インスタンスのロールの一時キーがインスタンスの外、しかも AWS の外の IP から使われたことを示し、SSRF などでキーが盗まれた典型の兆候です。パスワードの総当たりや悪性 IP への通信は別の検出結果です。IMDSv1 のインスタンスの起動自体は GuardDuty の検出対象ではありません。"
+    },
+    {
+      "kind": "essay",
+      "question": "SSRF の脆弱性を持つ Web アプリが IMDSv1 の EC2 で動いているとき、攻撃者が S3 の顧客データを持ち出すまでの流れを順に説明してください。そのうえで、IMDSv2 がどの段階をどう防ぐかと、IMDSv2 だけでは足りないため併せて行う対策を 2 つ以上述べてください(250〜450 字)。",
+      "answer": "攻撃者は、URL を受け取る機能に `http://169.254.169.254/latest/meta-data/iam/security-credentials/ロール名` を入れて送ります。アプリはサーバーの中から IMDS に GET を送り、IMDSv1 は GET だけでロールの一時キー(AccessKeyId・SecretAccessKey・Token)を返します。アプリはそれを応答として攻撃者に返し、攻撃者は自分の PC でそのキーを使い、ロールの権限で S3 のデータをダウンロードします。IMDSv2 を必須にすると、先に PUT でトークンを取り、GET にヘッダーで付けなければ 401 で拒否されるため、URL を指定して GET させるだけの SSRF では 2 段目で止まります。X-Forwarded-For 付きの PUT の拒否とホップ制限 1 で、中継された要求も防ぎます。ただしメソッドやヘッダーまで操れる穴なら取られうるので、アプリで宛先を許可リストで確かめて内部アドレスを拒否すること、ロールの権限を必要なバケットと操作だけに絞ること、GuardDuty の InstanceCredentialExfiltration で外部からの利用を検知することを併せて行います。",
+      "rubric": [
+        "アプリが IMDS に GET を送り、v1 が一時キーを返し、攻撃者が外部からそのキーで S3 を読む流れを順に説明している",
+        "IMDSv2 が PUT で得たトークンのヘッダーを必須にすることで、GET だけの SSRF を防ぐと説明している",
+        "アプリの入力チェック、ロールの最小権限、GuardDuty による検知など、併せて行う対策を 2 つ以上挙げている",
+        "IMDSv2 が SSRF の穴そのものを直すわけではないことに触れている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "SSRF による認証情報の盗難は「アプリの穴 → IMDS → 一時キー → 外部から利用」の 4 段で説明できます。IMDSv2 は 2 段目を難しくする対策で、穴の修正・権限の最小化・検知と重ねるのが多層防御です。"
+    }
+  ]
+}
