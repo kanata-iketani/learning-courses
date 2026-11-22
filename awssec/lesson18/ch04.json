@@ -1,0 +1,92 @@
+{
+  "lesson": 18,
+  "chapter": 4,
+  "title": "委任管理者・ルートの一元管理・払い出し",
+  "priority": "🔴",
+  "text": "### 基礎: 管理アカウントに仕事を集めない、ルートの鍵を配らない\nch1 で、管理アカウントには業務のリソースを置かず、入れる人を絞ると決めました。ところが、組織全体のセキュリティの仕事には、管理アカウントの権限が要るものがたくさんあります。\n\n- 全アカウントで GuardDuty(L14)・Security Hub・Inspector(L12)・Macie(L9)を有効にして、結果を 1 か所で見る\n- SCP を書き直して OU に付ける\n- 新しいアカウントを作る\n\nこれを全部、管理アカウントでやると、セキュリティ担当が毎日管理アカウントに入ることになります。入る人が増え、組織全体を握るアカウントの危険が増えます。そこで使うのが**委任管理者**(管理アカウントの代わりに、特定のサービスについて組織全体を管理するメンバーアカウント)です。\n\nもう 1 つの問題がルートユーザーです。50 個のアカウントがあれば、ルートユーザーも 50 人います。それぞれにパスワードと MFA があり、だれかが金庫に保管し、定期的に点検しなければなりません(L3)。1 つでも管理が甘ければ、そのアカウントは乗っ取られます。今の AWS では、メンバーアカウントのルートの認証情報を**そもそも持たない**形にできます。それが**ルートアクセスの一元管理**です。\n\n最後に、この 2 つと ch1〜ch3 の内容を組み合わせて、新しいアカウントを安全な状態で配る**アカウントの払い出し**の流れを作ります。\n\n### 委任管理者: 仕事をセキュリティツール用アカウントに移す\n#### 2 つの手順: 信頼されたアクセスと、委任管理者の登録\n組織全体でサービスを使うには、2 つの設定が要ります。\n\n1. **信頼されたアクセス**(trusted access): 「このサービスが、組織の情報を読み、各アカウントで作業してよい」と Organizations に許可します\n2. **委任管理者の登録**: 「このサービスについては、このメンバーアカウントを管理役にする」と決めます\n\n管理アカウント(111122223333)で、IAM Access Analyzer(L6)の委任管理者を、セキュリティツール用アカウント(444455556666)にする例です。\n\n```console\n$ aws organizations enable-aws-service-access \\\n    --service-principal access-analyzer.amazonaws.com\n\n$ aws organizations register-delegated-administrator \\\n    --account-id 444455556666 \\\n    --service-principal access-analyzer.amazonaws.com\n```\n\n- `enable-aws-service-access`: 信頼されたアクセスを有効にします\n- `--service-principal`: サービスを表す名前(サービスプリンシパル。L6)です\n- `register-delegated-administrator`: そのサービスの委任管理者を登録します。`--account-id` が管理役にするメンバーアカウントです\n\nGuardDuty・Security Hub・Macie・Inspector などのセキュリティのサービスでは、**そのサービス自身の API** で委任管理者を指定するのが基本です。そうすると、裏で上の 2 つの手順もまとめて行われます。\n\n```console\n$ aws guardduty enable-organization-admin-account \\\n    --admin-account-id 444455556666 --region ap-northeast-1\n```\n\n- GuardDuty の委任管理者を 444455556666 にします\n- L15 で見たとおり、GuardDuty の委任管理者は**リージョンごと**の設定です。使うリージョン(と、監視は止めないリージョン)すべてで同じアカウントを指定します\n\n登録できたかは、管理アカウントで確かめます。\n\n```console\n$ aws organizations list-delegated-administrators \\\n    --query 'DelegatedAdministrators[].[Id,Name]' --output text\n444455556666  security-tooling\n\n$ aws organizations list-delegated-services-for-account --account-id 444455556666 \\\n    --query 'DelegatedServices[].ServicePrincipal' --output text\naccess-analyzer.amazonaws.com  guardduty.amazonaws.com  securityhub.amazonaws.com\n```\n\n- 1 つ目: 委任管理者になっているアカウントの一覧です。ID と名前が出ます\n- 2 つ目: そのアカウントがどのサービスの委任管理者かを出します。3 つのサービスの管理役になっていることが分かります\n\n委任管理者のアカウントからは、組織のメンバーを自動で参加させる設定(新しいアカウントで GuardDuty を自動で有効にする、など)ができます。こうしておけば、ch4 の最後で見る払い出しの流れで、新しいアカウントに検知が自動で入ります。\n\n| サービス | よく委任する先 | 委任すると何ができるか |\n|---|---|---|\n| GuardDuty・Security Hub・Inspector・Macie・Detective | セキュリティツール用 | 全アカウントの有効化と結果の集約(L9・L12・L14) |\n| IAM Access Analyzer | セキュリティツール用 | 組織全体を信頼の範囲にした分析(L6) |\n| AWS Config | セキュリティツール用(Control Tower では監査用) | ルールと結果の集約(L20) |\n| CloudTrail | セキュリティツール用やログ保管用 | 組織の証跡の管理(L13) |\n| IAM(ルートアクセスの一元管理) | セキュリティツール用 | 次の節 |\n| IAM Identity Center | ID 管理用のアカウント | 社員のアクセスの管理(L5) |\n\n#### Organizations のポリシーの管理も委任できる\nSCP や RCP の作成・更新も、**リソースベースの委任ポリシー**(管理アカウントの組織そのものに付けるポリシー)で、メンバーアカウントに任せられます。公式の例をもとに、SCP の作成と更新だけを任せる部分を抜き出します。\n\n```json\n{ \"Sid\": \"DelegatingMinimalActionsForSCPs\",\n  \"Effect\": \"Allow\",\n  \"Principal\": { \"AWS\": \"arn:aws:iam::444455556666:root\" },\n  \"Action\": [ \"organizations:CreatePolicy\", \"organizations:DescribePolicy\",\n              \"organizations:UpdatePolicy\", \"organizations:DeletePolicy\" ],\n  \"Resource\": [\n    \"arn:aws:organizations::111122223333:policy/o-a1b2c3d4e5/service_control_policy/*\",\n    \"arn:aws:organizations::aws:policy/service_control_policy/*\" ] }\n```\n\n- `Principal`: 任せる相手のアカウントです。L6 で見たとおり、`:root` は「このアカウントに任せる」という意味で、ルートユーザーだけを指すわけではありません。アカウントの中でだれが使えるかは、そのアカウントの IAM のポリシーで決めます\n- `Action`: SCP の作成・参照・更新・削除です。**付け外し**(`AttachPolicy`・`DetachPolicy`)は入っていないので、この文だけでは OU に付けられません\n- `Resource`: 1 行目は自分の組織の SCP、2 行目は AWS 管理の SCP(`FullAWSAccess` など)です\n- 公式の例では、このほかに組織の構造を見るための `Describe`・`List` の操作を許す文も一緒に書きます\n\nポリシーを書く人と、付ける人(管理アカウント)を分けることもできます。「書く」と「全アカウントに効かせる」を 1 人に集めない、職務分掌の考え方です。\n\n### ルートアクセスの一元管理\n#### 何ができるようになるか\nルートアクセスの一元管理を有効にすると、管理アカウント(または IAM の委任管理者)から、メンバーアカウントについて次のことができます(公式ドキュメントで確認)。\n\n| できること | 中身 |\n|---|---|\n| ルートの認証情報の管理 | メンバーアカウントのルートのパスワード・アクセスキー・署名証明書を消し、MFA を無効にする。**組織で新しく作るアカウントは、最初からルートの認証情報を持たない** |\n| 特権の作業(ルートのセッション) | ルートでしかできなかった一部の作業を、短い一時的なセッションで行う |\n\nルートの認証情報を消すと、そのアカウントのルートユーザーではログインできず、パスワードの再設定(アカウントの回復)もできません。盗まれる鍵が、そもそもなくなります。\n\n#### 有効にする手順\n管理アカウントで、次の順に実行します。\n\n```console\n$ aws organizations enable-aws-service-access --service-principal iam.amazonaws.com\n\n$ aws iam enable-organizations-root-credentials-management\n\n$ aws iam enable-organizations-root-sessions\n\n$ aws organizations register-delegated-administrator \\\n    --service-principal iam.amazonaws.com --account-id 444455556666\n```\n\n- 1 行目: IAM に信頼されたアクセスを与えます\n- 2 行目: ルートの認証情報の管理(消す・状態を見る)を有効にします\n- 3 行目: 特権の作業のためのルートのセッションを有効にします\n- 4 行目(任意): IAM の委任管理者をセキュリティツール用アカウントにします。これで管理アカウントに入らずに、ルートの管理ができます\n\n#### 特権の作業: AssumeRoot\n「本番のアカウントで、だれかがバケットポリシーに『全員を Deny』と書いてしまい、管理者を含めてだれもバケットを触れなくなった」という事故を考えます。以前はルートユーザーでログインして直すしかありませんでした。一元管理を有効にした後は、委任管理者のアカウントから STS の `AssumeRoot` を呼びます。\n\n```console\n$ aws sts assume-root \\\n    --region ap-northeast-1 \\\n    --target-principal 555566667777 \\\n    --task-policy-arn arn=arn:aws:iam::aws:policy/root-task/S3UnlockBucketPolicy \\\n    --duration-seconds 900\n{\n    \"Credentials\": {\n        \"AccessKeyId\": \"ASIAIOSFODNN7EXAMPLE\",\n        \"SecretAccessKey\": \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY\",\n        \"SessionToken\": \"IQoJb3JpZ2luX2VjEXAMPLE...\",\n        \"Expiration\": \"2026-11-22T03:15:00Z\"\n    },\n    \"SourceIdentity\": \"alice\"\n}\n```\n\n- `--region ap-northeast-1`: `AssumeRoot` は**リージョンの** STS のエンドポイントに送る必要があり、グローバルのエンドポイント(sts.amazonaws.com)では使えません\n- `--target-principal`: 作業の対象のメンバーアカウントの ID です\n- `--task-policy-arn`: このセッションでできる作業を決める AWS 管理ポリシーです。必ず指定します。ここでは S3 のバケットポリシーの解除用です\n- `--duration-seconds 900`: セッションの長さです。最大で 900 秒(15 分)で、既定も 900 秒です\n- 返ってくる `Credentials` は、L5 で見た一時的な認証情報と同じ形です(`ASIA` で始まるキー、シークレット、セッショントークン、有効期限)\n- `SourceIdentity`: 呼び出した人を表す値で、CloudTrail で「だれのルートのセッションだったか」を追えます\n\nこの認証情報を環境変数に入れて、バケットポリシーを消します。\n\n```console\n$ export AWS_ACCESS_KEY_ID=ASIAIOSFODNN7EXAMPLE\n$ export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY\n$ export AWS_SESSION_TOKEN=IQoJb3JpZ2luX2VjEXAMPLE...\n$ aws s3api delete-bucket-policy --bucket example-locked-bucket\n```\n\n- `export`: シェルの環境変数を設定します。CLI は、この 3 つがあれば、それを認証情報として使います(L5)\n- `delete-bucket-policy`: 誤ったバケットポリシーを消します。成功すると何も表示されません。そのあと、通常の管理者のロールで正しいポリシーを付け直します\n\n使えるタスクポリシーは 5 つです。\n\n| タスクポリシー | できること |\n|---|---|\n| IAMAuditRootUserCredentials | ルートの認証情報(パスワード・キー・MFA)があるかを調べる |\n| IAMDeleteRootUserCredentials | ルートの認証情報を消す |\n| IAMCreateRootUserPassword | パスワードの回復を許す(ルートでしかできない作業がどうしても要るとき) |\n| S3UnlockBucketPolicy | 全員を拒否してしまった S3 のバケットポリシーを消す |\n| SQSUnlockQueuePolicy | 全員を拒否してしまった SQS のキューのポリシーを消す |\n\nルートの認証情報で `AssumeRoot` を呼ぶことはできません。呼べるのは、管理アカウントか IAM の委任管理者のアカウントで、`sts:AssumeRoot` を明示的に許可された IAM のユーザーやロールだけです。だれにどのタスクを許すかは、条件キー `sts:TaskPolicyArn` で絞ります。\n\n```json\n{ \"Sid\": \"OnlyAuditAndUnlock\",\n  \"Effect\": \"Allow\",\n  \"Action\": \"sts:AssumeRoot\",\n  \"Resource\": \"*\",\n  \"Condition\": { \"ArnEquals\": { \"sts:TaskPolicyArn\": [\n      \"arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials\",\n      \"arn:aws:iam::aws:policy/root-task/S3UnlockBucketPolicy\" ] } } }\n```\n\n- セキュリティ担当の普段のロールには「調べる」と「S3 の解除」だけを許し、認証情報の削除や回復のような重い作業は、別の承認つきのロールに分けます\n\n```mermaid\nsequenceDiagram\n    participant A as セキュリティ担当\n    participant S as STS(東京リージョン)\n    participant M as メンバーアカウント\n    participant T as CloudTrail\n    A->>S: AssumeRoot(対象 555566667777、S3UnlockBucketPolicy、900秒)\n    S->>S: sts:AssumeRoot の許可とタスクポリシーを確認\n    S-->>A: 15分だけ有効な一時的な認証情報\n    A->>M: DeleteBucketPolicy(example-locked-bucket)\n    M-->>A: 成功\n    S-->>T: AssumeRoot を記録\n    M-->>T: DeleteBucketPolicy を記録\n```\n\n図の流れです。担当者は STS に、対象のアカウントとタスクポリシーを指定してルートのセッションを頼みます。STS は担当者の権限とタスクポリシーを確かめ、15 分だけ使える認証情報を返します。担当者はそれで、タスクポリシーが許す作業(バケットポリシーの削除)だけを行います。呼び出しと作業は、どちらも CloudTrail に残ります。\n\n### アカウントの払い出しの流れ\nここまでの部品を組み合わせて、新しいアカウントを配る流れを作ります。\n\n```mermaid\nflowchart TD\n    A[チームが申請: システム名・環境・責任者・予算] --> B[承認]\n    B --> C[Account Factory または AFT でアカウント作成]\n    C --> D[決めた OU に配置: 例 Workloads/Prod]\n    D --> E[SCP・RCP・宣言型ポリシー・コントロールが OU から自動で効く]\n    E --> F[ランディングゾーンの基盤: 組織の証跡・Config]\n    F --> G[委任管理者の自動有効化: GuardDuty・Security Hub・Inspector]\n    G --> H[追加設定: ネットワーク・予算の通知・代替の連絡先]\n    H --> I[Identity Center でチームに権限セットを割り当て]\n    I --> J[ルートの認証情報なしを確認して引き渡し]\n```\n\n1 段ずつ見ます。\n\n- **申請**: システム名・環境(本番か本番以外か)・責任者・予算を必ず書かせます。責任者のいないアカウントは、後で放置されます\n- **作成**: Account Factory(ch3)や AFT で作ります。コンソールから手で作らないことで、名前の付け方やメールアドレスの規則がそろいます\n- **OU に配置**: 置いた瞬間から、OU のポリシーとコントロールが効きます(ch1)\n- **基盤と検知**: ランディングゾーンの証跡と Config、委任管理者の自動参加の設定によって、GuardDuty などが自動で入ります。人がアカウントごとに有効にする作業はありません\n- **追加設定**: AFT や CfCT(ch3)で、社内標準のネットワーク、予算の通知、代替の連絡先(セキュリティの連絡を受けるメールアドレス)を入れます\n- **権限の割り当て**: Identity Center(L5)で、チームのグループに権限セット(本番なら読み取り中心、など)を割り当てます。IAM ユーザーは作りません\n- **ルートの確認**: 一元管理を有効にしていれば、新しいアカウントには最初からルートの認証情報がありません。`IAMAuditRootUserCredentials` で確かめられます\n\n使わなくなったアカウントは、逆の順で片づけます。\n\n1. Suspended の OU に移します。この OU には、すべての操作を Deny する SCP を付けておきます\n2. 残っているリソースとデータの扱いを決めます(必要なら保管用アカウントへ移す)\n3. 管理アカウントや委任管理者から、アカウントを閉じます(`aws organizations close-account`)。閉じた後もしばらくは再開できる期間(閉鎖後の期間)があり、その間は組織のアカウントの数にも数えられます\n\n### 構成図: 委任管理者とルートの一元管理\n```mermaid\narchitecture-beta\n    group org(aws:aws-cloud)[Organization]\n    group mgmt(aws:account)[Management Account] in org\n    group sec(aws:account)[Security Tooling Account] in org\n    group prod(aws:account)[Prod Account] in org\n\n    service orgs(aws:organizations)[Organizations] in mgmt\n    service gd(aws:guardduty)[GuardDuty Admin] in sec\n    service hub(aws:aws-security-hub)[Security Hub Admin] in sec\n    service iamadm(aws:iam)[IAM Root Access Admin] in sec\n    service sts(aws:res-aws-identity-access-management-aws-sts)[AssumeRoot] in sec\n    service bucket(aws:s3)[Locked Bucket] in prod\n    service gdm(aws:guardduty)[GuardDuty Member] in prod\n\n    orgs:R --> L:gd\n    gd:R --> L:hub\n    gd:B --> T:iamadm\n    iamadm:R --> L:sts\n    sts:R --> L:bucket\n    gdm:T --> B:hub\n```\n\n管理アカウントの Organizations は、委任管理者としてセキュリティツール用アカウントを登録するだけで、普段の作業はしません。セキュリティツール用アカウントが、GuardDuty と Security Hub の管理役として本番のアカウントの検出結果を集め、IAM の委任管理者として `AssumeRoot` で本番のアカウントのロックされたバケットを直します。\n\n### 実務での使い方と判断\n#### 管理の置き場所の比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 |\n|---|---|---|---|---|\n| A. 全部を管理アカウントで | セキュリティのサービスも SCP もルートも管理アカウントで扱う | 設定が少ない | 管理アカウントに入る人が増え、組織全体の危険が増える | 低いが危険 |\n| B. 委任管理者に分ける(推奨) | セキュリティのサービスと IAM のルート管理をセキュリティツール用アカウントへ | 管理アカウントに入る人を最小にできる。担当ごとに権限を分けられる | サービスごとに委任の設定が要る。GuardDuty などはリージョンごと | 中 |\n\n#### ルートの守り方の比較\n| 案 | 仕組み | 良い点 | 悪い点 |\n|---|---|---|---|\n| A. 各アカウントでパスワードと MFA を保管(L3) | 金庫で管理し、定期点検 | 組織がなくてもできる | アカウントの数だけ鍵があり、点検の手間と漏れの危険が増える |\n| B. SCP でルートを禁止(ch2) | ルートの操作を Deny | すぐ効く | 認証情報は残る。管理アカウントのルートは対象外 |\n| C. ルートアクセスの一元管理(推奨) | 認証情報を消し、必要な作業は AssumeRoot で 15 分だけ | 盗まれる鍵がなくなる。作業は記録され、タスクで絞れる | 組織が必要。タスクにない作業はパスワードの回復が要る |\n\nプロは C を基本にして、B を重ねます。管理アカウントのルートユーザーだけは残るので、L3 の守り方(MFA、キーなし、使ったら通知)を続けます。\n\n#### よくある事故\n- **GuardDuty の委任管理者を 1 つのリージョンでしか指定しない**: ほかのリージョンの検出結果が集まりません(L15)\n- **委任管理者のアカウントに、業務の管理者のロールも配る**: 組織全体を見られるアカウントに、関係のない人が入れてしまいます\n- **sts:AssumeRoot を条件なしで広く許可する**: だれでも全アカウントのルートの認証情報を消したり、回復を許したりできます\n- **払い出しをコンソールの手作業で行う**: OU の置き間違い、権限の割り当て漏れ、予算の通知の付け忘れが起きます\n- **閉じるアカウントをそのまま閉じる**: 中のデータの扱いを決めないまま失われます。Suspended の OU で止めてから閉じます\n\n### 試験ではこう問われる\n- 「管理アカウントの使用を最小にしながら、組織全体で GuardDuty・Security Hub を管理」は、セキュリティツール用アカウントを**委任管理者**にする、が答えです\n- 「メンバーアカウントのルートユーザーの認証情報を、**大規模に**、**運用負荷を低く**なくしたい」は、ルートアクセスの一元管理(認証情報の削除)です\n- 「全員を拒否するバケットポリシーで、だれもバケットを触れない」は、`AssumeRoot` と `S3UnlockBucketPolicy` です。各アカウントのルートでログインする、は古い答えになりつつあります\n- 「新しいアカウントに、ガードレール・ログ・検知・権限を自動で入れる」は、Control Tower の Account Factory(または AFT)と、委任管理者の自動参加の組み合わせです\n\n### まとめ\n- 委任管理者は、特定のサービスについて組織全体を管理するメンバーアカウントです。信頼されたアクセスと登録の 2 つで設定し、管理アカウントに入る人を最小にします\n- SCP などのポリシーの管理も、リソースベースの委任ポリシーで任せられます\n- ルートアクセスの一元管理では、メンバーアカウントのルートの認証情報を消し(新しいアカウントは最初からない)、必要な作業は `AssumeRoot` で、タスクポリシーに絞った 15 分のセッションで行います\n- アカウントの払い出しは、申請 → 作成 → OU に配置 → 基盤と検知が自動で入る → 追加設定 → 権限の割り当て → ルートの確認、の流れを自動にします。片づけは Suspended の OU で止めてから閉じます\n",
+  "quiz": [
+    {
+      "question": "セキュリティチームは、組織の全アカウントで GuardDuty と Security Hub を有効にして結果を集めたい。ただし、管理アカウントにログインする人は最小にしたい。最も適切な方法はどれか。",
+      "choices": [
+        "管理アカウントで GuardDuty と Security Hub を有効にし、セキュリティチーム全員に管理アカウントの管理者権限を与える",
+        "各メンバーアカウントでセキュリティチームが個別に GuardDuty と Security Hub を有効にする",
+        "セキュリティツール用のメンバーアカウントを GuardDuty と Security Hub の委任管理者にし、そこから組織全体を管理する",
+        "SCP で GuardDuty と Security Hub の有効化を全アカウントに強制する"
+      ],
+      "correct": 2,
+      "explanation": "委任管理者にすれば、セキュリティツール用アカウントから組織全体の有効化と結果の集約ができ、管理アカウントに入る人を増やさずに済みます。管理アカウントに人を集めると組織全体の危険が増えます。個別の有効化は手間と漏れが出ます。SCP は操作を制限するもので、サービスを有効にする働きはありません。"
+    },
+    {
+      "question": "ルートアクセスの一元管理を有効にした組織で、委任管理者のアカウントから aws sts assume-root を実行した。この操作の説明として正しいものはどれか。",
+      "choices": [
+        "セッションの長さは最大 12 時間で、既定は 1 時間である",
+        "グローバルの STS エンドポイント(sts.amazonaws.com)にだけ送ることができる",
+        "メンバーアカウントのルートユーザーのパスワードがあれば、それで呼び出せる",
+        "タスクポリシーの指定は必須で、セッションはそのタスクポリシーが許す作業だけに限られ、最大 900 秒である"
+      ],
+      "correct": 3,
+      "explanation": "AssumeRoot では TaskPolicyArn が必須で、セッションはそのタスク(例: S3UnlockBucketPolicy)に限られます。長さは最大・既定とも 900 秒(15 分)です。リージョンの STS エンドポイントに送る必要があり、グローバルのエンドポイントは使えません。ルートの認証情報では呼べず、管理アカウントか IAM の委任管理者の IAM ユーザー・ロールが呼びます。"
+    },
+    {
+      "question": "本番のアカウントで、だれかが S3 のバケットポリシーに全員を Deny する文を書いてしまい、管理者を含めてだれもバケットを操作できなくなった。組織ではルートアクセスの一元管理が有効で、メンバーアカウントのルートの認証情報は削除済みである。最も適切な対応はどれか。",
+      "choices": [
+        "IAM の委任管理者のアカウントから、S3UnlockBucketPolicy のタスクポリシーで AssumeRoot を呼び、バケットポリシーを削除する",
+        "本番のアカウントのルートユーザーのパスワードを回復してログインし、バケットポリシーを直す",
+        "管理アカウントの管理者ロールで、本番のアカウントのバケットに直接 PutBucketPolicy を実行する",
+        "SCP で s3:PutBucketPolicy を許可してから、本番の管理者が直す"
+      ],
+      "correct": 0,
+      "explanation": "一元管理が有効なら、AssumeRoot と S3UnlockBucketPolicy で、15 分のセッションで誤ったバケットポリシーを消せます。パスワードの回復は手間がかかり、ルートの認証情報を復活させることになります。管理アカウントのロールでも、別アカウントのバケットポリシーの Deny は越えられません。SCP は許可を与えないので、バケットポリシーの Deny は解けません。"
+    },
+    {
+      "question": "管理アカウントで次のコマンドを順に実行した。\naws organizations enable-aws-service-access --service-principal iam.amazonaws.com\naws iam enable-organizations-root-credentials-management\nこの時点でできるようになったこととして、最も適切なものはどれか。",
+      "choices": [
+        "メンバーアカウントのルートユーザーが、管理アカウントにログインできるようになる",
+        "管理アカウントから、メンバーアカウントのルートの認証情報を削除したり状態を調べたりできる",
+        "管理アカウントのルートユーザーに SCP が効くようになる",
+        "メンバーアカウントのすべての IAM ユーザーが自動で削除される"
+      ],
+      "correct": 1,
+      "explanation": "enable-organizations-root-credentials-management で、メンバーアカウントのルートの認証情報の管理(削除や状態の確認)が有効になります。特権の作業のためのルートのセッションは、別に enable-organizations-root-sessions で有効にします。管理アカウントに SCP が効くようになることはなく、IAM ユーザーが消えることもありません。"
+    },
+    {
+      "question": "ある会社は、新しい AWS アカウントを各チームに配るとき、OU の配置、SCP、組織の証跡、GuardDuty の有効化、Identity Center の権限の割り当て、予算の通知を、毎回同じ形で入れたい。最も運用負荷が低い方法はどれか。",
+      "choices": [
+        "クラウドチームがコンソールでアカウントを作り、チェックリストに沿って手で設定する",
+        "各チームに管理アカウントの権限を与え、自分でアカウントを作らせる",
+        "アカウントを作った後、各アカウントのルートユーザーでログインして設定する",
+        "Control Tower の Account Factory(または AFT)で作成し、OU のポリシーとコントロール、委任管理者の自動有効化、AFT などによる追加設定で自動的に入れる"
+      ],
+      "correct": 3,
+      "explanation": "Account Factory や AFT で作ると、決めた OU に置かれて SCP とコントロールが効き、ランディングゾーンの基盤と委任管理者の自動有効化で検知が入り、追加設定もコードで入ります。手作業のチェックリストは漏れが出ます。管理アカウントの権限を配るのは危険です。ルートユーザーで作業するのは避けるべきで、一元管理ではそもそも認証情報がありません。"
+    },
+    {
+      "question": "セキュリティ担当の普段のロールには、メンバーアカウントのルートの認証情報の状態を調べることと、ロックされた S3 のバケットポリシーを解除することだけを許したい。認証情報の削除やパスワードの回復は許したくない。最も適切な設定はどれか。",
+      "choices": [
+        "sts:AssumeRoot を条件なしで許可し、使い方を手順書で決める",
+        "SCP で iam:DeleteLoginProfile を Deny する",
+        "sts:AssumeRoot を許可し、Condition の sts:TaskPolicyArn で IAMAuditRootUserCredentials と S3UnlockBucketPolicy だけに絞る",
+        "セキュリティ担当のロールに AdministratorAccess を付け、CloudTrail で監視する"
+      ],
+      "correct": 2,
+      "explanation": "sts:TaskPolicyArn の条件で、AssumeRoot で使えるタスクポリシーを限れば、許した作業だけができます。条件なしの許可や AdministratorAccess では、削除や回復もできてしまいます。SCP の Deny は特定の API の一部を止めるだけで、許すタスクを絞る用途には合いません。"
+    },
+    {
+      "kind": "essay",
+      "question": "あなたは 40 個のアカウントがある組織のセキュリティ担当です。各メンバーアカウントのルートユーザーのパスワードと MFA を、今は金庫で管理しています。これをルートアクセスの一元管理に移す計画を、(1) 有効にする手順、(2) 既存のアカウントでやること、(3) ルートでしかできない作業が必要になったときの対応、(4) この仕組み自体を悪用されないための守り、の 4 点で説明してください。",
+      "answer": "(1) 管理アカウントで、IAM の信頼されたアクセスを有効にし、ルートの認証情報の管理と、特権の作業のためのルートのセッションの 2 つを有効にします。管理アカウントに入る人を増やさないよう、IAM の委任管理者をセキュリティツール用アカウントに登録します。(2) 既存の 40 アカウントについて、IAMAuditRootUserCredentials のタスクで AssumeRoot を呼び、パスワード・アクセスキー・MFA の有無を調べます。そのうえで IAMDeleteRootUserCredentials のタスクで認証情報を消します。これ以降に組織で作るアカウントは、最初からルートの認証情報を持ちません。金庫の管理と定期点検は、管理アカウントのルートユーザーだけに減ります。(3) 全員を拒否するバケットポリシーや SQS のキューのポリシーは、S3UnlockBucketPolicy や SQSUnlockQueuePolicy のタスクで、15 分のセッションで直します。タスクにない作業がどうしても必要なときは、承認を経て IAMCreateRootUserPassword でパスワードの回復を許し、ルートのメールの受信箱を持つ人が再設定して作業し、終わったらまた認証情報を消します。(4) sts:AssumeRoot は、管理アカウントか委任管理者の決められたロールだけに許し、sts:TaskPolicyArn で普段のロールは調査と解除だけに絞り、削除や回復は承認つきの別のロールに分けます。AssumeRoot とその後の操作は CloudTrail に記録されるので、使われたら通知するようにします。SCP でルートの操作を禁止する文も重ねます。",
+      "rubric": [
+        "信頼されたアクセス、ルートの認証情報の管理、ルートのセッションの有効化と、IAM の委任管理者の登録を挙げている",
+        "既存のアカウントで認証情報を調べてから削除すること、新しいアカウントは最初から認証情報がないことを述べている",
+        "S3UnlockBucketPolicy などのタスクでの対応と、タスクにない作業ではパスワードの回復を許して作業後に再び消すことを述べている",
+        "sts:AssumeRoot を許す相手の限定、sts:TaskPolicyArn での絞り込み、CloudTrail での記録と通知などの守りを述べている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "有効化の手順、既存アカウントの棚卸しと削除、例外時の回復と再削除、AssumeRoot 自体の権限の絞り込みと監視の 4 点がそろっていれば合格です。"
+    }
+  ]
+}
