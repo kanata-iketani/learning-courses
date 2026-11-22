@@ -1,0 +1,98 @@
+{
+  "lesson": 20,
+  "chapter": 3,
+  "title": "パック・組織展開・自動修復",
+  "priority": "🔴",
+  "text": "### 基礎: 1 つのアカウントでできても、組織では回らない\nch02 で、1 つのアカウントにルールを作りました。実際の組織には数十〜数百のアカウントがあり、それぞれに複数のリージョンがあります。\n\n- 30 個のルール × 50 アカウント × 3 リージョン = 4,500 個のルールを、手で作って同じ設定に保つのは無理です\n- アカウントの管理者が、都合の悪いルールを消したり、パラメーターを緩めたりできてしまいます\n- 結果がアカウントごとに散らばり、「組織全体で不合格はいくつか」に答えられません\n- 不合格を見つけても、直すのが人の手だけだと、夜間や休日は開きっぱなしです\n\nこの章では、これを 4 つの道具で解きます。\n\n| 困りごと | 道具 |\n|---|---|\n| ルールをまとめて配りたい | コンフォーマンスパック |\n| 組織の全アカウントに配り、勝手に変えさせない | 組織のコンフォーマンスパック・組織の Config ルール |\n| 結果を 1 か所で見たい | アグリゲーター |\n| 不合格を自動で直したい | 自動修復(Systems Manager Automation) |\n\n### コンフォーマンスパック: ルールをまとめて配る\n**コンフォーマンスパック**は、複数の Config ルールと修復の設定を 1 つの YAML のテンプレートにまとめ、1 つの単位として配るものです。AWS が「Operational Best Practices for PCI DSS」「Operational Best Practices for NIST 800-53」などのサンプルのテンプレートを公開しており、これを土台に社内の基準を作れます。\n\nテンプレートを 1 行ずつ読みます。書き方は CloudFormation(AWS のリソースをテンプレートで作るサービス。L19)と同じです。\n\n```yaml\nParameters:\n  MaxKeyAge:\n    Type: String\n    Default: \"90\"\nResources:\n  AccessKeysRotated:\n    Type: AWS::Config::ConfigRule\n    Properties:\n      ConfigRuleName: access-keys-rotated\n      InputParameters:\n        maxAccessKeyAge: !Ref MaxKeyAge\n      MaximumExecutionFrequency: TwentyFour_Hours\n      Source:\n        Owner: AWS\n        SourceIdentifier: ACCESS_KEYS_ROTATED\n  S3PublicReadProhibited:\n    Type: AWS::Config::ConfigRule\n    Properties:\n      ConfigRuleName: s3-bucket-public-read-prohibited\n      Scope:\n        ComplianceResourceTypes:\n          - AWS::S3::Bucket\n      Source:\n        Owner: AWS\n        SourceIdentifier: S3_BUCKET_PUBLIC_READ_PROHIBITED\n```\n\n| 行 | 意味 |\n|---|---|\n| `Parameters:` の `MaxKeyAge` | 配るときに値を変えられる変数。既定は 90(日) |\n| `Resources:` | ここから下に、作るものを並べる |\n| `AccessKeysRotated:` | テンプレートの中での呼び名 |\n| `Type: AWS::Config::ConfigRule` | Config ルールを作る |\n| `ConfigRuleName: access-keys-rotated` | アカウントでのルールの名前 |\n| `maxAccessKeyAge: !Ref MaxKeyAge` | ルールのパラメーター。`!Ref` で上の変数の値(90)を入れる |\n| `MaximumExecutionFrequency: TwentyFour_Hours` | 定期のきっかけ。24 時間ごとに評価(ch02 で見た、時間で悪くなるもの) |\n| `Owner: AWS` と `SourceIdentifier: ACCESS_KEYS_ROTATED` | AWS のマネージドルールを識別子で指定 |\n| `S3PublicReadProhibited:` 以下 | 2 つ目のルール。S3 バケットだけを対象に、公開読み取りを点検 |\n\n1 つのアカウント・1 つのリージョンに配るなら次のコマンドです。\n\n```bash\naws configservice put-conformance-pack \\\n    --conformance-pack-name security-baseline \\\n    --template-body file://baseline.yaml\n```\n\n- `--conformance-pack-name`: パックの名前\n- `--template-body file://baseline.yaml`: 手元の YAML を渡す\n\nパックの画面では、**コンプライアンススコア**(パックの「ルール × リソース」の組のうち、合格している組の割合)と、その推移を見られます。「先月 78% だったのが今月 93%」のように、改善の進み具合を数字で示せます。\n\nパックには、**プロセスチェック**という種類のルールも入れられます。「年に 1 回、インシデント対応の演習をした」のように AWS の設定では判定できない項目を、人が合否を記入して同じ画面で管理するためのものです。\n\n### 組織の全アカウントに配る\nAWS Organizations(L18 で詳しく見る)と連携すると、管理アカウント、または Config の委任管理者(管理を任せた別のアカウント)から、組織の全メンバーアカウントにパックやルールを配れます。\n\n```bash\naws configservice put-organization-conformance-pack \\\n    --organization-conformance-pack-name org-security-baseline \\\n    --template-s3-uri s3://cpack-templates-444455556666/baseline.yaml \\\n    --excluded-accounts 777788889999 \\\n    --region ap-northeast-1\n```\n\n- `put-organization-conformance-pack`: 組織のコンフォーマンスパックを作る(または更新する)\n- `--template-s3-uri`: テンプレートを S3 から読む\n- `--excluded-accounts 777788889999`: 配らないアカウント。検証用の砂場のアカウントなど\n- `--region ap-northeast-1`: **配る先のリージョン**。この呼び出しは東京にだけ配る\n\n公式ドキュメントから、運用で効く性質を拾います。\n\n| 性質 | 内容 |\n|---|---|\n| メンバーアカウントは変えられない | 組織から配ったルールは、メンバーアカウントの管理者が変更・削除できない |\n| 新しいアカウントにも自動で配られる | 組織に入ると配られ、外れると取り除かれる |\n| リージョンごとに呼ぶ | 大阪にも配るなら、`--region ap-northeast-3` でもう一度呼ぶ |\n| 設定レコーダーが前提 | メンバーアカウントで記録が動いていないと配れない。新しいアカウントへの配布の再試行は 7 時間だけなので、それまでにレコーダーを作っておく |\n| 作った場所からしか見えない | 管理アカウントで作ったものは委任管理者から、委任管理者で作ったものは管理アカウントから、一覧に出ない。どちらで管理するかを 1 つに決める |\n\n配布の状態は `get-organization-conformance-pack-detailed-status` でアカウントごとに確かめられます。`Status` が `CREATE_SUCCESSFUL` なら配布済み、`CREATE_FAILED` なら失敗で、原因は同じ結果の `ErrorMessage` に出ます。いちばん多い原因は、そのアカウントで設定レコーダーが動いていないことです。\n\nパックを使わずに、ルールを 1 つずつ組織に配る `put-organization-config-rule` もあります。数個のルールならこちら、基準としてまとめて管理するならパック、と使い分けます。\n\n### アグリゲーター: 結果を 1 か所で見る\n配ったルールの結果は、各アカウント・各リージョンに残ります。**アグリゲーター**は、それらの構成項目と評価結果を 1 つのアカウントの 1 つのリージョンにコピーして集める仕組みです。\n\n```bash\naws configservice put-configuration-aggregator \\\n    --configuration-aggregator-name org-aggregator \\\n    --organization-aggregation-source \\\n        RoleArn=arn:aws:iam::444455556666:role/ConfigAggregatorRole,AllAwsRegions=true\n```\n\n- `--configuration-aggregator-name`: アグリゲーターの名前\n- `--organization-aggregation-source`: 集める元を「組織の全アカウント」にする\n- `RoleArn=...`: Config が組織のアカウントの一覧を読むためのロール\n- `AllAwsRegions=true`: 全リージョンから集める。今後増えるリージョンも含む\n\n| 性質 | 内容 |\n|---|---|\n| 読むだけ | 公式ドキュメントのとおり、集めたデータを見るための読み取り専用の仕組み。**ルールを配ったり、元のアカウントを変えたりはできない** |\n| 承認 | 組織から集めるなら、各アカウントでの承認は不要。組織の外の個別のアカウントから集めるときは、元のアカウントで承認(aggregation authorization)が要る |\n| 料金 | アグリゲーター自体に追加の料金はかからない |\n| 検索 | ch01 の高度なクエリを、組織全体に対して実行できる |\n\n組織全体の不合格のリソースを数える例です。\n\n```bash\naws configservice select-aggregate-resource-config \\\n    --configuration-aggregator-name org-aggregator \\\n    --expression \"SELECT accountId, awsRegion, configuration.targetResourceId, configuration.complianceType WHERE resourceType = 'AWS::Config::ResourceCompliance' AND configuration.complianceType = 'NON_COMPLIANT'\"\n```\n\n- `select-aggregate-resource-config`: アグリゲーターに対して高度なクエリを実行する\n- `resourceType = 'AWS::Config::ResourceCompliance'`: リソースごとの合否の記録を対象にする\n- `configuration.targetResourceId`: 合否の対象のリソースの ID\n- `configuration.complianceType = 'NON_COMPLIANT'`: 不合格のものだけ\n\n結果の例です。\n\n| accountId | awsRegion | targetResourceId | complianceType |\n|---|---|---|---|\n| 222233334444 | ap-northeast-1 | sg-0a1b2c3d4e5f67890 | NON_COMPLIANT |\n| 555566667777 | ap-northeast-3 | example-public-bucket | NON_COMPLIANT |\n\n**配るのは組織のパック・ルール、見るのはアグリゲーター**、と役目が分かれていることを押さえます。試験でも「アグリゲーターでルールを配る」は誤りの選択肢としてよく出ます。\n\n### 自動修復: Systems Manager Automation で直す\n#### 仕組み\nConfig ルールには**修復のアクション**を付けられます。中身は Systems Manager Automation のランブック(L14 で見た、AWS の操作の手順を YAML などで書いた手順書。Automation は手順書を実行する機能)です。AWS が用意したランブックが多数あり、自作もできます。\n\n| 方式 | 動き |\n|---|---|\n| 手動の修復 | 担当者が画面で不合格のリソースを選び、「修復」を押すとランブックが動く |\n| 自動の修復 | 不合格になったら、Config が自動でランブックを動かす |\n\n#### 修復の設定を 1 行ずつ\n`s3-bucket-public-read-prohibited` に、公開を止めるランブックを付けます。`put-remediation-configurations` に渡す設定です。\n\n```json\n{\n  \"ConfigRuleName\": \"s3-bucket-public-read-prohibited\",\n  \"TargetType\": \"SSM_DOCUMENT\",\n  \"TargetId\": \"AWS-DisableS3BucketPublicReadWrite\",\n  \"Automatic\": true,\n  \"MaximumAutomaticAttempts\": 3,\n  \"RetryAttemptSeconds\": 60,\n  \"Parameters\": {\n    \"AutomationAssumeRole\": {\n      \"StaticValue\": {\n        \"Values\": [\"arn:aws:iam::222233334444:role/ConfigRemediationRole\"]\n      }\n    },\n    \"S3BucketName\": {\n      \"ResourceValue\": { \"Value\": \"RESOURCE_ID\" }\n    }\n  }\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `\"ConfigRuleName\"` | どのルールに付けるか |\n| `\"TargetType\": \"SSM_DOCUMENT\"` | 修復の中身は Systems Manager のドキュメント(ランブック)。公式の API では、取れる値はこれだけ |\n| `\"TargetId\"` | ランブックの名前。AWS が用意した、バケットの公開の読み書きを止めるもの(中で何をするかはランブックの説明で確かめる) |\n| `\"Automatic\": true` | 自動の修復。false なら手動 |\n| `\"MaximumAutomaticAttempts\": 3` | 失敗したときに試す回数の上限。省略すると 5、1〜25 の範囲 |\n| `\"RetryAttemptSeconds\": 60` | 上の回数を数える時間の幅。60 秒の間に 3 回失敗したら、そのリソースを**修復の例外**にして、それ以上試さない(無限に繰り返すのを防ぐ) |\n| `\"AutomationAssumeRole\"` の `\"StaticValue\"` | ランブックが動くときに引き受けるロール。固定の値で渡す |\n| `\"S3BucketName\"` の `\"ResourceValue\"` と `\"RESOURCE_ID\"` | ランブックの引数に、不合格になったバケットの ID を実行のたびに入れる |\n\nランブックの引数の名前(ここでは `S3BucketName`)はランブックごとに違います。使う前に Systems Manager のランブックの説明で確かめます。修復のロールには、Systems Manager が引き受けられる信頼ポリシー(L3 で見た)と、直すのに必要な最小の権限(ここでは S3 のパブリックアクセスブロックの設定)だけを付けます。\n\n```mermaid\narchitecture-beta\n    group mgmt(aws:account)[Management Account]\n    group sec(aws:account)[Security Account]\n    group wl(aws:account)[Workload Account]\n\n    service org(aws:organizations)[Organizations] in mgmt\n    service pack(aws:aws-config)[Org Conformance Pack] in sec\n    service agg(aws:aws-config)[Config Aggregator] in sec\n    service rules(aws:aws-config)[Config Rules] in wl\n    service ssm(aws:aws-systems-manager)[SSM Automation] in wl\n    service bucket(aws:s3)[S3 Bucket] in wl\n\n    org:R --> L:pack\n    pack:B --> T:rules\n    rules:R --> L:agg\n    rules:B --> T:ssm\n    ssm:R --> L:bucket\n```\n\n管理アカウントの Organizations で、セキュリティ用のアカウントを Config の委任管理者にします。セキュリティ用のアカウントから組織のコンフォーマンスパックを配ると、各ワークロードのアカウントに Config ルールができます。ルールが S3 バケットを不合格にすると、そのアカウントの SSM Automation が修復します。評価結果はセキュリティ用のアカウントのアグリゲーターに集まります。\n\n#### 自動修復の注意点\n- **サービスリンクのルールには付けられない**: 公式ドキュメントのとおり、修復を管理できるのはサービスリンクでない Config ルールだけです。Security Hub CSPM が作るルール(ch04)には、Config の修復を付けられません\n- **古い結果で動くことがある**: 公式ドキュメントによると、自動修復は定期的に取った合否の写しをもとに始まるため、写しの後に直ったリソースにも修復が走ることがあります。修復は「何度実行しても同じ結果になる」(冪等な)処理にします\n- **IaC との綱引き**: Terraform(L19)が公開の設定を持っていると、修復で閉じても次の適用でまた開き、修復が繰り返されます。直すべきはテンプレートの側です\n- **業務を止める修復**: 公開のウェブサイト用のバケットを自動で閉じると、サイトが止まります。例外にするバケットはスコープやタグで外しておきます\n- 失敗の詳細は `describe-remediation-execution-status` で、手順ごとの状態とエラーを見られます\n\n### 実務での使い方と判断\n#### 不合格をどう直すか\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. 通知して人が直す | EventBridge → SNS(ch02) | 業務への影響を人が判断できる | 夜間や休日は開いたまま | 中 | 低い |\n| B. Config の自動修復 | ルールに SSM Automation を付ける | 設定だけで作れ、再試行と例外の仕組みがある。パックで組織に配れる | 業務を止める修復の危険。サービスリンクのルールには付けられない | 低い | Automation の実行の料金 |\n| C. EventBridge+Lambda | `Config Rules Compliance Change` を Lambda で受けて直す | 条件分岐など何でも書ける | コードとロールの保守 | 中〜高 | Lambda の実行 |\n| D. 予防する | SCP、S3 のパブリックアクセスブロック(アカウント単位) | そもそも不合格が生まれない | 例外の扱いが難しい | 低い | なし |\n\nプロは D を土台にし、漏れたものを B で直し、判断が要るものは A にします。たとえば「S3 の公開」はアカウント単位のパブリックアクセスブロックと SCP で防ぎ、それでも見つかったものは B で閉じます。「本番の RDS の暗号化漏れ」は自動では直せない(作り直しが要る)ので A です。\n\n#### よくある設定ミス\n- 組織のパックを東京にだけ配り、大阪の結果がない\n- 新しいアカウントで設定レコーダーを作る前にパックを配り、7 時間の再試行が切れて配られないまま\n- アグリゲーターでルールを配れると思い込み、配布の仕組みを作っていない\n- 修復のロールに広すぎる権限(`s3:*` など)を付け、修復の仕組みが乗っ取りの踏み台になる\n\n### 試験ではこう問われる\n「組織の全アカウントに、同じ Config ルールのセットを**最も運用負荷が低く**配り、メンバーアカウントに変更させない」は、委任管理者からの組織のコンフォーマンスパックです。「全アカウント・全リージョンの合否を 1 か所で見る」はアグリゲーターです。「不合格のリソースを自動で直す」は、Config ルールの自動修復(SSM Automation)が第一候補で、修復が繰り返されるときは `MaximumAutomaticAttempts` と `RetryAttemptSeconds`、IaC との綱引きを疑います。\n\n### まとめ\n- コンフォーマンスパックは、ルールと修復を 1 つの YAML にまとめて配る単位です。コンプライアンススコアで進み具合を示せます\n- 組織のパック・ルールは、管理アカウントか委任管理者からリージョンごとに配り、メンバーアカウントは変えられません。メンバーの設定レコーダーが前提です\n- アグリゲーターは読み取り専用で、全アカウント・全リージョンの構成項目と合否を 1 か所に集めます。ルールは配れません\n- 自動修復は SSM Automation のランブックを動かします。回数と時間の幅で無限の繰り返しを防ぎ、ロールは最小の権限にします\n",
+  "quiz": [
+    {
+      "question": "80 個のメンバーアカウントがある組織で、30 個の Config ルールのセットを全アカウントに配りたい。メンバーアカウントの管理者がルールを消したり変えたりできないようにし、今後増えるアカウントにも自動で配りたい。最も運用負荷が低い方法はどれか。",
+      "choices": [
+        "委任管理者のアカウントから、組織のコンフォーマンスパックとして配る",
+        "セキュリティ用のアカウントにアグリゲーターを作り、そこからルールを配る",
+        "各アカウントで put-conformance-pack を実行するスクリプトを毎週動かす",
+        "CloudFormation のテンプレートを各アカウントの管理者に渡し、作ってもらう"
+      ],
+      "correct": 0,
+      "explanation": "組織のコンフォーマンスパックは、管理アカウントか委任管理者から全メンバーに配り、メンバー側では変更できず、新しいアカウントにも自動で配られます。アグリゲーターは読み取り専用で、ルールを配れません。スクリプトや各管理者に任せる方法は、メンバーが変更できるうえ、運用の負荷も高くなります。"
+    },
+    {
+      "question": "組織のコンフォーマンスパックを東京リージョンで配った。数日後、大阪リージョンのリソースについての評価結果が 1 件もないことに気づいた。最も可能性の高い原因はどれか。",
+      "choices": [
+        "アグリゲーターが大阪を集める設定になっていない",
+        "組織のパックの配布はリージョンごとで、大阪では配っていない",
+        "コンフォーマンスパックは東京リージョンでしか使えない",
+        "メンバーアカウントの管理者が大阪のルールを削除した"
+      ],
+      "correct": 1,
+      "explanation": "組織のルールとパックを配る API はリージョンごとなので、大阪にも配るには大阪を指定してもう一度呼びます。アグリゲーターの設定は集めて見る側の話で、そもそもルールがなければ結果は生まれません。組織から配ったルールはメンバーが削除できず、パックは東京以外でも使えます。"
+    },
+    {
+      "question": "Config ルールの自動修復で、あるバケットの修復が失敗し続け、60 秒の間に 3 回失敗したあと、それ以上の修復が試されなくなった。この動きを決めている設定の組み合わせはどれか。",
+      "choices": [
+        "Automatic と TargetType",
+        "ResourceValue と StaticValue",
+        "MaximumAutomaticAttempts と RetryAttemptSeconds",
+        "MaximumExecutionFrequency と Scope"
+      ],
+      "correct": 2,
+      "explanation": "RetryAttemptSeconds の時間の幅の中で MaximumAutomaticAttempts の回数だけ失敗すると、そのリソースは修復の例外になり、無限に繰り返さなくなります。Automatic は自動か手動か、TargetType は修復の中身の種類です。ResourceValue と StaticValue はランブックへの引数の渡し方、MaximumExecutionFrequency と Scope はルールの評価の設定です。"
+    },
+    {
+      "question": "S3 の公開を閉じる自動修復を入れたところ、同じバケットに対して修復が 1 日に何度も実行されている。調べると、このバケットは Terraform で管理されており、CI/CD で 1 日に数回適用されていた。最も適切な対応はどれか。",
+      "choices": [
+        "MaximumAutomaticAttempts を 25 に増やし、確実に閉じるようにする",
+        "自動修復をやめ、毎日担当者が手で閉じる",
+        "このバケットを Config の記録の対象から外す",
+        "Terraform のコードで公開の設定を直し、修復と IaC が逆の設定を繰り返さないようにする"
+      ],
+      "correct": 3,
+      "explanation": "IaC が公開の設定を持っている限り、適用のたびに開き、修復がそれを閉じる綱引きが続きます。直すべきはテンプレートの側です。試す回数を増やしても綱引きは止まらず、手作業にすると開いている時間が延びます。記録から外すと、点検そのものができなくなります。"
+    },
+    {
+      "question": "セキュリティ用のアカウントで、組織の全アカウント・全リージョンの AWS Config の構成項目と評価結果を集めて検索したい。組織の外にある 2 つの取引先のアカウントも含めたい。正しい説明はどれか。",
+      "choices": [
+        "組織のアカウントは承認なしで集められるが、組織の外の個別のアカウントでは、元のアカウント側での承認が要る",
+        "どのアカウントから集める場合も、元のアカウントごとに承認が要る",
+        "アグリゲーターは組織のアカウントしか集められない",
+        "アグリゲーターを作ると、集めたアカウントにルールも自動で配られる"
+      ],
+      "correct": 0,
+      "explanation": "公式ドキュメントのとおり、組織から集めるときは承認が不要で、個別のアカウントを元にするときはそのアカウントで承認を与えます。アグリゲーターは組織の外の個別のアカウントも集められます。読み取り専用なので、ルールを配る機能はありません。"
+    },
+    {
+      "kind": "essay",
+      "question": "次の修復の設定を読み、何が起きるかを順に説明してください。あわせて、この修復を本番に入れる前に確かめておくべきことを 2 つ以上挙げてください(200〜400 字)。\n\n```json\n{\n  \"ConfigRuleName\": \"s3-bucket-public-read-prohibited\",\n  \"TargetType\": \"SSM_DOCUMENT\",\n  \"TargetId\": \"AWS-DisableS3BucketPublicReadWrite\",\n  \"Automatic\": true,\n  \"MaximumAutomaticAttempts\": 3,\n  \"RetryAttemptSeconds\": 60,\n  \"Parameters\": {\n    \"AutomationAssumeRole\": { \"StaticValue\": { \"Values\": [\"arn:aws:iam::222233334444:role/ConfigRemediationRole\"] } },\n    \"S3BucketName\": { \"ResourceValue\": { \"Value\": \"RESOURCE_ID\" } }\n  }\n}\n```",
+      "answer": "s3-bucket-public-read-prohibited のルールでバケットが NON_COMPLIANT になると、Config が自動で(Automatic が true)Systems Manager Automation のランブック AWS-DisableS3BucketPublicReadWrite を動かします。ランブックは ConfigRemediationRole を引き受け、不合格になったバケットの ID(RESOURCE_ID)を S3BucketName として受け取り、そのバケットの公開を止めます。失敗したら再試行し、60 秒の間に 3 回失敗したら、そのバケットは修復の例外になって、それ以上は試しません。本番の前に、公開が業務上必要なバケット(ウェブサイト用など)が対象に入っていないか、IaC が公開の設定を持っていて修復と綱引きにならないか、修復のロールが S3 のパブリックアクセスの設定だけを許す最小の権限で Systems Manager から引き受けられるか、を確かめます。",
+      "rubric": [
+        "不合格をきっかけに、SSM Automation のランブックが自動で動くことを説明している",
+        "RESOURCE_ID が不合格のバケットの ID として渡され、AutomationAssumeRole のロールで実行されることを読み取っている",
+        "MaximumAutomaticAttempts と RetryAttemptSeconds による再試行と修復の例外を説明している",
+        "業務で公開が必要なバケットの除外、IaC との綱引き、ロールの最小権限などの確認事項を 2 つ以上挙げている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "修復の設定を、きっかけ・実行の中身・引数・再試行の順に読み、本番で事故を起こさないための確認まで言えることが要点です。"
+    },
+    {
+      "kind": "essay",
+      "question": "50 アカウントの組織で「全アカウントに同じ点検を配り、結果を 1 か所で見て、S3 の公開は自動で閉じる」仕組みを設計してください。どのアカウントで何を使うか、それぞれの道具の役目の違い、つまずきやすい前提を述べてください(200〜400 字)。",
+      "answer": "管理アカウントの Organizations で、セキュリティ用のアカウントを Config の委任管理者にします。全アカウント・全リージョンで設定レコーダーを動かしておくことが前提で、新しいアカウントにはアカウントを作る仕組みの中でレコーダーを先に作ります。点検のセットは YAML のコンフォーマンスパックにまとめ、委任管理者から組織のコンフォーマンスパックとして、使うリージョンごとに配ります。メンバーは変更できず、新しいアカウントにも自動で配られます。結果は、同じセキュリティ用のアカウントに組織のアグリゲーターを作って全リージョンから集め、高度なクエリで不合格を一覧にします。アグリゲーターは読むだけでルールを配れないので、配るのはパック、見るのはアグリゲーターと分けます。S3 の公開は、パックの中で s3-bucket-public-read-prohibited に SSM Automation の自動修復を付け、修復のロールは最小の権限にします。土台として、アカウント単位のパブリックアクセスブロックと SCP で予防も重ねます。",
+      "rubric": [
+        "委任管理者(セキュリティ用のアカウント)から組織のコンフォーマンスパックで配ることを述べている",
+        "アグリゲーターで集めること、アグリゲーターは読み取り専用で配布には使えないことを区別している",
+        "SSM Automation による自動修復と、そのロールの最小権限に触れている",
+        "メンバーの設定レコーダーが前提であることや、リージョンごとに配る必要があることなど、つまずきやすい前提を挙げている"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "配る(組織のパック)・見る(アグリゲーター)・直す(自動修復)の役目を分け、前提まで含めて説明できることが要点です。"
+    }
+  ]
+}

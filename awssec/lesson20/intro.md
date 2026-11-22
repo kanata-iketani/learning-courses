@@ -1,0 +1,1 @@
+「決まりに合っている」と「それを証明できる」の 2 つをコンプライアンスと捉え、AWS Config が設定の変化を構成項目として記録する仕組みを 1 行ずつ読みます。マネージドルール・Guard・Lambda のルールで設定を評価し、コンフォーマンスパックで組織の全アカウントに配り、アグリゲーターで結果を集め、Systems Manager Automation で自動で直す流れを組み立てます。最後に、Security Hub の標準と Config の関係、Audit Manager と AWS Artifact を使った監査への答え方を学びます。
