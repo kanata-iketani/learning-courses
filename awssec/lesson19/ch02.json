@@ -1,0 +1,92 @@
+{
+  "lesson": 19,
+  "chapter": 2,
+  "title": "ガードレール — まちがった設定を作る前に止める",
+  "priority": "🔴",
+  "text": "### 基礎: まちがった設定は、作る前に止める\nch01 で、設定をコードにすると「作る前に機械で調べられる」と書きました。この章では、その仕組みを**ガードレール**(道を外れないように置く柵。決まりを守らせる仕組み)として組みます。\n\nまちがった設定を止められる場所は、時間の順に 4 つあります。\n\n```mermaid\nflowchart LR\n    A[1 コードを書く・PR] --> B[2 CI の事前チェック]\n    B --> C[3 デプロイの直前 Hooks]\n    C --> D[4 API の呼び出し SCP・RCP]\n    D --> E[5 作った後 Config]\n```\n\n| 場所 | 道具の例 | 種類 | 扱うレッスン |\n|---|---|---|---|\n| CI の事前チェック | cfn-guard、cfn-lint、Checkov、OPA | 予防(作る前に止める) | この章 |\n| デプロイの直前 | CloudFormation Hooks、Control Tower のプロアクティブコントロール | 予防 | この章 |\n| API の呼び出し | SCP・RCP・宣言型ポリシー | 予防 | L6・L18 |\n| 作った後 | AWS Config のルール、Security Hub | 発見(できた後に見つける) | L20 |\n\n止める場所が早いほど、直すのは安く済みます。PR の段階なら 1 行直すだけですが、本番で見つかると、データの移し替えや利用者への影響の調査が要ります。この考え方を**シフトレフト**(時間軸の左、つまり早い段階で問題をつぶすこと)と呼びます。\n\nただし、早い場所だけでは足りません。CI のチェックは「CI を通ったデプロイ」にしか効かず、誰かが自分のパソコンから直接デプロイすれば素通りします。そこで、AWS の側で必ず通る関所(Hooks・SCP)と、作った後に見つける仕組み(Config)を重ねます。L1 で見た多層防御です。\n\n### AWS での仕組み 1: cfn-guard でテンプレートを調べる\n**AWS CloudFormation Guard**(cfn-guard)は、AWS が公開している無料のツールで、JSON や YAML のデータが「ルール」を満たすかを調べます。ルールは Guard 独自の短い言語で書きます。このように、決まりをコードとして書いて機械で調べることを**ポリシー・アズ・コード**と呼びます。\n\nch01 のバケットに「パブリックアクセスのブロックを 4 つとも有効にすること」を求めるルールです。\n\n```text\nlet buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]\n\nrule S3_BLOCK_PUBLIC when %buckets !empty {\n    %buckets.Properties.PublicAccessBlockConfiguration exists\n    %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicAcls == true\n    %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicPolicy == true\n    %buckets.Properties.PublicAccessBlockConfiguration.IgnorePublicAcls == true\n    %buckets.Properties.PublicAccessBlockConfiguration.RestrictPublicBuckets == true\n    <<\n      Violation: S3 bucket must block all public access.\n      Fix: Set all four PublicAccessBlockConfiguration flags to true.\n    >>\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `let buckets = ...` | 変数 `buckets` に、テンプレートの中から集めたものを入れる |\n| `Resources.*` | `Resources` の下のすべての要素(論理 ID ごとのリソース) |\n| `[ Type == 'AWS::S3::Bucket' ]` | その中で `Type` が S3 バケットのものだけに絞る |\n| `rule S3_BLOCK_PUBLIC` | ルールの名前。結果の表示に使われる |\n| `when %buckets !empty` | バケットが 1 つ以上あるときだけ調べる。`%` は変数を使う印。バケットがなければこのルールは飛ばす(SKIP) |\n| `... exists` | その設定が書かれていること |\n| `... == true` | その値が true であること。各行がすべて満たされて初めて合格 |\n| `<< ... >>` | 不合格のときに表示するメッセージ。何が悪く、どう直すかを書く |\n\nch01 のテンプレートからパブリックアクセスのブロックを消したファイルを調べると、次のようになります(出力は抜粋。形は版によって少し違います)。\n\n```text\n$ cfn-guard validate --data logs.yaml --rules s3.guard\nlogs.yaml Status = FAIL\nFAILED rules\ns3.guard/S3_BLOCK_PUBLIC    FAIL\n---\nEvaluating data logs.yaml against rules s3.guard\nNumber of non-compliant resources 1\nResource = LogBucket {\n  Type      = AWS::S3::Bucket\n  Rule = S3_BLOCK_PUBLIC {\n    ALL {\n      Check = %buckets.Properties.PublicAccessBlockConfiguration EXISTS {\n        RequiredPropertyError {\n          PropertyPath = /Resources/LogBucket/Properties\n          MissingProperty = PublicAccessBlockConfiguration\n          ...\n```\n\n- `--data`: 調べる対象(テンプレート)。`--rules`: ルールのファイル\n- `Status = FAIL`: どれかのルールに違反した。すべて満たせば `PASS`\n- `Resource = LogBucket`: 違反した論理 ID\n- `MissingProperty`: 足りない設定の名前\n\n違反があると cfn-guard は 0 以外の終了コード(プログラムが「失敗」を返す数値)で終わります。CI は終了コードが 0 以外ならそこでジョブを止めるので、違反したテンプレートはデプロイまで進みません。\n\n似た道具に **cfn-lint**(テンプレートの書き方の誤り、たとえば存在しないプロパティ名を見つける)があります。cfn-lint は「正しく書けているか」、cfn-guard は「自分たちの決まりを守っているか」を見ます。両方を CI に入れるのがふつうです。\n\n### AWS での仕組み 2: Terraform の事前チェック\nTerraform のコードは CloudFormation を通らないので、次の節の Hooks は効きません(例外は後で触れます)。そのため、CI での事前チェックが特に大事です。方法は 2 つあります。\n\n| 方法 | 何を調べるか | 道具の例 | 良い点 | 弱い点 |\n|---|---|---|---|---|\n| コードを調べる | `.tf` ファイルの書き方 | Checkov、Trivy | 速い。AWS に接続しなくてよい | 変数やモジュールで決まる値は分からないことがある |\n| plan を調べる | 実際に作られる値の一覧 | OPA(conftest)、HCP Terraform の Sentinel | 最終的な値で判断できる | plan を作る権限と時間が要る |\n\nplan を調べる方法を見ます。まず、保存した plan を JSON に変換します。\n\n```text\n$ terraform plan -out=tfplan\n$ terraform show -json tfplan > plan.json\n```\n\n`plan.json` の中で、作られるリソースは `resource_changes` という配列に並びます(抜粋)。\n\n```json\n{\n  \"resource_changes\": [\n    {\n      \"address\": \"aws_s3_bucket_public_access_block.logs\",\n      \"type\": \"aws_s3_bucket_public_access_block\",\n      \"change\": {\n        \"actions\": [\"create\"],\n        \"after\": {\n          \"block_public_acls\": true,\n          \"block_public_policy\": false,\n          \"ignore_public_acls\": true,\n          \"restrict_public_buckets\": true\n        }\n      }\n    }\n  ]\n}\n```\n\n- `address`: コードの中でのリソースの名前\n- `actions`: `create`(作る)・`update`(変える)・`delete`(消す)など\n- `after`: 変更後の値。ここでは `block_public_policy` が `false` になっている\n\nこれを **OPA**(Open Policy Agent。ポリシー・アズ・コードの汎用の道具)のルールで調べます。ルールは Rego という言語で書き、**conftest**(OPA のルールでファイルを調べるコマンド)で実行します。\n\n```text\npackage terraform.s3\n\nimport rego.v1\n\ndeny contains msg if {\n    rc := input.resource_changes[_]\n    rc.type == \"aws_s3_bucket_public_access_block\"\n    rc.change.after.block_public_policy != true\n    msg := sprintf(\"%s: block_public_policy must be true\", [rc.address])\n}\n```\n\n| 行 | 意味 |\n|---|---|\n| `package terraform.s3` | ルールのまとまりの名前 |\n| `deny contains msg if { ... }` | `{ }` の中の条件がすべて成り立つと、`msg` を「拒否の理由」に加える |\n| `rc := input.resource_changes[_]` | `input`(調べる JSON)の `resource_changes` から 1 つずつ取り出して `rc` に入れる。`[_]` は「どれでも」 |\n| `rc.type == ...` | 種類がパブリックアクセスのブロックのものだけ |\n| `... != true` | `block_public_policy` が true でなければ |\n| `sprintf(...)` | `%s` に `rc.address` を入れたメッセージを作る |\n\n```text\n$ conftest test plan.json --policy policy/ --all-namespaces\nFAIL - plan.json - terraform.s3 - aws_s3_bucket_public_access_block.logs: block_public_policy must be true\n\n1 test, 0 passed, 0 warnings, 1 failure, 0 exceptions\n```\n\n`FAIL` が 1 つでもあれば conftest は 0 以外で終わり、CI は apply に進みません。\n\n### AWS での仕組み 3: CloudFormation Hooks で AWS の側で止める\n**CloudFormation Hooks** は、CloudFormation がリソースを作る・変える・消す**直前**に、設定を調べる仕組みです。違反があれば、操作を失敗させる(FAIL)か、警告だけ出して続ける(WARN)かを選べます。AWS のアカウントの中で動くので、CI を通らずにデプロイしても必ず通ります。\n\n| 項目 | 内容 |\n|---|---|\n| 調べる対象 | スタック全体(STACK)、個々のリソース(RESOURCE)、変更セット(CHANGE_SET)、Cloud Control API(AWS のリソースを共通の形で操作する API)の操作(CLOUD_CONTROL) |\n| 調べ方 | Guard のルール(S3 に置く)、Lambda 関数、Control Tower のプロアクティブコントロール(AWS が用意したルール集)、自作の Hook |\n| 違反したとき | `FAIL` なら操作を止める。`WARN` なら警告を出して続ける |\n| 有効にする範囲 | アカウントとリージョンごと。組織全体には StackSets で配る(ch04) |\n\nGuard のルールを使う **Guard Hook** を有効にする例です。上の `s3.guard` を S3 に置いてから、次を実行します。\n\n```text\n$ aws cloudformation activate-type --type HOOK \\\n    --type-name AWS::Hooks::GuardHook \\\n    --publisher-id aws-hooks \\\n    --type-name-alias Private::Guard::S3Public \\\n    --execution-role-arn arn:aws:iam::111122223333:role/guard-hook-exec\n$ aws cloudformation set-type-configuration \\\n    --type-arn arn:aws:cloudformation:ap-northeast-1:111122223333:type/hook/Private-Guard-S3Public \\\n    --configuration file://config.json\n```\n\n`config.json` の中身です。\n\n```json\n{\n  \"CloudFormationConfiguration\": {\n    \"HookConfiguration\": {\n      \"HookInvocationStatus\": \"ENABLED\",\n      \"TargetOperations\": [\"RESOURCE\", \"STACK\"],\n      \"FailureMode\": \"WARN\",\n      \"Properties\": {\n        \"ruleLocation\": \"s3://guard-rules-111122223333/s3.guard\",\n        \"logBucket\": \"guard-reports-111122223333\"\n      },\n      \"TargetFilters\": { \"Actions\": [\"CREATE\", \"UPDATE\"] }\n    }\n  }\n}\n```\n\n| 部分 | 意味 |\n|---|---|\n| `activate-type --type HOOK` | AWS が用意した Guard Hook の型を、このアカウントで使えるようにする |\n| `--type-name-alias` | このアカウントでの名前 |\n| `--execution-role-arn` | Hook が S3 からルールを読み、結果を書くときに使うロール |\n| `set-type-configuration` の `--type-arn` | 有効にした Hook の ARN。`activate-type` の出力の `Arn` を使う |\n| `HookInvocationStatus: ENABLED` | Hook を動かす |\n| `TargetOperations` | 何を調べるか。ここではリソースとスタック |\n| `FailureMode: WARN` | 違反しても止めず警告だけ。慣れたら `FAIL` にする |\n| `ruleLocation` | ルールのファイルの場所。Hook は呼ばれるたびにここから読む |\n| `logBucket` | 違反の詳しい報告(Violation と Fix)を置くバケット |\n| `TargetFilters` の `Actions` | 作成と更新のときだけ動かす。削除のときは調べない |\n\n`FAIL` にした状態で違反するスタックを作ると、スタックのイベント(L13 で見たような 1 件ずつの記録)に次のように出ます(抜粋)。\n\n```json\n{\n  \"LogicalResourceId\": \"LogBucket\",\n  \"ResourceType\": \"AWS::S3::Bucket\",\n  \"HookType\": \"Private::Guard::S3Public\",\n  \"HookInvocationPoint\": \"PRE_PROVISION\",\n  \"HookStatus\": \"HOOK_COMPLETE_FAILED\",\n  \"HookFailureMode\": \"FAIL\",\n  \"HookStatusReason\": \"Template failed validation, the following rule(s) failed: S3_BLOCK_PUBLIC.\"\n}\n```\n\n- `HookInvocationPoint: PRE_PROVISION`: リソースを作る前に呼ばれた\n- `HookStatus: HOOK_COMPLETE_FAILED`: 調べ終わって、違反だった。合格なら `HOOK_COMPLETE_SUCCEEDED`\n- `HookFailureMode: FAIL`: 違反なので操作を止めた。このあとリソースは `CREATE_FAILED` になり、スタックはロールバック(元に戻す処理)する\n- `HookStatusReason`: どのルールで落ちたか(文言は抜粋)\n\n#### Terraform と Hooks\nTerraform の AWS プロバイダー(`hashicorp/aws`)は、各サービスの API を直接呼ぶので、CloudFormation の Hooks は通りません。AWS Cloud Control API を使う `awscc` プロバイダーで作ったリソースは、Hook の対象に `CLOUD_CONTROL` を入れると調べられます。Terraform が中心の組織では、CI の事前チェックを必須にし(ch03 で「CI のロールでしかデプロイできない」形にする)、SCP と Config(L20)を重ねます。\n\n#### Hooks そのものを守る\nHook はアカウントの中の設定なので、強い権限を持つ人が無効にできます。SCP(L6・L18)で `cloudformation:DeactivateType` と `cloudformation:SetTypeConfiguration` を、基盤を管理するロール以外に拒否します。ルールを置く S3 のバケットも、書き込めるのをその管理用のロールに限り、バージョニングを有効にします。\n\n### 構成図: デプロイの直前に Guard Hook で調べる\n```mermaid\narchitecture-beta\n    group cloud(aws:aws-cloud)[AWS Cloud]\n    group acct(aws:account)[Workload Account] in cloud\n\n    service ci(aws:client)[CI Pipeline]\n    service cfn(aws:aws-cloudformation)[CloudFormation] in acct\n    service rules(aws:s3)[Guard Rules] in acct\n    service report(aws:s3)[Hook Reports] in acct\n    service bucket(aws:s3)[App Bucket] in acct\n\n    ci:R --> L:cfn\n    cfn:T --> B:rules\n    cfn:B --> T:report\n    cfn:R --> L:bucket\n```\n\nCI(またはエンジニアの手元)からのデプロイは、ワークロードのアカウントの CloudFormation に届きます。CloudFormation はリソースを作る前に Guard Hook を呼び、Hook は S3 のルールを読んで調べ、詳しい結果を報告用のバケットに置きます。合格したときだけ、アプリのバケットが作られます。\n\n### 実務での使い方と判断\n#### ガードレールの置き方の比較\n| 案 | 仕組み | 良い点 | 悪い点 | 運用負荷 | コスト |\n|---|---|---|---|---|---|\n| A. CI の事前チェックだけ | PR や CI で cfn-guard・conftest を実行 | 最も早く、直すのが安い。開発者がすぐ結果を見られる | CI を通らないデプロイには効かない | 低い | ほぼ無料 |\n| B. A + CloudFormation Hooks | AWS の側でも同じルールで調べる | 誰がどこからデプロイしても通る | CloudFormation 以外(Terraform の aws プロバイダーなど)には効かない | 中 | Hook の呼び出しに料金がかかる(最新は公式で確認) |\n| C. B + SCP + Config | API で禁止し、作った後も見張る | 抜け道が最も少ない | ルールが 3 か所に分かれ、整合を保つ手間 | 高め | Config の評価の料金 |\n\n#### よくある事故\n- **いきなり FAIL で有効にして、全チームのデプロイが止まった**: 最初は WARN で 1〜2 週間動かし、違反の数と中身を見てから FAIL にします\n- **ルールの例外を個別に作り続けた**: 例外が増えるとルールの意味がなくなります。例外は期限と理由を付けて記録します\n- **CI のチェックを「失敗しても続ける」設定にしていた**: 終了コードを無視するとチェックは飾りになります\n- **Terraform の組織が Hooks だけに頼っていた**: aws プロバイダーには効かないので、素通りします\n\n#### プロならどう決めるか\n同じルールを、CI(早く知らせる)と Hooks(必ず止める)の両方で使います。Guard のルールなら、同じファイルを cfn-guard と Guard Hook の両方に使えるので、ルールを 1 か所で管理できます。重要なもの(公開・暗号化なし・ログの停止)は SCP でも禁止し、作った後は Config で見張ります。新しいルールは WARN から始めて FAIL に上げ、Hook とルールのバケットは SCP で守ります。\n\n### 試験ではこう問われる\n「リソースが作られる**前に**、組織の決まりに合わない設定を止めたい」「CloudFormation で作るリソースを事前に評価したい」は CloudFormation Hooks(または Control Tower のプロアクティブコントロール)が答えです。「作った後に違反を見つけて直す」は Config(L20)なので、「前」か「後」かを読み分けます。「テンプレートをポリシー・アズ・コードで調べる」は cfn-guard、「最も運用負荷が低い」なら AWS が用意したルール集(プロアクティブコントロール)を選びます。\n\n### まとめ\n- まちがった設定は、CI → デプロイの直前 → API → 作った後、の順に何重にも止めます。早いほど直すのが安く、遅い層は抜け道をふさぎます\n- cfn-guard はテンプレートを Guard のルールで調べ、違反なら 0 以外で終わって CI を止めます。Terraform は plan を JSON にして OPA などで調べます\n- CloudFormation Hooks は、リソースを作る直前に AWS の側で調べ、FAIL なら止め、WARN なら警告します。WARN から始めて FAIL に上げます\n- Hooks は CloudFormation と Cloud Control API の操作だけに効きます。Hook 自体も SCP で守ります\n",
+  "quiz": [
+    {
+      "question": "CI のパイプラインで cfn-guard のチェックを入れているが、エンジニアが自分のパソコンから直接 CloudFormation でデプロイすると、ルール違反のバケットが作れてしまう。CloudFormation で作られるリソースについて、どこからデプロイしても作る前に止めたい。最も適切なものはどれか。",
+      "choices": [
+        "AWS Config のルールで違反したバケットを見つけて通知する",
+        "CI のチェックの結果をメールで全員に送る",
+        "Terraform の plan を conftest で調べる",
+        "同じ Guard のルールを使った CloudFormation の Guard Hook を FAIL モードで有効にする"
+      ],
+      "correct": 3,
+      "explanation": "Guard Hook はアカウントの中で、CloudFormation がリソースを作る直前に動くので、どこからのデプロイでも通ります。Config は作った後に見つける発見型の仕組みで、作る前には止めません。Terraform の plan の検査は CloudFormation のデプロイとは関係がありません。"
+    },
+    {
+      "question": "次の Guard のルールについて、正しい説明はどれか。\n\nlet buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]\nrule S3_VERSIONED when %buckets !empty { %buckets.Properties.VersioningConfiguration.Status == 'Enabled' }",
+      "choices": [
+        "テンプレートに S3 バケットが 1 つもなければ、このルールは調べずに飛ばされる",
+        "テンプレートのすべてのリソースについて、バージョニングが有効かを調べる",
+        "バケットが 1 つでもバージョニング有効なら、ほかのバケットが無効でも合格になる",
+        "違反したバケットのバージョニングを自動で有効にする"
+      ],
+      "correct": 0,
+      "explanation": "when %buckets !empty は、バケットが 1 つ以上あるときだけ調べるという条件で、なければ SKIP です。Type で S3 バケットに絞っているので全リソースではありません。%buckets の各要素がすべて条件を満たす必要があります。Guard は調べるだけで直しません。"
+    },
+    {
+      "question": "CloudFormation Hooks を組織に初めて入れる。既存のチームのデプロイを不用意に止めずに、違反の実態を把握してから強制したい。最も適切な進め方はどれか。",
+      "choices": [
+        "最初から FailureMode を FAIL にし、止まったチームから個別に例外の申請を受ける",
+        "Hook は使わず、SCP ですべての CloudFormation の操作を拒否する",
+        "最初は FailureMode を WARN にして違反の数と中身を確かめ、直してもらってから FAIL に切り替える",
+        "Hook の TargetFilters で DELETE だけを対象にする"
+      ],
+      "correct": 2,
+      "explanation": "WARN は違反を警告として出しながらデプロイを続けさせるので、影響を見ながら段階的に強制できます。いきなり FAIL は全チームの作業を止め、例外が増える原因になります。DELETE だけを対象にしても、作成時の違反は止まりません。"
+    },
+    {
+      "question": "Terraform(hashicorp/aws プロバイダー)だけで AWS を管理している組織が、CloudFormation の Guard Hook を全アカウントで FAIL モードで有効にした。期待どおりに違反を止められない理由として最も適切なものはどれか。",
+      "choices": [
+        "Guard Hook は Terraform の状態ファイルを読めないから",
+        "hashicorp/aws プロバイダーは各サービスの API を直接呼び、CloudFormation を通らないので、Hook が呼ばれないから",
+        "Guard Hook は WARN モードでしか動かないから",
+        "Guard Hook は管理アカウントでしか動かないから"
+      ],
+      "correct": 1,
+      "explanation": "Hooks は CloudFormation のスタック・リソース・変更セットと Cloud Control API の操作に対して動きます。hashicorp/aws プロバイダーの操作はそのどれでもないので素通りします。Terraform では CI での plan の検査を必須にし、SCP や Config を重ねます。"
+    },
+    {
+      "question": "terraform show -json で作った plan.json を OPA(conftest)で調べる方法の利点として、最も適切なものはどれか。",
+      "choices": [
+        "AWS に接続せずに、.tf ファイルだけから一瞬で調べられる",
+        "違反があれば、Terraform が自動で正しい値に直して apply する",
+        "AWS の側で動くので、CI を通らないデプロイも止められる",
+        "変数やモジュールの展開が済んだ、実際に作られる最終的な値で判断できる"
+      ],
+      "correct": 3,
+      "explanation": "plan の JSON の resource_changes には、変数やモジュールを解決した後の値(after)が入るので、最終的な値で判断できます。plan を作るには AWS への接続が要ります。conftest は CI で動くので、CI を通らないデプロイは止められず、自動修正もしません。"
+    },
+    {
+      "question": "CloudFormation のスタックイベントに HookStatus: HOOK_COMPLETE_FAILED、HookFailureMode: FAIL、HookInvocationPoint: PRE_PROVISION と出た。このとき何が起きたか。",
+      "choices": [
+        "リソースを作る前に Hook がルール違反を見つけ、作成を止めた。スタックはロールバックする",
+        "リソースは作られたが、Hook が後から違反を見つけて削除した",
+        "Hook のルールのファイルが S3 に見つからず、Hook が無効になった",
+        "違反はあったが、警告だけ出してリソースは作られた"
+      ],
+      "correct": 0,
+      "explanation": "PRE_PROVISION は作る前、HOOK_COMPLETE_FAILED は調べ終わって違反、FailureMode が FAIL なので操作は止まり、リソースは CREATE_FAILED となってロールバックします。警告だけで続くのは WARN のときです。Hook は作った後に消すことはしません。"
+    },
+    {
+      "kind": "essay",
+      "question": "あなたは組織のセキュリティ担当です。「S3 バケットは必ずパブリックアクセスのブロックを 4 つとも有効にする」という決まりを、CloudFormation と Terraform の両方を使う開発チームに守らせる仕組みを設計してください。どの段階で何を使うか、なぜ 1 か所では足りないのかを含めて説明してください(300〜500 字)。",
+      "answer": "決まりを Guard のルールと OPA のルールとして 1 つずつ書き、段階ごとに重ねます。まず PR と CI で、CloudFormation のテンプレートは cfn-guard、Terraform は plan を JSON にして conftest で調べ、違反なら 0 以外の終了コードでデプロイに進ませません。これが最も早く、直すのが安い場所です。ただし CI を通らないデプロイには効かないので、CloudFormation については同じ Guard のルールを Guard Hook として全アカウントに StackSets で配り、WARN で様子を見てから FAIL にします。Hook は hashicorp/aws プロバイダーの Terraform には効かないため、デプロイは CI のロールからしかできないよう権限を絞り、事前チェックを抜けられなくします。さらに API の段階では、組織の SCP で s3:PutBucketPublicAccessBlock などの緩める操作を基盤のロール以外に拒否し、アカウント単位のパブリックアクセスのブロックも有効にします。最後に作った後は AWS Config のルールで違反を見つけます。Hook とルールのバケットも SCP で守ります。",
+      "rubric": [
+        "CI での事前チェック(cfn-guard と、Terraform の plan の検査)を挙げている",
+        "CloudFormation Hooks で AWS の側でも止めることと、WARN から FAIL への段階的な導入に触れている",
+        "Hooks が Terraform(aws プロバイダー)に効かない点と、その補い方(CI のロールに限る・SCP など)を述べている",
+        "作った後の発見(Config)や Hook 自体の保護など、1 か所では足りない理由を説明している"
+      ],
+      "choices": [
+        "⭕ 合格",
+        "❌ 不合格"
+      ],
+      "correct": 0,
+      "explanation": "早い層は安く直せるが抜け道があり、遅い層は抜け道をふさぐが直すのが高くつきます。CloudFormation と Terraform で効く道具が違うことを押さえ、どの道から作っても少なくとも 1 か所で止まる設計にできているかが要点です。"
+    }
+  ]
+}

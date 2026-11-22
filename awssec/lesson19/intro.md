@@ -1,0 +1,1 @@
+正しいセキュリティ設定を、毎回まちがいなく全環境に入れるための仕組みを作ります。CloudFormation と Terraform の最小例を1行ずつ読み、cfn-guard・CloudFormation Hooks・plan の検査で「まちがった設定を作る前に止める」ガードレールを重ねます。GitHub Actions の OIDC とデプロイ用ロールの最小権限・承認、秘密情報をコードに入れない方法、StackSets・Image Builder・タグポリシーで組織全体に同じ守りを配る方法まで、実務で設計して説明できるようにします。
