@@ -66,10 +66,10 @@
         "VPC Traffic Mirroring で ENI の通信を複製し、分析用の機器に送る",
         "VPC Flow Logs をカスタム形式にして、bytes と tcp-flags の項目を足す",
         "VPC Flow Logs のまとめる間隔を 1 分にする",
-        "NACL のログ記録を有効にする"
+        "VPC Flow Logs の送り先を S3 にして、Parquet 形式で保存する"
       ],
       "correct": 0,
-      "explanation": "フローログは通信の要約(5 タプル・量・時刻・許可か拒否か)だけで、中身は記録しません。項目や間隔を変えても同じです。パケットの中身を見るには、通信を複製して送る Traffic Mirroring を使います。NACL にはそれ自体のログ機能はなく、判定の結果はフローログの action に表れます。"
+      "explanation": "フローログは通信の要約(5 タプル・量・時刻・許可か拒否か)だけで、中身は記録しません。項目や間隔、送り先や保存形式を変えても同じです。パケットの中身を見るには、通信を複製して送る Traffic Mirroring を使います。"
     },
     {
       "kind": "essay",
