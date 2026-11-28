@@ -1,13 +1,16 @@
 #!/bin/bash
 # 学習講座アプリの起動/停止/状態確認
-# 使い方: ./course.sh {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|private-a|private-b|kiji|dbspec|private-c|awsnet|daily|awssec|all}
+# 使い方: ./course.sh {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|kiji|awssec|…|all}
 set -u
 
-declare -A ROOTS=( [go]="$HOME/learning/go" [fastapi]="$HOME/learning/fastapi" [vue]="$HOME/learning/vue" [terraform]="$HOME/learning/terraform" [takken]="$HOME/learning/takken" [nwspec]="$HOME/learning/nwspec" [cissp]="$HOME/learning/cissp" [ddd]="$HOME/learning/ddd" [private-a]="$HOME/learning/private-a" [private-b]="$HOME/learning/private-b" [kiji]="$HOME/learning/kiji" [dbspec]="$HOME/learning/dbspec" [private-c]="$HOME/learning/private-c" [awsnet]="$HOME/learning/awsnet" [daily]="$HOME/learning/daily" [awssec]="$HOME/learning/awssec" )
-declare -A PORTS=( [go]=8080 [fastapi]=8081 [vue]=8082 [terraform]=8083 [takken]=8084 [nwspec]=8085 [cissp]=8086 [ddd]=8087 [private-a]=8088 [private-b]=8089 [kiji]=8090 [dbspec]=8091 [private-c]=8092 [awsnet]=8093 [daily]=8094 [awssec]=8095 )
+declare -A ROOTS=( [go]="$HOME/learning/go" [fastapi]="$HOME/learning/fastapi" [vue]="$HOME/learning/vue" [terraform]="$HOME/learning/terraform" [takken]="$HOME/learning/takken" [nwspec]="$HOME/learning/nwspec" [cissp]="$HOME/learning/cissp" [ddd]="$HOME/learning/ddd" [kiji]="$HOME/learning/kiji" [awssec]="$HOME/learning/awssec" )
+declare -A PORTS=( [go]=8080 [fastapi]=8081 [vue]=8082 [terraform]=8083 [takken]=8084 [nwspec]=8085 [cissp]=8086 [ddd]=8087 [kiji]=8090 [awssec]=8095 )
+ORDER="go fastapi vue terraform takken nwspec cissp ddd kiji awssec"
+# 公開しない講座は course.local.sh(git 管理外)で ROOTS・PORTS・ORDER に足す
+[ -f "$HOME/learning/course.local.sh" ] && . "$HOME/learning/course.local.sh"
 
 targets() {
-  if [ "${1:-all}" = "all" ]; then echo "go fastapi vue terraform takken nwspec cissp ddd private-a private-b kiji dbspec private-c awsnet daily awssec"; else echo "$1"; fi
+  if [ "${1:-all}" = "all" ]; then echo "$ORDER"; else echo "$1"; fi
 }
 
 is_up() { curl -s -m 2 "http://127.0.0.1:${PORTS[$1]}/api/course" >/dev/null 2>&1; }
@@ -42,6 +45,6 @@ for c in $(targets "${2:-all}"); do
     stop)    stop_one "$c" ;;
     restart) stop_one "$c"; start_one "$c" ;;
     status)  status_one "$c" ;;
-    *) echo "使い方: $0 {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|private-a|private-b|kiji|dbspec|private-c|awsnet|daily|awssec|all}"; exit 1 ;;
+    *) echo "使い方: $0 {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|kiji|awssec|…|all}"; exit 1 ;;
   esac
 done
