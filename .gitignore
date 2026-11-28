@@ -22,15 +22,7 @@ takken/
 # OS / エディタ
 .DS_Store
 
-# 社内情報・IPA 過去問を含む講座(ローカル専用。CLAUDE.local.md を参照)
-private-a/
-private-b/
-private-c/
-dbspec/
-awsnet/
-_archive/
-CLAUDE.local.md
-STUDY_PLAN.md
+# 公開しない講座・個人のファイルは .git/info/exclude で除外している(CLAUDE.local.md を参照)
 
 # 別リポジトリの講座
 nwspec/
@@ -48,5 +40,3 @@ kiji/source/
 */app/mistakes.json
 */app/ai_usage.json
 
-# 毎日のテックニュース(提案に社内情報を含む。会社PCで運用)
-daily/
