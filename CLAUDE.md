@@ -24,7 +24,7 @@
 ユーザーが「go 起動」「vue 停止」「全部状態」などと言ったら実行する:
 
 ```sh
-~/learning/course.sh {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|private-a|private-b|kiji|dbspec|private-c|awsnet|all}
+~/learning/course.sh {start|stop|restart|status} {go|fastapi|vue|terraform|takken|nwspec|cissp|ddd|kiji|awssec|all}(公開しない講座は course.local.sh で追加)
 ```
 
 ## 共通アーキテクチャ
@@ -39,7 +39,7 @@
 ## Git の運用
 
 - **main に直接 push しない。** 変更は `~/bin/git-ship "<コミットメッセージ>" [ファイル...]` で入れる(ブランチ → PR → squash でセルフマージ → main に戻って pull まで自動)。ユーザーの指示(2026-11-04、GitHub の実績のため)
-- 公開リポジトリ(learning-courses・takken・nwspec・cissp・ddd)に、社内情報や IPA 過去問データを入れない。それらの講座は `.gitignore` で除外している
+- 公開リポジトリ(learning-courses・takken・nwspec・cissp・ddd)に、社内情報や IPA 過去問データを入れない。公開しない講座は `.git/info/exclude` で除外し、一覧と運用は `CLAUDE.local.md` に書く(会社名やフォルダ名も公開ファイルに書かない)
 - コミットメッセージ・PR に AI 署名を入れない
 
 - 教材を修正したら該当講座で `go run ./tools/coursegen` を回して ALL OK を確認すること
